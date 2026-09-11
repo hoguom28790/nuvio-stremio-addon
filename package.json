@@ -1,5 +1,5 @@
 {
-  "name": "hpaddon",
+  "name": "hophim-addon",
   "version": "1.0.0",
   "description": "Nuvio Stremio Addon",
   "main": "server.js",
