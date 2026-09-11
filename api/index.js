@@ -1,11 +1,11 @@
+const express = require('express');
 const { getRouter } = require('stremio-addon-sdk');
 const addonInterface = require('../src/addon');
 
-const router = getRouter(addonInterface);
+const app = express();
 
-module.exports = function (req, res) {
-    router(req, res, function() {
-        res.statusCode = 404;
-        res.end();
-    });
-};
+// Mount the Stremio addon router
+app.use('/', getRouter(addonInterface));
+
+// Export the Express app so Vercel can run it
+module.exports = app;
