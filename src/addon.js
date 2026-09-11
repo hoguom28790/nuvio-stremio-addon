@@ -1,4 +1,3 @@
-const { addonBuilder } = require('stremio-addon-sdk');
 const manifest = require('./manifest');
 
 const kkphim = require('./scrapers/kkphim');
@@ -10,7 +9,35 @@ const live = require('./scrapers/live');
 const imdb = require('./scrapers/imdb');
 const cache = require('./utils/cache');
 
-const builder = new addonBuilder(manifest);
+// Custom Builder to allow manifests larger than the default 8KB SDK limit
+function CustomAddonBuilder(manifest) {
+    const handlers = {};
+    this.defineResourceHandler = function(resource, handler) {
+        handlers[resource] = handler;
+        return this;
+    };
+    this.defineStreamHandler = this.defineResourceHandler.bind(this, 'stream');
+    this.defineMetaHandler = this.defineResourceHandler.bind(this, 'meta');
+    this.defineCatalogHandler = this.defineResourceHandler.bind(this, 'catalog');
+    this.defineSubtitlesHandler = this.defineResourceHandler.bind(this, 'subtitles');
+
+    this.getInterface = function() {
+        function AddonInterface() {
+            this.manifest = Object.freeze(Object.assign({}, manifest));
+            this.get = (resource, type, id, extra = {}, config = {}) => {
+                const handler = handlers[resource];
+                if (!handler) {
+                    return Promise.reject({ message: `No handler for ${resource}`, noHandler: true });
+                }
+                return handler({ type, id, extra, config });
+            };
+        }
+        return new AddonInterface();
+    };
+    return this;
+}
+
+const builder = new CustomAddonBuilder(manifest);
 
 // 1. CATALOG HANDLER
 builder.defineCatalogHandler(async ({ type, id, extra = {} }) => {
@@ -115,12 +142,11 @@ builder.defineStreamHandler(async ({ type, id }) => {
         } else if (id.startsWith('streamfree:') || id.startsWith('sports:')) {
             streams = await live.getStream(id, type);
         } else if (id.startsWith('tt')) {
-            // General IMDb search across KKPhim, NguonC, etc.
             streams = await imdb.getStream(id, type);
         }
 
         if (streams && streams.length > 0) {
-            cache.set(cacheKey, streams, 1800); // 30 min cache
+            cache.set(cacheKey, streams, 1800);
         }
     } catch (err) {
         console.error(`[Stream Error] ID: ${id}:`, err.message);
