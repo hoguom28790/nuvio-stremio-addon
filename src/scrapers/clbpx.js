@@ -13,7 +13,6 @@ async function getCatalog(type, extra = {}) {
         if (extra.search) {
             url = `${BASE_URL}/v1/api/tim-kiem?keyword=${encodeURIComponent(extra.search)}&limit=24`;
         } else {
-            // CLBPX -> Phim Kinh Điển / Phim Xưa
             url = `${BASE_URL}/v1/api/the-loai/kinh-dien?page=${page}`;
         }
 
@@ -36,7 +35,7 @@ async function getCatalog(type, extra = {}) {
                 name: item.name || 'Không tên',
                 poster: poster,
                 posterShape: 'poster',
-                description: `CLBPX • CLB Phim Xưa (${item.year || ''})\n${item.origin_name || ''} - Kinh Điển Vietsub & Lồng Tiếng`
+                description: `CLBPX • CLB Phim Xưa (${item.year || ''})\n⚡ Định tuyến: CDN Tốc Độ Cao (Direct HLS)\n${item.origin_name || ''} - Kinh Điển Vietsub & Lồng Tiếng`
             };
         });
 
@@ -68,7 +67,8 @@ async function getStream(id, type) {
     const streams = await kkphim.getStream(mappedId, type);
     return streams.map(s => ({
         ...s,
-        name: s.name.replace('KKPhim', 'CLB Phim Xưa')
+        name: s.name.replace('KKPhim', 'CLB Phim Xưa').replace('[CDN]', '[CDN Phim Xưa]'),
+        title: s.title.replace('KKPhim', 'CLB Phim Xưa')
     }));
 }
 

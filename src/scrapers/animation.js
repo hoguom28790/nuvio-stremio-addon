@@ -13,7 +13,6 @@ async function getCatalog(catalogId, type, extra = {}) {
         if (extra.search) {
             url = `${BASE_URL}/v1/api/tim-kiem?keyword=${encodeURIComponent(extra.search)}&limit=24`;
         } else {
-            // Filter by Hoạt Hình / Anime category
             url = `${BASE_URL}/v1/api/the-loai/hoat-hinh?page=${page}`;
         }
 
@@ -39,7 +38,7 @@ async function getCatalog(catalogId, type, extra = {}) {
                 name: item.name || 'Không tên',
                 poster: poster,
                 posterShape: 'poster',
-                description: `${brandName} (${item.year || ''})\n${item.origin_name || ''} - ${item.lang || 'Thuyết Minh / Vietsub'}`
+                description: `${brandName} (${item.year || ''})\n⚡ Định tuyến: CDN Tốc Độ Cao (Direct HLS)\n${item.origin_name || ''} - ${item.lang || 'Thuyết Minh / Vietsub'}`
             };
         });
 
@@ -72,7 +71,8 @@ async function getStream(prefix, id, type) {
     const brand = prefix.toUpperCase();
     return streams.map(s => ({
         ...s,
-        name: s.name.replace('KKPhim', brand)
+        name: s.name.replace('KKPhim', brand).replace('[CDN]', `[CDN ${brand}]`),
+        title: s.title.replace('KKPhim', brand)
     }));
 }
 

@@ -25,7 +25,6 @@ async function getCinemetaInfo(type, imdbId) {
 
 async function getStream(id, type) {
     try {
-        // id format: tt1234567 or tt1234567:season:episode
         const parts = id.split(':');
         const imdbId = parts[0];
         const season = parts[1];
@@ -37,9 +36,10 @@ async function getStream(id, type) {
         const title = movieInfo.name;
         console.log(`[IMDb Resolver] Searching streams for: "${title}" (${imdbId})`);
 
-        const allStreams = [];
+        const cdnStreams = [];
+        const proxyStreams = [];
 
-        // 1. Search KKPhim
+        // 1. Search KKPhim (CDN Priority)
         try {
             const kkRes = await axios.get(`https://phimapi.com/v1/api/tim-kiem?keyword=${encodeURIComponent(title)}&limit=5`, { timeout: 5000 });
             const items = kkRes.data?.data?.items || [];
@@ -49,13 +49,35 @@ async function getStream(id, type) {
                     ? `kkphim:${bestMatch.slug}:${season || 1}:${episode}`
                     : `kkphim:${bestMatch.slug}`;
                 const kkStreams = await kkphim.getStream(kkId, type);
-                allStreams.push(...kkStreams);
+                cdnStreams.push(...kkStreams);
             }
         } catch (e) {
             // ignore
         }
 
-        // 2. Search NguonC
+        // 2. Search VSMOV (CDN Priority if m3u8)
+        try {
+            const vsRes = await axios.get(`https://vsmov.com/api/tim-kiem?keyword=${encodeURIComponent(title)}&limit=5`, { timeout: 5000 });
+            const items = vsRes.data?.items || [];
+            if (items.length > 0) {
+                const bestMatch = items[0];
+                const vsId = (type === 'series' && episode)
+                    ? `vsmov:${bestMatch.slug}:${season || 1}:${episode}`
+                    : `vsmov:${bestMatch.slug}`;
+                const vsStreams = await vsmov.getStream(vsId, type);
+                vsStreams.forEach(s => {
+                    if (s.name.includes('[CDN]')) {
+                        cdnStreams.push(s);
+                    } else {
+                        proxyStreams.push(s);
+                    }
+                });
+            }
+        } catch (e) {
+            // ignore
+        }
+
+        // 3. Search NguonC (Proxy / Backup Priority)
         try {
             const ncRes = await axios.get(`https://phim.nguonc.com/api/films/search?keyword=${encodeURIComponent(title)}&page=1`, { timeout: 5000 });
             const items = ncRes.data?.items || [];
@@ -65,13 +87,14 @@ async function getStream(id, type) {
                     ? `nguonc:${bestMatch.slug}:${season || 1}:${episode}`
                     : `nguonc:${bestMatch.slug}`;
                 const ncStreams = await nguonc.getStream(ncId, type);
-                allStreams.push(...ncStreams);
+                proxyStreams.push(...ncStreams);
             }
         } catch (e) {
             // ignore
         }
 
-        return allStreams;
+        // Return CDN streams first, followed by Proxy streams as backup
+        return [...cdnStreams, ...proxyStreams];
     } catch (err) {
         console.error('[IMDb Resolver Error]:', err.message);
         return [];

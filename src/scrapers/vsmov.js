@@ -31,7 +31,7 @@ async function getCatalog(type, extra = {}) {
                 name: item.name || 'Không tên',
                 poster: item.poster_url || item.thumb_url || '',
                 posterShape: 'poster',
-                description: `${item.origin_name || ''} (${item.year || ''})\nNguồn: VSMOV 4K/HD • IMDb: ${item.imdb?.id || 'N/A'}`
+                description: `${item.origin_name || ''} (${item.year || ''})\n⚡ Nguồn: VSMOV 4K/HD • IMDb: ${item.imdb?.id || 'N/A'}`
             };
         });
 
@@ -109,7 +109,8 @@ async function getStream(id, type) {
         const episodes = res.data?.episodes || [];
         if (episodes.length === 0) return [];
 
-        const streams = [];
+        const cdnStreams = [];
+        const proxyStreams = [];
 
         episodes.forEach(server => {
             const serverName = server.server_name || 'VSMOV VIP';
@@ -124,18 +125,26 @@ async function getStream(id, type) {
             }
 
             if (targetItem) {
-                const streamUrl = targetItem.link_m3u8 || targetItem.link_embed;
-                if (streamUrl) {
-                    streams.push({
-                        name: `VSMOV • ${serverName}`,
-                        title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\nChất lượng: 4K/Full HD`,
-                        url: streamUrl
+                if (targetItem.link_m3u8) {
+                    cdnStreams.push({
+                        name: `⚡ [CDN] VSMOV • ${serverName}`,
+                        title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n⚡ Định tuyến: CDN Tốc Độ Cao (Direct HLS 4K)\n🎞️ Chất lượng: 4K / Full HD`,
+                        url: targetItem.link_m3u8,
+                        behaviorHints: { notWebReady: false }
+                    });
+                } else if (targetItem.link_embed) {
+                    proxyStreams.push({
+                        name: `🛡️ [Proxy] VSMOV • ${serverName}`,
+                        title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n🛡️ Định tuyến: Máy chủ trung gian (Embed/Proxy)\n📌 Dùng khi các link CDN khác bị nghẽn`,
+                        url: targetItem.link_embed,
+                        behaviorHints: { notWebReady: true }
                     });
                 }
             }
         });
 
-        return streams;
+        // Prioritize CDN first, then Proxy fallback
+        return [...cdnStreams, ...proxyStreams];
     } catch (err) {
         console.error('[VSMOV Stream Error]:', err.message);
         return [];

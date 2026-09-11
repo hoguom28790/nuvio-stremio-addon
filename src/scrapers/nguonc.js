@@ -30,7 +30,7 @@ async function getCatalog(type, extra = {}) {
                 name: item.name || 'Không tên',
                 poster: item.poster_url || item.thumb_url || '',
                 posterShape: 'poster',
-                description: `${item.original_name || ''} (${item.year || ''})\nNguồn: NguonC • Chất lượng: ${item.quality || 'HD'}`
+                description: `${item.original_name || ''} (${item.year || ''})\n🛡️ Server: Máy chủ trung gian (Proxy / StreamC)\n🎞️ Chất lượng: ${item.quality || 'HD'}`
             };
         });
 
@@ -118,9 +118,18 @@ async function getStream(id, type) {
 
             if (targetItem && targetItem.embed) {
                 streams.push({
-                    name: `NguonC • ${serverName}`,
-                    title: `${movie.name} - Tập ${targetItem.name}\nNguồn phát: StreamC`,
-                    url: targetItem.embed
+                    name: `🛡️ [Proxy] NguonC • ${serverName}`,
+                    title: `${movie.name} - Tập ${targetItem.name}\n🛡️ Định tuyến: Máy chủ trung gian (Proxy / StreamC)\n📌 Khuyên dùng: Dùng khi các nguồn CDN bị nghẽn`,
+                    url: targetItem.embed,
+                    behaviorHints: {
+                        notWebReady: true,
+                        proxyHeaders: {
+                            request: {
+                                "Referer": "https://phim.nguonc.com/",
+                                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+                            }
+                        }
+                    }
                 });
             }
         });

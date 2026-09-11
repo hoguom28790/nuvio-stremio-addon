@@ -137,7 +137,7 @@ async function getCatalog(catalogId, type, extra = {}) {
             name: item.name,
             poster: item.poster,
             posterShape: 'landscape',
-            description: item.description
+            description: `${item.description}\n⚡ Định tuyến: CDN Thể Thao Trực Tiếp (Low Latency)`
         }));
     }
 
@@ -148,7 +148,7 @@ async function getCatalog(catalogId, type, extra = {}) {
             name: item.name,
             poster: item.poster,
             posterShape: 'landscape',
-            description: item.description
+            description: `${item.description}\n⚡ Định tuyến: CDN Đài Truyền Hình (Direct HLS)`
         }));
     }
 
@@ -168,23 +168,27 @@ async function getMeta(type, id) {
         name: item.name,
         poster: item.poster,
         background: item.poster,
-        description: item.description,
+        description: `${item.description}\n⚡ Định tuyến: CDN Phát Trực Tiếp (Không qua trung gian)`,
         releaseInfo: 'LIVE 24/7'
     };
 }
 
 async function getStream(id, type) {
+    let isSport = false;
     let item = SPORTS_CHANNELS.find(c => c.id === id);
-    if (!item) {
+    if (item) {
+        isSport = true;
+    } else {
         item = STREAMFREE_CHANNELS.find(c => c.id === id);
     }
     if (!item || !item.url) return [];
 
     return [
         {
-            name: 'Live Stream • HD',
-            title: `${item.name}\nTrực tiếp tốc độ cao (HLS)`,
-            url: item.url
+            name: isSport ? `⚡ [CDN Thể Thao] ${item.name.split(' • ')[0]}` : `⚡ [CDN Trực Tiếp] Đài Truyền Hình`,
+            title: `${item.name}\n⚡ Định tuyến: CDN Tốc Độ Cao (Direct HLS)\n📡 Tình trạng: Phát trực tiếp 24/7 (Không giật lag)`,
+            url: item.url,
+            behaviorHints: { notWebReady: false }
         }
     ];
 }

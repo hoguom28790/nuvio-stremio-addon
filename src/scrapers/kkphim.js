@@ -43,11 +43,11 @@ async function getCatalog(type, extra = {}) {
                 name: item.name || 'Không tên',
                 poster: poster,
                 posterShape: 'poster',
-                description: `${item.origin_name || ''} (${item.year || ''})\nChất lượng: ${item.quality || 'HD'} - ${item.lang || 'Vietsub'}`
+                description: `${item.origin_name || ''} (${item.year || ''})\n⚡ Server: CDN Tốc Độ Cao\n🎞️ Chất lượng: ${item.quality || 'HD'} • ${item.lang || 'Vietsub'}`
             };
         });
 
-        cache.set(cacheKey, metas, 600); // 10 min cache
+        cache.set(cacheKey, metas, 600);
         return metas;
     } catch (err) {
         console.error('[KKPhim Catalog Error]:', err.message);
@@ -71,7 +71,6 @@ async function getMeta(type, id) {
 
         const videos = [];
         if (isSeries && episodes.length > 0) {
-            // First server
             const serverData = episodes[0]?.server_data || [];
             serverData.forEach((ep, index) => {
                 videos.push({
@@ -108,10 +107,9 @@ async function getMeta(type, id) {
 
 async function getStream(id, type) {
     try {
-        // id format: kkphim:slug or kkphim:slug:season:episode_slug
         const parts = id.replace('kkphim:', '').split(':');
         const slug = parts[0];
-        const targetEpSlug = parts[2]; // if series
+        const targetEpSlug = parts[2];
 
         const res = await axios.get(`${BASE_URL}/phim/${slug}`, { timeout: 10000 });
         const episodes = res.data?.episodes || [];
@@ -133,9 +131,12 @@ async function getStream(id, type) {
 
             if (targetItem && targetItem.link_m3u8) {
                 streams.push({
-                    name: `KKPhim • ${serverName}`,
-                    title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\nĐộ phân giải: Full HD (HLS)`,
-                    url: targetItem.link_m3u8
+                    name: `⚡ [CDN] KKPhim • ${serverName}`,
+                    title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n⚡ Định tuyến: CDN Tốc Độ Cao (Direct HLS)\n🎞️ Độ phân giải: 1080p Full HD • Vietsub`,
+                    url: targetItem.link_m3u8,
+                    behaviorHints: {
+                        notWebReady: false
+                    }
                 });
             }
         });
