@@ -1,58 +1,150 @@
 const axios = require('axios');
+const cache = require('../utils/cache');
 
 const BASE_URL = 'https://phimapi.com';
+const CDN_URL = 'https://phimimg.com';
 
-/**
- * Scrape stream data from KKPhim (phimapi)
- * @param {string} id - The stream ID (e.g., kkphim:slug-of-the-movie)
- * @param {string} type - "movie" or "series"
- * @returns {Promise<Array>} Array of Stremio stream objects
- */
-async function getStream(id, type) {
+function formatPoster(path) {
+    if (!path) return '';
+    if (path.startsWith('http')) return path;
+    const cleanPath = path.replace(/^\/?uploads\/movies\//, '');
+    return `${CDN_URL}/uploads/movies/${cleanPath}`;
+}
+
+async function getCatalog(type, extra = {}) {
     try {
-        // Extract the slug from the prefixed ID
-        const slug = id.replace('kkphim:', '');
-        
-        console.log(`[KKPhim Scraper] Fetching data for slug: ${slug}`);
-        
-        // Timeout set to gracefully handle network issues without crashing the server
-        const response = await axios.get(`${BASE_URL}/phim/${slug}`, { timeout: 10000 });
-        const data = response.data;
-        
-        // Handle invalid or missing data
-        if (!data || !data.episodes || data.episodes.length === 0) {
-            console.log(`[KKPhim Scraper] No episodes found for: ${slug}`);
-            return [];
-        }
-        
-        const streams = [];
-        
-        // Typically, Ophim API structures servers inside `episodes`
-        // Movie usually has 1 episode (Full), Series has multiple
-        const firstServer = data.episodes[0].server_data;
-        
-        if (firstServer && firstServer.length > 0) {
-            firstServer.forEach(ep => {
-                streams.push({
-                    name: "KKPhim",
-                    title: `${data.movie?.name || 'Unknown'} - ${ep.name}\nResolution: HD`,
-                    url: ep.link_m3u8,
-                    // If it's a direct mp4 instead of m3u8 we could use 'url', but Stremio handles m3u8 nicely usually
-                    // or we can provide alternative links if available
-                });
-            });
-        }
-        
-        return streams;
-    } catch (error) {
-        if (error.code === 'ECONNABORTED') {
-            console.error(`[KKPhim Scraper] Timeout fetching data for ${id}`);
+        const page = extra.skip ? Math.floor(extra.skip / 24) + 1 : 1;
+        let url = '';
+
+        if (extra.search) {
+            url = `${BASE_URL}/v1/api/tim-kiem?keyword=${encodeURIComponent(extra.search)}&limit=24`;
+        } else if (type === 'series') {
+            url = `${BASE_URL}/v1/api/danh-sach/phim-bo?page=${page}`;
         } else {
-            console.error(`[KKPhim Scraper] Error: ${error.message}`);
+            url = `${BASE_URL}/v1/api/danh-sach/phim-le?page=${page}`;
         }
-        // Graceful degradation: return empty streams instead of throwing and crashing server
-        return []; 
+
+        const cacheKey = `kkphim:catalog:${type}:${JSON.stringify(extra)}`;
+        const cached = cache.get(cacheKey);
+        if (cached) return cached;
+
+        const res = await axios.get(url, { timeout: 10000 });
+        const items = res.data?.data?.items || res.data?.items || [];
+        const cdnDomain = res.data?.data?.APP_DOMAIN_CDN_IMAGE || CDN_URL;
+
+        const metas = items.map(item => {
+            const poster = item.poster_url?.startsWith('http') 
+                ? item.poster_url 
+                : `${cdnDomain}/uploads/movies/${(item.poster_url || '').replace(/^\/?uploads\/movies\//, '')}`;
+            
+            return {
+                id: `kkphim:${item.slug}`,
+                type: type === 'series' ? 'series' : 'movie',
+                name: item.name || 'Không tên',
+                poster: poster,
+                posterShape: 'poster',
+                description: `${item.origin_name || ''} (${item.year || ''})\nChất lượng: ${item.quality || 'HD'} - ${item.lang || 'Vietsub'}`
+            };
+        });
+
+        cache.set(cacheKey, metas, 600); // 10 min cache
+        return metas;
+    } catch (err) {
+        console.error('[KKPhim Catalog Error]:', err.message);
+        return [];
     }
 }
 
-module.exports = { getStream };
+async function getMeta(type, id) {
+    try {
+        const slug = id.replace('kkphim:', '').split(':')[0];
+        const cacheKey = `kkphim:meta:${slug}`;
+        const cached = cache.get(cacheKey);
+        if (cached) return cached;
+
+        const res = await axios.get(`${BASE_URL}/phim/${slug}`, { timeout: 10000 });
+        const movie = res.data?.movie;
+        if (!movie) return null;
+
+        const episodes = res.data?.episodes || [];
+        const isSeries = type === 'series' || movie.type === 'series' || movie.type === 'hoathinh';
+
+        const videos = [];
+        if (isSeries && episodes.length > 0) {
+            // First server
+            const serverData = episodes[0]?.server_data || [];
+            serverData.forEach((ep, index) => {
+                videos.push({
+                    id: `kkphim:${slug}:1:${ep.slug || index + 1}`,
+                    title: `Tập ${ep.name}`,
+                    season: 1,
+                    episode: index + 1,
+                    released: new Date().toISOString()
+                });
+            });
+        }
+
+        const meta = {
+            id: `kkphim:${slug}`,
+            type: isSeries ? 'series' : 'movie',
+            name: movie.name,
+            poster: formatPoster(movie.poster_url),
+            background: formatPoster(movie.thumb_url),
+            description: (movie.content || '').replace(/<[^>]*>?/gm, ''),
+            releaseInfo: String(movie.year || ''),
+            genres: (movie.category || []).map(c => c.name),
+            cast: movie.actor || [],
+            director: movie.director ? [movie.director] : [],
+            videos: videos.length > 0 ? videos : undefined
+        };
+
+        cache.set(cacheKey, meta, 3600);
+        return meta;
+    } catch (err) {
+        console.error('[KKPhim Meta Error]:', err.message);
+        return null;
+    }
+}
+
+async function getStream(id, type) {
+    try {
+        // id format: kkphim:slug or kkphim:slug:season:episode_slug
+        const parts = id.replace('kkphim:', '').split(':');
+        const slug = parts[0];
+        const targetEpSlug = parts[2]; // if series
+
+        const res = await axios.get(`${BASE_URL}/phim/${slug}`, { timeout: 10000 });
+        const episodes = res.data?.episodes || [];
+        if (episodes.length === 0) return [];
+
+        const streams = [];
+
+        episodes.forEach(server => {
+            const serverName = server.server_name || 'VIP';
+            const serverData = server.server_data || [];
+
+            let targetItem = null;
+            if (targetEpSlug) {
+                targetItem = serverData.find(item => item.slug === targetEpSlug || item.name === targetEpSlug);
+            }
+            if (!targetItem) {
+                targetItem = serverData[0];
+            }
+
+            if (targetItem && targetItem.link_m3u8) {
+                streams.push({
+                    name: `KKPhim • ${serverName}`,
+                    title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\nĐộ phân giải: Full HD (HLS)`,
+                    url: targetItem.link_m3u8
+                });
+            }
+        });
+
+        return streams;
+    } catch (err) {
+        console.error('[KKPhim Stream Error]:', err.message);
+        return [];
+    }
+}
+
+module.exports = { getCatalog, getMeta, getStream };

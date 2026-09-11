@@ -1,257 +1,123 @@
 module.exports = {
-    "id": "org.hpaddon.stremio",
-    "version": "1.0.0",
-    "name": "HPaddon",
-    "description": "Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ NguonC, Siêu Tầm Phim, Hoạt Hình 3D, CLB Phim Xưa, VSMOV, YanHH3D, KKPhim, StreamFree Live và Thể Thao Trực Tiếp",
-    "logo": "https://dl.strem.io/addon-logo.png",
-    "resources": [
+    id: "org.hpaddon.stremio",
+    version: "1.0.0",
+    name: "HPaddon",
+    description: "Tổng hợp phim Vietsub & Thuyết minh từ NguonC, STP, Hoạt Hình 3D, CLB Phim Xưa, VSMOV, YanHH3D, KKPhim, StreamFree Live và Thể Thao Trực Tiếp",
+    logo: "https://dl.strem.io/addon-logo.png",
+    resources: [
         "catalog",
         {
-            "name": "meta",
-            "types": ["movie", "series", "tv"],
-            "idPrefixes": ["nguonc:", "stp:", "hh3d:", "clbpx:", "vsmov:", "yan:", "kkphim:", "sf:", "streamfree:", "iptv:", "sports:"]
+            name: "meta",
+            types: ["movie", "series", "tv"],
+            idPrefixes: ["tt", "nguonc:", "stp:", "hh3d:", "clbpx:", "vsmov:", "yan:", "kkphim:", "sf:", "streamfree:", "iptv:", "sports:"]
         },
         {
-            "name": "stream",
-            "types": ["movie", "series", "tv"],
-            "idPrefixes": ["tt", "nguonc:", "stp:", "hh3d:", "clbpx:", "vsmov:", "yan:", "kkphim:", "sf:", "streamfree:", "iptv:", "sports:"]
+            name: "stream",
+            types: ["movie", "series", "tv"],
+            idPrefixes: ["tt", "nguonc:", "stp:", "hh3d:", "clbpx:", "vsmov:", "yan:", "kkphim:", "sf:", "streamfree:", "iptv:", "sports:"]
         }
     ],
-    "types": ["movie", "series", "tv"],
-    "idPrefixes": ["tt", "nguonc:", "stp:", "hh3d:", "clbpx:", "vsmov:", "yan:", "kkphim:", "sf:", "streamfree:", "iptv:", "sports:"],
-    "catalogs": [
+    types: ["movie", "series", "tv"],
+    idPrefixes: ["tt", "nguonc:", "stp:", "hh3d:", "clbpx:", "vsmov:", "yan:", "kkphim:", "sf:", "streamfree:", "iptv:", "sports:"],
+    catalogs: [
         {
-            "type": "movie",
-            "id": "nguonc-movie",
-            "name": "NguonC • Phim Lẻ",
-            "extra": [
-                { "name": "search", "isRequired": false },
-                { "name": "skip", "isRequired": false },
+            type: "movie",
+            id: "nguonc-movie",
+            name: "NguonC • Phim Lẻ",
+            extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }]
+        },
+        {
+            type: "series",
+            id: "nguonc-series",
+            name: "NguonC • Phim Bộ",
+            extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }]
+        },
+        {
+            type: "movie",
+            id: "stp-movie",
+            name: "STP • Phim Lẻ",
+            extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }]
+        },
+        {
+            type: "movie",
+            id: "hh3d-movie",
+            name: "HH3D • Phim Lẻ",
+            extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }]
+        },
+        {
+            type: "series",
+            id: "hh3d-series",
+            name: "HH3D • Phim Bộ",
+            extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }]
+        },
+        {
+            type: "movie",
+            id: "clbpx-movie",
+            name: "CLBPX • Phim Lẻ",
+            extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }]
+        },
+        {
+            type: "series",
+            id: "clbpx-series",
+            name: "CLBPX • Phim Bộ",
+            extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }]
+        },
+        {
+            type: "movie",
+            id: "vsmov-movie",
+            name: "VSMOV • Phim Lẻ",
+            extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }]
+        },
+        {
+            type: "series",
+            id: "vsmov-series",
+            name: "VSMOV • Phim Bộ",
+            extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }]
+        },
+        {
+            type: "movie",
+            id: "yan-movie",
+            name: "YAN • Phim Lẻ",
+            extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }]
+        },
+        {
+            type: "movie",
+            id: "kkphim-movie",
+            name: "KKPhim • Phim Lẻ",
+            extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }]
+        },
+        {
+            type: "series",
+            id: "kkphim-series",
+            name: "KKPhim • Phim Bộ",
+            extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }]
+        },
+        {
+            type: "tv",
+            id: "streamfree-live",
+            name: "StreamFree • Trực Tiếp",
+            extra: [{ name: "skip", isRequired: false }]
+        },
+        {
+            type: "tv",
+            id: "sports-live",
+            name: "K20 • Thể Thao Trực Tiếp",
+            extra: [
+                { name: "skip", isRequired: false },
                 {
-                    "name": "genre",
-                    "isRequired": false,
-                    "options": [
-                        "Danh mục: Phim Lẻ", "Danh mục: Phim Bộ", "Danh mục: Hoạt Hình", "Danh mục: TV Shows", "Danh mục: Đang Chiếu", "Danh mục: Mới Cập Nhật",
-                        "Thể loại: Hành Động", "Thể loại: Tình Cảm", "Thể loại: Hài", "Thể loại: Cổ Trang", "Thể loại: Tâm Lý", "Thể loại: Hình Sự", "Thể loại: Chiến Tranh",
-                        "Thể loại: Bí Ẩn", "Thể loại: Gây Cấn", "Thể loại: Gia Đình", "Thể loại: Giả Tưởng", "Thể loại: Hoạt Hình", "Thể loại: Khoa Học Viễn Tưởng",
-                        "Thể loại: Kinh Dị", "Thể loại: Lãng Mạn", "Thể loại: Lịch Sử", "Thể loại: Miền Tây", "Thể loại: Phiêu Lưu", "Thể loại: Phim 18+", "Thể loại: Nhạc",
-                        "Thể loại: Tài Liệu", "Thể loại: Chính Kịch", "Quốc gia: Âu Mỹ", "Quốc gia: Hàn Quốc", "Quốc gia: Trung Quốc", "Quốc gia: Nhật Bản",
-                        "Quốc gia: Thái Lan", "Quốc gia: Việt Nam", "Quốc gia: Hồng Kông", "Quốc gia: Đài Loan", "Quốc gia: Ấn Độ", "Quốc gia: Anh", "Quốc gia: Pháp",
-                        "Quốc gia: Nga", "Quốc gia: Hà Lan", "Quốc gia: Indonesia", "Quốc gia: Philippines", "Quốc gia: Quốc gia khác",
-                        "Năm: 2026", "Năm: 2025", "Năm: 2024", "Năm: 2023", "Năm: 2022", "Năm: 2021", "Năm: 2020", "Năm: 2019", "Năm: 2018", "Năm: 2017", "Năm: 2016"
+                    name: "genre",
+                    isRequired: false,
+                    options: [
+                        "Thể loại: Tất Cả Thể Thao",
+                        "Kênh: [Xôi Lạc] Thể Thao Trực Tiếp",
+                        "Kênh: [Cà Khịa] Thể Thao Trực Tiếp",
+                        "Kênh: [SoCoLive] Thể Thao Trực Tiếp",
+                        "Kênh: [Vebo TV] Thể Thao Trực Tiếp",
+                        "Kênh: [Mì Tôm] Thể Thao Trực Tiếp"
                     ]
-                }
-            ]
-        },
-        {
-            "type": "series",
-            "id": "nguonc-series",
-            "name": "NguonC • Phim Bộ",
-            "extra": [
-                { "name": "search", "isRequired": false },
-                { "name": "skip", "isRequired": false },
-                {
-                    "name": "genre",
-                    "isRequired": false,
-                    "options": [
-                        "Danh mục: Phim Lẻ", "Danh mục: Phim Bộ", "Danh mục: Hoạt Hình", "Danh mục: TV Shows", "Danh mục: Đang Chiếu", "Danh mục: Mới Cập Nhật",
-                        "Thể loại: Hành Động", "Thể loại: Tình Cảm", "Thể loại: Hài", "Thể loại: Cổ Trang", "Thể loại: Tâm Lý", "Thể loại: Hình Sự", "Thể loại: Chiến Tranh",
-                        "Thể loại: Bí Ẩn", "Thể loại: Gây Cấn", "Thể loại: Gia Đình", "Thể loại: Giả Tưởng", "Thể loại: Hoạt Hình", "Thể loại: Khoa Học Viễn Tưởng",
-                        "Thể loại: Kinh Dị", "Thể loại: Lãng Mạn", "Thể loại: Lịch Sử", "Thể loại: Miền Tây", "Thể loại: Phiêu Lưu", "Thể loại: Phim 18+", "Thể loại: Nhạc",
-                        "Thể loại: Tài Liệu", "Thể loại: Chính Kịch", "Quốc gia: Âu Mỹ", "Quốc gia: Hàn Quốc", "Quốc gia: Trung Quốc", "Quốc gia: Nhật Bản",
-                        "Quốc gia: Thái Lan", "Quốc gia: Việt Nam", "Quốc gia: Hồng Kông", "Quốc gia: Đài Loan", "Quốc gia: Ấn Độ", "Quốc gia: Anh", "Quốc gia: Pháp",
-                        "Quốc gia: Nga", "Quốc gia: Hà Lan", "Quốc gia: Indonesia", "Quốc gia: Philippines", "Quốc gia: Quốc gia khác",
-                        "Năm: 2026", "Năm: 2025", "Năm: 2024", "Năm: 2023", "Năm: 2022", "Năm: 2021", "Năm: 2020", "Năm: 2019", "Năm: 2018", "Năm: 2017", "Năm: 2016"
-                    ]
-                }
-            ]
-        },
-        {
-            "type": "movie",
-            "id": "stp-movie",
-            "name": "STP • Phim Lẻ",
-            "extra": [
-                { "name": "search", "isRequired": false },
-                { "name": "skip", "isRequired": false },
-                {
-                    "name": "genre",
-                    "isRequired": false,
-                    "options": ["Quốc gia: Mỹ", "Quốc gia: Hàn Quốc", "Quốc gia: Trung Quốc", "Quốc gia: Nhật Bản", "Quốc gia: Hồng Kông", "Quốc gia: Thái Lan", "Quốc gia: Việt Nam", "Quốc gia: Đài Loan", "Quốc gia: Ấn Độ", "Quốc gia: Anh", "Quốc gia: Pháp", "Quốc gia: Nga", "Quốc gia: Úc", "Quốc gia: Singapore", "Quốc gia: Philippines", "Quốc gia: Tây Ban Nha", "Quốc gia: Khác"]
-                }
-            ]
-        },
-        {
-            "type": "movie",
-            "id": "hh3d-movie",
-            "name": "HH3D • Phim Lẻ",
-            "extra": [
-                { "name": "search", "isRequired": false },
-                { "name": "skip", "isRequired": false },
-                {
-                    "name": "genre",
-                    "isRequired": false,
-                    "options": ["Danh mục: Phim Lẻ", "Danh mục: Đang Chiếu", "Danh mục: Hoàn Thành", "Danh mục: Đánh Giá Cao", "Thể loại: Huyền Huyễn", "Thể loại: Xuyên Không", "Thể loại: Trùng Sinh", "Thể loại: Tiên Hiệp", "Thể loại: Cổ Trang", "Thể loại: Hài Hước", "Thể loại: Kiếm Hiệp", "Thể loại: Hiện Đại"]
-                }
-            ]
-        },
-        {
-            "type": "series",
-            "id": "hh3d-series",
-            "name": "HH3D • Phim Bộ",
-            "extra": [
-                { "name": "search", "isRequired": false },
-                { "name": "skip", "isRequired": false },
-                {
-                    "name": "genre",
-                    "isRequired": false,
-                    "options": ["Danh mục: Phim Lẻ", "Danh mục: Đang Chiếu", "Danh mục: Hoàn Thành", "Danh mục: Đánh Giá Cao", "Thể loại: Huyền Huyễn", "Thể loại: Xuyên Không", "Thể loại: Trùng Sinh", "Thể loại: Tiên Hiệp", "Thể loại: Cổ Trang", "Thể loại: Hài Hước", "Thể loại: Kiếm Hiệp", "Thể loại: Hiện Đại"]
-                }
-            ]
-        },
-        {
-            "type": "movie",
-            "id": "clbpx-movie",
-            "name": "CLBPX • Phim Lẻ",
-            "extra": [
-                { "name": "search", "isRequired": false },
-                { "name": "skip", "isRequired": false },
-                {
-                    "name": "genre",
-                    "isRequired": false,
-                    "options": ["Thể loại: Mới Cập Nhật", "Thể loại: Kiếm Hiệp", "Thể loại: Tiên Hiệp", "Thể loại: Tâm Lý", "Thể loại: Ma Kinh Dị", "Thể loại: Điện Ảnh Châu Á", "Thể loại: Điện Ảnh Âu Mỹ", "Thể loại: Hàn Quốc", "Thể loại: Anime", "Thể loại: TV Series", "Thể loại: Thập Niên 60", "Thể loại: Thập Niên 70", "Thể loại: Thập Niên 80", "Thể loại: Thập Niên 90", "Thể loại: Thập Niên 2000"]
-                }
-            ]
-        },
-        {
-            "type": "series",
-            "id": "clbpx-series",
-            "name": "CLBPX • Phim Bộ",
-            "extra": [
-                { "name": "search", "isRequired": false },
-                { "name": "skip", "isRequired": false },
-                {
-                    "name": "genre",
-                    "isRequired": false,
-                    "options": ["Thể loại: Mới Cập Nhật", "Thể loại: Kiếm Hiệp", "Thể loại: Tiên Hiệp", "Thể loại: Tâm Lý", "Thể loại: Ma Kinh Dị", "Thể loại: Điện Ảnh Châu Á", "Thể loại: Điện Ảnh Âu Mỹ", "Thể loại: Hàn Quốc", "Thể loại: Anime", "Thể loại: TV Series", "Thể loại: Thập Niên 60", "Thể loại: Thập Niên 70", "Thể loại: Thập Niên 80", "Thể loại: Thập Niên 90", "Thể loại: Thập Niên 2000"]
-                }
-            ]
-        },
-        {
-            "type": "movie",
-            "id": "vsmov-movie",
-            "name": "VSMOV • Phim Lẻ",
-            "extra": [
-                { "name": "search", "isRequired": false },
-                { "name": "skip", "isRequired": false },
-                {
-                    "name": "genre",
-                    "isRequired": false,
-                    "options": ["Danh mục: Phim Mới Cập Nhật", "Danh mục: Phim Lẻ", "Danh mục: Phim Bộ", "Danh mục: Phim Đang Chiếu", "Danh mục: Phim Thuyết Minh", "Danh mục: Phim Lồng Tiếng", "Danh mục: Phim 4K"]
-                }
-            ]
-        },
-        {
-            "type": "series",
-            "id": "vsmov-series",
-            "name": "VSMOV • Phim Bộ",
-            "extra": [
-                { "name": "search", "isRequired": false },
-                { "name": "skip", "isRequired": false },
-                {
-                    "name": "genre",
-                    "isRequired": false,
-                    "options": ["Danh mục: Phim Mới Cập Nhật", "Danh mục: Phim Lẻ", "Danh mục: Phim Bộ", "Danh mục: Phim Đang Chiếu", "Danh mục: Phim Thuyết Minh", "Danh mục: Phim Lồng Tiếng", "Danh mục: Phim 4K"]
-                }
-            ]
-        },
-        {
-            "type": "movie",
-            "id": "yan-movie",
-            "name": "YAN • Phim Lẻ",
-            "extra": [
-                { "name": "search", "isRequired": false },
-                { "name": "skip", "isRequired": false },
-                {
-                    "name": "genre",
-                    "isRequired": false,
-                    "options": ["Danh mục: Mới Cập Nhật", "Danh mục: Đang Chiếu", "Danh mục: Hoàn Thành", "Danh mục: Hoạt Hình 3D", "Danh mục: Hoạt Hình 2D", "Danh mục: Hoạt Hình 4K", "Danh mục: Hoạt Hình AI", "Danh mục: Phim Lẻ", "Thể loại: Huyền Huyễn", "Thể loại: Xuyên Không", "Thể loại: Trùng Sinh", "Thể loại: Tiên Hiệp", "Thể loại: Cổ Trang", "Thể loại: Hài Hước", "Thể loại: Kiếm Hiệp", "Thể loại: Hiện Đại", "Thể loại: CN Animation"]
-                }
-            ]
-        },
-        {
-            "type": "movie",
-            "id": "kkphim-movie",
-            "name": "KKPhim • Phim Lẻ",
-            "extra": [
-                { "name": "search", "isRequired": false },
-                { "name": "skip", "isRequired": false },
-                {
-                    "name": "genre",
-                    "isRequired": false,
-                    "options": [
-                        "Danh mục: Mới Cập Nhật", "Danh mục: Phim Lẻ", "Danh mục: Phim Bộ", "Danh mục: Hoạt Hình", "Danh mục: TV Shows", "Danh mục: Phim Chiếu Rạp",
-                        "Thể loại: Hành Động", "Thể loại: Tình Cảm", "Thể loại: Hài Hước", "Thể loại: Cổ Trang", "Thể loại: Tâm Lý", "Thể loại: Hình Sự", "Thể loại: Chiến Tranh",
-                        "Thể loại: Bí Ẩn", "Thể loại: Gia Đình", "Thể loại: Kinh Dị", "Thể loại: Lịch Sử", "Thể loại: Phiêu Lưu", "Thể loại: Viễn Tưởng", "Thể loại: Võ Thuật",
-                        "Thể loại: Thần Thoại", "Thể loại: Kinh Điển", "Thể loại: Học Đường", "Thể loại: Khoa Học", "Thể loại: Thể Thao", "Thể loại: Trẻ Em", "Thể loại: Phim Ngắn",
-                        "Thể loại: Tài Liệu", "Thể loại: Âm Nhạc", "Thể loại: Chính Kịch", "Thể loại: Miền Tây", "Thể loại: Phim 18+", "Quốc gia: Âu Mỹ", "Quốc gia: Hàn Quốc",
-                        "Quốc gia: Trung Quốc", "Quốc gia: Nhật Bản", "Quốc gia: Thái Lan", "Quốc gia: Việt Nam", "Quốc gia: Hồng Kông", "Quốc gia: Đài Loan", "Quốc gia: Ấn Độ",
-                        "Quốc gia: Anh", "Quốc gia: Pháp", "Quốc gia: Đức", "Quốc gia: Nga", "Quốc gia: Tây Ban Nha", "Quốc gia: Úc", "Quốc gia: Canada", "Quốc gia: Indonesia",
-                        "Quốc gia: Philippines", "Quốc gia: Quốc Gia Khác", "Năm: 2026", "Năm: 2025", "Năm: 2024", "Năm: 2023", "Năm: 2022", "Năm: 2021", "Năm: 2020", "Năm: 2019",
-                        "Năm: 2018", "Năm: 2017", "Năm: 2016"
-                    ]
-                }
-            ]
-        },
-        {
-            "type": "series",
-            "id": "kkphim-series",
-            "name": "KKPhim • Phim Bộ",
-            "extra": [
-                { "name": "search", "isRequired": false },
-                { "name": "skip", "isRequired": false },
-                {
-                    "name": "genre",
-                    "isRequired": false,
-                    "options": [
-                        "Danh mục: Mới Cập Nhật", "Danh mục: Phim Lẻ", "Danh mục: Phim Bộ", "Danh mục: Hoạt Hình", "Danh mục: TV Shows", "Danh mục: Phim Chiếu Rạp",
-                        "Thể loại: Hành Động", "Thể loại: Tình Cảm", "Thể loại: Hài Hước", "Thể loại: Cổ Trang", "Thể loại: Tâm Lý", "Thể loại: Hình Sự", "Thể loại: Chiến Tranh",
-                        "Thể loại: Bí Ẩn", "Thể loại: Gia Đình", "Thể loại: Kinh Dị", "Thể loại: Lịch Sử", "Thể loại: Phiêu Lưu", "Thể loại: Viễn Tưởng", "Thể loại: Võ Thuật",
-                        "Thể loại: Thần Thoại", "Thể loại: Kinh Điển", "Thể loại: Học Đường", "Thể loại: Khoa Học", "Thể loại: Thể Thao", "Thể loại: Trẻ Em", "Thể loại: Phim Ngắn",
-                        "Thể loại: Tài Liệu", "Thể loại: Âm Nhạc", "Thể loại: Chính Kịch", "Thể loại: Miền Tây", "Thể loại: Phim 18+", "Quốc gia: Âu Mỹ", "Quốc gia: Hàn Quốc",
-                        "Quốc gia: Trung Quốc", "Quốc gia: Nhật Bản", "Quốc gia: Thái Lan", "Quốc gia: Việt Nam", "Quốc gia: Hồng Kông", "Quốc gia: Đài Loan", "Quốc gia: Ấn Độ",
-                        "Quốc gia: Anh", "Quốc gia: Pháp", "Quốc gia: Đức", "Quốc gia: Nga", "Quốc gia: Tây Ban Nha", "Quốc gia: Úc", "Quốc gia: Canada", "Quốc gia: Indonesia",
-                        "Quốc gia: Philippines", "Quốc gia: Quốc Gia Khác", "Năm: 2026", "Năm: 2025", "Năm: 2024", "Năm: 2023", "Năm: 2022", "Năm: 2021", "Năm: 2020", "Năm: 2019",
-                        "Năm: 2018", "Năm: 2017", "Năm: 2016"
-                    ]
-                }
-            ]
-        },
-        {
-            "type": "tv",
-            "id": "streamfree-live",
-            "name": "StreamFree • Trực Tiếp",
-            "extra": [
-                { "name": "skip", "isRequired": false },
-                {
-                    "name": "genre",
-                    "isRequired": true,
-                    "options": ["Thể loại: Tất Cả Trực Tiếp", "Thể loại: Bóng Đá (Soccer)", "Thể loại: Bóng Rổ (Basketball)", "Thể loại: Bóng Bầu Dục (NFL)", "Thể loại: Võ Thuật (Combat/UFC)", "Thể loại: Đua Xe (F1/Racing)", "Thể loại: Bóng Chày (MLB)", "Thể loại: Quần Vợt (Tennis)", "Thể loại: Khúc Côn Cầu (Hockey)", "Thể loại: Cricket"]
-                }
-            ]
-        },
-        {
-            "type": "tv",
-            "id": "sports-live",
-            "name": "K20 • Thể Thao Trực Tiếp",
-            "extra": [
-                { "name": "skip", "isRequired": false },
-                {
-                    "name": "genre",
-                    "isRequired": true,
-                    "options": ["Thể loại: Tất Cả Thể Thao", "Kênh: [Xôi Lạc] Thể Thao Trực Tiếp", "Kênh: [Cà Khịa] Thể Thao Trực Tiếp", "Kênh: [SoCoLive] Thể Thao Trực Tiếp", "Kênh: [CoLa TV] Thể Thao Trực Tiếp", "Kênh: [Lương Sơn] Thể Thao Trực Tiếp", "Kênh: [Vebo TV] Thể Thao Trực Tiếp", "Kênh: [Mì Tôm] Thể Thao Trực Tiếp", "Kênh: [90 Phút] Thể Thao Trực Tiếp", "Kênh: [S8 TV] Thể Thao Trực Tiếp", "Kênh: [Nguồn Khác] Thể Thao Trực Tiếp"]
                 }
             ]
         }
     ],
-    "behaviorHints": { "adult": false, "p2p": false, "configurable": true, "configurationRequired": false }
+    behaviorHints: { adult: false, p2p: false, configurable: true, configurationRequired: false }
 };
