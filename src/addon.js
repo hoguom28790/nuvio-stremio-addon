@@ -15,6 +15,16 @@ const SOURCE_CONFIG = {
     'yan:': { baseUrl: 'https://yan.com/api', name: 'YAN' }
 };
 
+builder.defineCatalogHandler(async ({ type, id, extra }) => {
+    console.log(`[Catalog Request] Type: ${type}, ID: ${id}`);
+    return Promise.resolve({ metas: [] });
+});
+
+builder.defineMetaHandler(async ({ type, id }) => {
+    console.log(`[Meta Request] Type: ${type}, ID: ${id}`);
+    return Promise.resolve({ meta: {} });
+});
+
 builder.defineStreamHandler(async ({ type, id }) => {
     console.log(`[Stream Request] Type: ${type}, ID: ${id}`);
     
@@ -57,15 +67,3 @@ builder.defineStreamHandler(async ({ type, id }) => {
 });
 
 module.exports = builder.getInterface();
-
-builder.defineCatalogHandler(async ({ type, id, extra }) => {
-    console.log([Catalog Request] Type: , ID: );
-    // Mock empty catalog for now to satisfy Stremio Addon SDK
-    return Promise.resolve({ metas: [] });
-});
-
-builder.defineMetaHandler(async ({ type, id }) => {
-    console.log([Meta Request] Type: , ID: );
-    // Mock empty meta to satisfy SDK
-    return Promise.resolve({ meta: {} });
-});
