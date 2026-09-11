@@ -1,5 +1,6 @@
 const axios = require('axios');
 const cache = require('../utils/cache');
+const { parseFilter } = require('../utils/filterHelper');
 
 const BASE_URL = 'https://phimapi.com';
 const CDN_URL = 'https://phimimg.com';
@@ -18,10 +19,31 @@ async function getCatalog(type, extra = {}) {
 
         if (extra.search) {
             url = `${BASE_URL}/v1/api/tim-kiem?keyword=${encodeURIComponent(extra.search)}&limit=24`;
-        } else if (type === 'series') {
-            url = `${BASE_URL}/v1/api/danh-sach/phim-bo?page=${page}`;
-        } else {
-            url = `${BASE_URL}/v1/api/danh-sach/phim-le?page=${page}`;
+        } else if (extra.genre) {
+            const filter = parseFilter(extra.genre);
+            if (filter) {
+                if (filter.filterType === 'genre') {
+                    url = `${BASE_URL}/v1/api/the-loai/${filter.slug}?page=${page}`;
+                } else if (filter.filterType === 'country') {
+                    url = `${BASE_URL}/v1/api/quoc-gia/${filter.slug}?page=${page}`;
+                } else if (filter.filterType === 'year') {
+                    url = `${BASE_URL}/v1/api/nam/${filter.slug}?page=${page}`;
+                } else if (filter.filterType === 'category') {
+                    url = `${BASE_URL}/v1/api/danh-sach/${filter.slug}?page=${page}`;
+                } else if (filter.filterType === 'decade') {
+                    url = `${BASE_URL}/v1/api/nam/${filter.slug}?page=${page}`;
+                } else if (filter.filterType === 'search') {
+                    url = `${BASE_URL}/v1/api/tim-kiem?keyword=${encodeURIComponent(filter.value)}&limit=24`;
+                }
+            }
+        }
+
+        if (!url) {
+            if (type === 'series') {
+                url = `${BASE_URL}/v1/api/danh-sach/phim-bo?page=${page}`;
+            } else {
+                url = `${BASE_URL}/v1/api/danh-sach/phim-le?page=${page}`;
+            }
         }
 
         const cacheKey = `kkphim:catalog:${type}:${JSON.stringify(extra)}`;

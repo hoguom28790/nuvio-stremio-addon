@@ -1,5 +1,6 @@
 const axios = require('axios');
 const cache = require('../utils/cache');
+const { parseFilter } = require('../utils/filterHelper');
 
 const BASE_URL = 'https://vsmov.com/api';
 
@@ -10,8 +11,35 @@ async function getCatalog(type, extra = {}) {
 
         if (extra.search) {
             url = `${BASE_URL}/tim-kiem?keyword=${encodeURIComponent(extra.search)}&limit=24`;
-        } else {
-            url = `${BASE_URL}/danh-sach/phim-moi-cap-nhat?page=${page}`;
+        } else if (extra.genre) {
+            const filter = parseFilter(extra.genre);
+            if (filter) {
+                if (filter.filterType === 'genre') {
+                    url = `${BASE_URL}/the-loai/${filter.slug}?page=${page}`;
+                } else if (filter.filterType === 'category') {
+                    if (filter.slug === 'phim-le') {
+                        url = `${BASE_URL}/danh-sach/phim-le?page=${page}`;
+                    } else if (filter.slug === 'phim-bo') {
+                        url = `${BASE_URL}/danh-sach/phim-bo?page=${page}`;
+                    } else if (filter.slug === 'phim-4k') {
+                        url = `${BASE_URL}/tim-kiem?keyword=4k&limit=24`;
+                    } else {
+                        url = `${BASE_URL}/danh-sach/phim-moi-cap-nhat?page=${page}`;
+                    }
+                } else if (filter.filterType === 'country' || filter.filterType === 'year') {
+                    url = `${BASE_URL}/tim-kiem?keyword=${encodeURIComponent(filter.value)}&limit=24`;
+                }
+            }
+        }
+
+        if (!url) {
+            if (type === 'series') {
+                url = `${BASE_URL}/danh-sach/phim-bo?page=${page}`;
+            } else if (type === 'movie') {
+                url = `${BASE_URL}/danh-sach/phim-le?page=${page}`;
+            } else {
+                url = `${BASE_URL}/danh-sach/phim-moi-cap-nhat?page=${page}`;
+            }
         }
 
         const cacheKey = `vsmov:catalog:${type}:${JSON.stringify(extra)}`;
@@ -143,7 +171,6 @@ async function getStream(id, type) {
             }
         });
 
-        // Prioritize CDN first, then Proxy fallback
         return [...cdnStreams, ...proxyStreams];
     } catch (err) {
         console.error('[VSMOV Stream Error]:', err.message);
