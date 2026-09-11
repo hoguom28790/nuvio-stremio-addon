@@ -57,3 +57,15 @@ builder.defineStreamHandler(async ({ type, id }) => {
 });
 
 module.exports = builder.getInterface();
+
+builder.defineCatalogHandler(async ({ type, id, extra }) => {
+    console.log([Catalog Request] Type: , ID: );
+    // Mock empty catalog for now to satisfy Stremio Addon SDK
+    return Promise.resolve({ metas: [] });
+});
+
+builder.defineMetaHandler(async ({ type, id }) => {
+    console.log([Meta Request] Type: , ID: );
+    // Mock empty meta to satisfy SDK
+    return Promise.resolve({ meta: {} });
+});
