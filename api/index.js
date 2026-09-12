@@ -96,16 +96,23 @@ app.get('/hentaiz/stream/:videoId/:quality.m3u8', async (req, res) => {
 app.get('/debug/hentaiz', async (req, res) => {
     const axios = require('axios');
     const results = {};
+    const fullUa = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36';
     const testEndpoints = [
-        'https://storage.haiten.org',
+        'https://storage.haiten.org/2026/08/6d18bd8e-c973-4866-888c-fe82f119f507.jpg',
         'https://x.haiten.org/watch?v=7befd23d-0013-46ac-ac52-2130b62c3b73',
         'https://x.mimix.cc/watch/7befd23d-0013-46ac-ac52-2130b62c3b73',
-        'https://c2.animez.top'
+        'https://c2.animez.top/7befd23d-0013-46ac-ac52-2130b62c3b73/SNU0Bmjk5g/Bw9rQwCNB_VxFxtW7JSgC1iRHPc.png'
     ];
     for (const url of testEndpoints) {
         try {
-            const r = await axios.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 5000 });
-            results[url] = { status: r.status };
+            const headers = { 'User-Agent': fullUa };
+            if (url.includes('mimix.cc')) headers['Referer'] = 'https://x.haiten.org/';
+            if (url.includes('animez.top')) {
+                headers['Referer'] = 'https://x.haiten.org/';
+                headers['Range'] = 'bytes=8343-2477346';
+            }
+            const r = await axios.get(url, { headers, timeout: 7000 });
+            results[url] = { status: r.status, len: typeof r.data === 'string' ? r.data.length : undefined };
         } catch (e) {
             results[url] = { status: e.response?.status || e.message };
         }
