@@ -200,16 +200,128 @@ const javhdCatalogs = [
     }
 ];
 
+const vlxxGenres = [
+    "Tất Cả",
+    "Vietsub",
+    "Không Che",
+    "Phim Hay",
+    "JAV",
+    "Sex Học Sinh",
+    "Vụng Trộm - Ngoại Tình",
+    "Phim Cấp 3",
+    "Sex Mỹ - Châu Âu",
+    "XVIDEOS",
+    "XNXX",
+    "XXX"
+];
+
+const vlxxCatalogs = [
+    {
+        type: "movie",
+        id: "vlxx-latest",
+        name: "VLXX Mới Nhất",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: vlxxGenres }
+        ]
+    },
+    {
+        type: "movie",
+        id: "vlxx-vietsub",
+        name: "VLXX Vietsub",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: vlxxGenres }
+        ]
+    },
+    {
+        type: "movie",
+        id: "vlxx-uncensored",
+        name: "VLXX Không Che",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: vlxxGenres }
+        ]
+    },
+    {
+        type: "movie",
+        id: "vlxx-popular",
+        name: "VLXX Phim Hay",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: vlxxGenres }
+        ]
+    },
+    {
+        type: "movie",
+        id: "vlxx-jav",
+        name: "VLXX JAV",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: vlxxGenres }
+        ]
+    },
+    {
+        type: "movie",
+        id: "vlxx-hocsinh",
+        name: "VLXX Học Sinh",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: vlxxGenres }
+        ]
+    },
+    {
+        type: "movie",
+        id: "vlxx-vungtrom",
+        name: "VLXX Vụng Trộm",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: vlxxGenres }
+        ]
+    },
+    {
+        type: "movie",
+        id: "vlxx-cap3",
+        name: "VLXX Phim Cấp 3",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: vlxxGenres }
+        ]
+    },
+    {
+        type: "movie",
+        id: "vlxx-aumy",
+        name: "VLXX Âu Mỹ",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: vlxxGenres }
+        ]
+    }
+];
+
 function getManifest(config = {}) {
     let catalogs = filteredCatalogs;
     const isHentaiz = !!(config && Array.isArray(config.sources) && config.sources.includes('hentaiz'));
     const isJavhd = !!(config && Array.isArray(config.sources) && config.sources.includes('javhd'));
+    const isVlxx = !!(config && Array.isArray(config.sources) && config.sources.includes('vlxx'));
 
     if (isHentaiz) {
         catalogs = [...catalogs, ...hentaizCatalogs];
     }
     if (isJavhd) {
         catalogs = [...catalogs, ...javhdCatalogs];
+    }
+    if (isVlxx) {
+        catalogs = [...catalogs, ...vlxxCatalogs];
     }
 
     if (config && config.sources && Array.isArray(config.sources)) {
@@ -222,6 +334,7 @@ function getManifest(config = {}) {
     let idPrefixes = [...baseManifest.idPrefixes];
     if (isHentaiz) idPrefixes.push("hentaiz:");
     if (isJavhd) idPrefixes.push("javhd:");
+    if (isVlxx) idPrefixes.push("vlxx:");
 
     const resources = baseManifest.resources.map(res => {
         if (typeof res === 'object' && res.idPrefixes) {

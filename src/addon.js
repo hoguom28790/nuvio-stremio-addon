@@ -7,6 +7,7 @@ const animation = require('./scrapers/animation');
 const clbpx = require('./scrapers/clbpx');
 const hentaiz = require('./scrapers/hentaiz');
 const javhd = require('./scrapers/javhd');
+const vlxx = require('./scrapers/vlxx');
 const imdb = require('./scrapers/imdb');
 const cache = require('./utils/cache');
 
@@ -42,7 +43,7 @@ const builder = new CustomAddonBuilder(manifest);
 
 // Helper to check if source is enabled in config
 function isSourceEnabled(sourcePrefix, config) {
-    if (sourcePrefix === 'hentaiz' || sourcePrefix === 'javhd') {
+    if (sourcePrefix === 'hentaiz' || sourcePrefix === 'javhd' || sourcePrefix === 'vlxx') {
         return !!(config && Array.isArray(config.sources) && config.sources.includes(sourcePrefix));
     }
     if (!config || !config.sources || !Array.isArray(config.sources)) {
@@ -79,6 +80,10 @@ builder.defineCatalogHandler(async ({ type, id, extra = {}, config = {} }) => {
 
         if (id.startsWith('javhd-') && isSourceEnabled('javhd', config)) {
             return { metas: await javhd.getCatalog(id, type, extra) };
+        }
+
+        if (id.startsWith('vlxx-') && isSourceEnabled('vlxx', config)) {
+            return { metas: await vlxx.getCatalog(id, type, extra) };
         }
     } catch (e) {
         console.error(`[Catalog Error] ID: ${id}:`, e.message);
@@ -126,6 +131,10 @@ builder.defineMetaHandler(async ({ type, id, config = {} }) => {
             const meta = await javhd.getMeta(type, id);
             if (meta) return { meta };
         }
+        if (id.startsWith('vlxx:')) {
+            const meta = await vlxx.getMeta(type, id);
+            if (meta) return { meta };
+        }
     } catch (e) {
         console.error(`[Meta Error] ID: ${id}:`, e.message);
     }
@@ -165,6 +174,8 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
             streams = await hentaiz.getStream(id, type, config.host);
         } else if (id.startsWith('javhd:')) {
             streams = await javhd.getStream(id, type, config.host);
+        } else if (id.startsWith('vlxx:')) {
+            streams = await vlxx.getStream(id, type, config.host);
         } else if (id.startsWith('tt')) {
             if (config.prefImdb !== false) {
                 streams = await imdb.getStream(id, type, config);

@@ -735,9 +735,9 @@ function renderConfigPage(host, initialConfig = {}) {
       </div>
     </div>
     
-    <div id="tgk-locked" class="tgk-lock-box" style="${(isSourceActive('hentaiz') || isSourceActive('javhd')) ? 'display: none;' : ''}">
+    <div id="tgk-locked" class="tgk-lock-box" style="${(isSourceActive('hentaiz') || isSourceActive('javhd') || isSourceActive('vlxx')) ? 'display: none;' : ''}">
       <div style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.5;">
-        🔒 Mục này chứa nguồn phim từ <b>HentaiZ & JavHD</b>. Mặc định bị tắt. Vui lòng nhập đúng mật mã để mở khóa và kích hoạt các nguồn này.
+        🔒 Mục này chứa nguồn phim từ <b>HentaiZ, JavHD & VLXX</b>. Mặc định bị tắt. Vui lòng nhập đúng mật mã để mở khóa và kích hoạt các nguồn này.
       </div>
       <div class="tgk-input-group">
         <input type="password" id="tgk-pass" class="tgk-input" placeholder="Nhập mật khẩu để mở khóa..." onkeydown="if(event.key==='Enter') unlockTheGioiKhac()">
@@ -745,7 +745,7 @@ function renderConfigPage(host, initialConfig = {}) {
       </div>
     </div>
 
-    <div id="tgk-unlocked" style="${(isSourceActive('hentaiz') || isSourceActive('javhd')) ? '' : 'display: none;'} margin-top: 14px;">
+    <div id="tgk-unlocked" style="${(isSourceActive('hentaiz') || isSourceActive('javhd') || isSourceActive('vlxx')) ? '' : 'display: none;'} margin-top: 14px;">
       <div style="font-size: 0.85rem; color: var(--accent-green); margin-bottom: 12px; font-weight: 500;">
         ✓ Đã mở khóa thành công danh mục Thế Giới Khác.
       </div>
@@ -757,6 +757,10 @@ function renderConfigPage(host, initialConfig = {}) {
         <label class="${sourceClass('javhd')}">
           <input type="checkbox" name="source" value="javhd" ${sourceChecked('javhd')} onchange="updateUI()">
           <span>⚡ JavHD (Phim Nhật Bản)</span>
+        </label>
+        <label class="${sourceClass('vlxx')}">
+          <input type="checkbox" name="source" value="vlxx" ${sourceChecked('vlxx')} onchange="updateUI()">
+          <span>⚡ VLXX (Phim Chọn Lọc)</span>
         </label>
       </div>
     </div>
