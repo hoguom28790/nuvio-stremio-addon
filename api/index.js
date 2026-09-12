@@ -98,24 +98,17 @@ app.get('/debug/hentaiz', async (req, res) => {
     const segUrl = 'https://c1.animez.top/7b9ab61d-239a-4641-bee1-6c018acfd21d/2R0nZA/4rDfPXoeWG6LOzLkqZ-_xR8jUsQ.png';
     const result = {};
     try {
-        const rSeg = await axios.get(segUrl, {
+        const fetchRes = await fetch(segUrl, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Referer': 'https://x.haiten.org/',
                 'Range': 'bytes=8343-10343'
-            },
-            timeout: 8000,
-            responseType: 'arraybuffer'
+            }
         });
-        result.segStatus = rSeg.status;
-        result.segLen = rSeg.data?.length;
+        result.fetchStatus = fetchRes.status;
+        result.fetchHeaders = Object.fromEntries(fetchRes.headers.entries());
     } catch (e) {
-        result.segError = {
-            status: e.response?.status,
-            message: e.message,
-            headers: e.response?.headers,
-            bodySnippet: e.response?.data ? String(e.response.data).substring(0, 300) : null
-        };
+        result.fetchError = e.message;
     }
 
     try {
