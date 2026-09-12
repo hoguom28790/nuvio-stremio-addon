@@ -104,12 +104,25 @@ app.get('/debug/hentaiz', async (req, res) => {
                 'Referer': 'https://x.haiten.org/',
                 'Range': 'bytes=8343-10343'
             },
-            timeout: 8000
+            timeout: 8000,
+            responseType: 'arraybuffer'
         });
         result.segStatus = rSeg.status;
         result.segLen = rSeg.data?.length;
     } catch (e) {
-        result.segError = { status: e.response?.status, message: e.message };
+        result.segError = {
+            status: e.response?.status,
+            message: e.message,
+            headers: e.response?.headers,
+            bodySnippet: e.response?.data ? String(e.response.data).substring(0, 300) : null
+        };
+    }
+
+    try {
+        const sData = await hentaiz.getM3u8('7b9ab61d-239a-4641-bee1-6c018acfd21d', 'master');
+        result.masterLen = sData?.length;
+    } catch (e) {
+        result.masterError = e.message;
     }
 
     try {
