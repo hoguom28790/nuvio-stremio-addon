@@ -108,7 +108,7 @@ const hentaizCatalogs = [
     {
         type: "series",
         id: "hentaiz-anime",
-        name: "Thế Giới Khác • HentaiZ",
+        name: "HentaiZ",
         extra: [
             { name: "search", isRequired: false },
             { name: "skip", isRequired: false },
@@ -118,7 +118,7 @@ const hentaizCatalogs = [
     {
         type: "movie",
         id: "hentaiz-movie",
-        name: "Thế Giới Khác • HentaiZ Phim",
+        name: "HentaiZ Phim",
         extra: [
             { name: "search", isRequired: false },
             { name: "skip", isRequired: false },
@@ -151,7 +151,7 @@ const javhdCatalogs = [
     {
         type: "movie",
         id: "javhd-latest",
-        name: "Thế Giới Khác • JavHD Mới Nhất",
+        name: "JavHD Mới Nhất",
         extra: [
             { name: "search", isRequired: false },
             { name: "skip", isRequired: false },
@@ -161,7 +161,7 @@ const javhdCatalogs = [
     {
         type: "movie",
         id: "javhd-trending",
-        name: "Thế Giới Khác • JavHD Xu Hướng",
+        name: "JavHD Xu Hướng",
         extra: [
             { name: "search", isRequired: false },
             { name: "skip", isRequired: false },
@@ -171,7 +171,7 @@ const javhdCatalogs = [
     {
         type: "movie",
         id: "javhd-censored",
-        name: "Thế Giới Khác • JavHD Có Che",
+        name: "JavHD Có Che",
         extra: [
             { name: "search", isRequired: false },
             { name: "skip", isRequired: false },
@@ -181,7 +181,7 @@ const javhdCatalogs = [
     {
         type: "movie",
         id: "javhd-uncensored",
-        name: "Thế Giới Khác • JavHD Không Che",
+        name: "JavHD Không Che",
         extra: [
             { name: "search", isRequired: false },
             { name: "skip", isRequired: false },
@@ -191,7 +191,7 @@ const javhdCatalogs = [
     {
         type: "movie",
         id: "javhd-beauty",
-        name: "Thế Giới Khác • JavHD Người Đẹp",
+        name: "JavHD Người Đẹp",
         extra: [
             { name: "search", isRequired: false },
             { name: "skip", isRequired: false },
