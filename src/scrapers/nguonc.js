@@ -2,6 +2,8 @@ const axios = require('axios');
 const cache = require('../utils/cache');
 const { parseFilter } = require('../utils/filterHelper');
 const { findEpisode } = require('../utils/episodeHelper');
+const kkphim = require('./kkphim');
+const vsmov = require('./vsmov');
 
 const BASE_URL = 'https://phim.nguonc.com/api';
 
@@ -148,26 +150,78 @@ async function getStream(id, type) {
 
         const streams = [];
 
+        // 1. Cross-resolve direct HLS CDN stream from KKPhim or VSMOV
+        try {
+            const searchQueries = [movie.original_name, movie.name].filter(Boolean);
+            let match = null;
+            let matchSource = null;
+
+            // Check KKPhim first
+            for (const q of searchQueries) {
+                const results = await kkphim.getCatalog(type, { search: q });
+                if (results && results.length > 0) {
+                    match = results[0];
+                    matchSource = 'kkphim';
+                    break;
+                }
+            }
+
+            // Check VSMOV if not found in KKPhim
+            if (!match) {
+                for (const q of searchQueries) {
+                    const results = await vsmov.getCatalog(type, { search: q });
+                    if (results && results.length > 0) {
+                        match = results[0];
+                        matchSource = 'vsmov';
+                        break;
+                    }
+                }
+            }
+
+            if (match && matchSource === 'kkphim') {
+                const kkSlug = match.id.replace('kkphim:', '').split(':')[0];
+                const kkId = targetEp ? `kkphim:${kkSlug}:1:${targetEp}` : `kkphim:${kkSlug}`;
+                const directStreams = await kkphim.getStream(kkId, type);
+                directStreams.forEach(s => {
+                    streams.push({
+                        name: s.name.replace('KKPhim', 'NguonC (CDN HLS)'),
+                        title: s.title,
+                        url: s.url,
+                        behaviorHints: {
+                            notWebReady: false
+                        }
+                    });
+                });
+            } else if (match && matchSource === 'vsmov') {
+                const vsSlug = match.id.replace('vsmov:', '').split(':')[0];
+                const vsId = targetEp ? `vsmov:${vsSlug}:1:${targetEp}` : `vsmov:${vsSlug}`;
+                const directStreams = await vsmov.getStream(vsId, type);
+                directStreams.forEach(s => {
+                    streams.push({
+                        name: s.name.replace('VSMOV', 'NguonC (CDN HLS)'),
+                        title: s.title,
+                        url: s.url,
+                        behaviorHints: {
+                            notWebReady: false
+                        }
+                    });
+                });
+            }
+        } catch (e) {
+            console.error('[NguonC Cross-source Error]:', e.message);
+        }
+
+        // 2. Include original embed as externalUrl (opened in external browser)
         movie.episodes.forEach(server => {
             const serverName = server.server_name || 'NguonC';
             const items = server.items || [];
-
             const targetItem = findEpisode(items, targetEp);
 
             if (targetItem && targetItem.embed) {
                 streams.push({
-                    name: `🛡️ [Proxy] NguonC • ${serverName}`,
-                    title: `${movie.name} - Tập ${targetItem.name}\n🛡️ Định tuyến: Máy chủ trung gian (Proxy / StreamC)\n📌 Khuyên dùng: Dùng khi các nguồn CDN bị nghẽn`,
-                    url: targetItem.embed,
-                    behaviorHints: {
-                        notWebReady: true,
-                        proxyHeaders: {
-                            request: {
-                                "Referer": "https://phim.nguonc.com/",
-                                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-                            }
-                        }
-                    }
+                    name: `🛡️ [Web] NguonC • ${serverName}`,
+                    title: `${movie.name} - Tập ${targetItem.name}\n🌐 Mở xem trực tiếp trên trình duyệt Web (StreamC Embed)\n📌 Yêu cầu mở ngoài bằng trình duyệt`,
+                    externalUrl: targetItem.embed
                 });
             }
         });

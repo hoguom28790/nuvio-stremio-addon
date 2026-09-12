@@ -157,7 +157,13 @@ async function getStream(id, type, config = {}) {
                         ? `nguonc:${bestMatch.slug}:${season}:${episode}`
                         : `nguonc:${bestMatch.slug}`;
                     const ncStreams = await nguonc.getStream(ncId, type);
-                    proxyStreams.push(...ncStreams);
+                    ncStreams.forEach(s => {
+                        if (s.name.includes('[CDN]') && prefCdn) {
+                            cdnStreams.push(s);
+                        } else if (prefProxy) {
+                            proxyStreams.push(s);
+                        }
+                    });
                 }
             } catch (e) {
                 // ignore
