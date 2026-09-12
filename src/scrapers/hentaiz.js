@@ -390,7 +390,9 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
         const proxyHeaders = {
             request: {
                 'User-Agent': USER_AGENT,
-                'Referer': 'https://x.haiten.org/'
+                'Referer': 'https://x.haiten.org/',
+                'Origin': 'https://x.haiten.org',
+                'Connection': 'keep-alive'
             }
         };
 
@@ -419,47 +421,50 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
             variant1080 = variantMatches[variantMatches.length - 1];
         }
         if (!variant720 && variantMatches.length > 1) {
-            variant720 = variantMatches[1];
+            variant720 = variantMatches[variantMatches.length - 2];
         }
 
         const streams = [];
 
-        // 1. Direct CDN Master (Auto resolution - recommended for Stremio & Nuvio)
-        streams.push({
-            name: '🔞 HentaiZ',
-            title: `[Tự Động Auto] ${cleanTitle}\n⚡ CDN Tốc độ cao • Đa độ phân giải HLS (1080p/720p)`,
-            url: `${cdnDomain}/${videoId}/master.m3u8`,
-            behaviorHints: {
-                notWebReady: true,
-                proxyHeaders: proxyHeaders
-            }
-        });
-
-        // 2. Direct CDN 1080p Full HD
-        if (variant1080) {
-            streams.push({
-                name: '🔞 HentaiZ',
-                title: `[Full HD 1080p] ${cleanTitle}\n⚡ CDN Tốc độ cao • 1080p Siêu nét`,
-                url: `${cdnDomain}/${videoId}/${variant1080}/playlist.m3u8`,
-                behaviorHints: {
-                    notWebReady: true,
-                    proxyHeaders: proxyHeaders
-                }
-            });
-        }
-
-        // 3. Direct CDN 720p HD
+        // 1. Direct CDN 720p HD (Tối ưu tốc độ cao, tua nhanh tức thì không giật lag)
         if (variant720) {
             streams.push({
                 name: '🔞 HentaiZ',
-                title: `[HD 720p] ${cleanTitle}\n⚡ CDN Tốc độ cao • 720p Mượt mà`,
+                title: `[HD 720p - Khuyên Dùng] ${cleanTitle}\n⚡ Tốc độ cao • Tua nhanh tức thì • Tải mượt mà không độ trễ`,
                 url: `${cdnDomain}/${videoId}/${variant720}/playlist.m3u8`,
                 behaviorHints: {
                     notWebReady: true,
+                    bingeGroup: 'hentaiz-720p',
                     proxyHeaders: proxyHeaders
                 }
             });
         }
+
+        // 2. Direct CDN 1080p Full HD (Hình ảnh siêu nét)
+        if (variant1080) {
+            streams.push({
+                name: '🔞 HentaiZ',
+                title: `[Full HD 1080p] ${cleanTitle}\n⚡ CDN Trực tiếp • Hình ảnh siêu nét Full HD`,
+                url: `${cdnDomain}/${videoId}/${variant1080}/playlist.m3u8`,
+                behaviorHints: {
+                    notWebReady: true,
+                    bingeGroup: 'hentaiz-1080p',
+                    proxyHeaders: proxyHeaders
+                }
+            });
+        }
+
+        // 3. Direct CDN Master (Tự Động Đa Độ Phân Giải HLS)
+        streams.push({
+            name: '🔞 HentaiZ',
+            title: `[Tự Động Auto] ${cleanTitle}\n⚡ Đa độ phân giải thích ứng (1080p/720p/480p)`,
+            url: `${cdnDomain}/${videoId}/master.m3u8`,
+            behaviorHints: {
+                notWebReady: true,
+                bingeGroup: 'hentaiz-auto',
+                proxyHeaders: proxyHeaders
+            }
+        });
 
         // 4. Server Reconstructed Stream (Backup route)
         streams.push({
@@ -468,6 +473,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
             url: `${hostBase}/hentaiz/stream/${videoId}/master.m3u8`,
             behaviorHints: {
                 notWebReady: true,
+                bingeGroup: 'hentaiz-proxy',
                 proxyHeaders: proxyHeaders
             }
         });
