@@ -25,47 +25,9 @@ function parseConfig(configParam) {
 
 // Serve logo.png
 const path = require('path');
-const axios = require('axios');
 app.get('/logo.png', (req, res) => {
     res.setHeader('Cache-Control', 'max-age=86400, public');
     res.sendFile(path.join(__dirname, '..', 'logo.png'));
-});
-
-// Debug endpoint to diagnose NguonC outbound connectivity from Vercel
-app.get('/debug-nguonc', async (req, res) => {
-    const url = req.query.url || 'https://phim.nguonc.com/api/films/danh-sach/phim-le?page=1';
-    const ua = req.query.ua || 'default';
-    const method = req.query.method || 'axios';
-
-    try {
-        const t0 = Date.now();
-        if (method === 'fetch') {
-            const fetchRes = await fetch(url, {
-                headers: ua === 'none' ? {} : { 'User-Agent': ua }
-            });
-            const text = await fetchRes.text();
-            let json;
-            try { json = JSON.parse(text); } catch (e) {}
-            return res.json({
-                ok: fetchRes.ok,
-                status: fetchRes.status,
-                itemsCount: json?.items?.length,
-                bodySnippet: text.slice(0, 200)
-            });
-        }
-
-        const headers = ua === 'none' ? {} : { 'User-Agent': ua };
-        const r = await axios.get(url, { timeout: 8000, headers });
-        res.json({ ok: true, duration: Date.now() - t0, status: r.status, itemsCount: r.data?.items?.length });
-    } catch(err) {
-        res.json({
-            ok: false,
-            message: err.message,
-            code: err.code,
-            responseStatus: err.response?.status,
-            responseData: typeof err.response?.data === 'string' ? err.response.data.slice(0, 300) : err.response?.data
-        });
-    }
 });
 
 // Serve the Config / Landing page on root, /configure, and /:config/configure
