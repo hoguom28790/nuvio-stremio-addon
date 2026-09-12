@@ -5,6 +5,7 @@ const nguonc = require('./scrapers/nguonc');
 const vsmov = require('./scrapers/vsmov');
 const animation = require('./scrapers/animation');
 const clbpx = require('./scrapers/clbpx');
+const hentaiz = require('./scrapers/hentaiz');
 const imdb = require('./scrapers/imdb');
 const cache = require('./utils/cache');
 
@@ -40,6 +41,9 @@ const builder = new CustomAddonBuilder(manifest);
 
 // Helper to check if source is enabled in config
 function isSourceEnabled(sourcePrefix, config) {
+    if (sourcePrefix === 'hentaiz') {
+        return !!(config && Array.isArray(config.sources) && config.sources.includes('hentaiz'));
+    }
     if (!config || !config.sources || !Array.isArray(config.sources)) {
         return true; // default enabled
     }
@@ -67,6 +71,10 @@ builder.defineCatalogHandler(async ({ type, id, extra = {}, config = {} }) => {
 
         if (id === 'clbpx-movie' && isSourceEnabled('clbpx', config)) return { metas: await clbpx.getCatalog('movie', extra) };
         if (id === 'clbpx-series' && isSourceEnabled('clbpx', config)) return { metas: await clbpx.getCatalog('series', extra) };
+
+        if ((id === 'hentaiz-anime' || id === 'hentaiz-movie') && isSourceEnabled('hentaiz', config)) {
+            return { metas: await hentaiz.getCatalog(type, extra) };
+        }
     } catch (e) {
         console.error(`[Catalog Error] ID: ${id}:`, e.message);
     }
@@ -105,6 +113,10 @@ builder.defineMetaHandler(async ({ type, id, config = {} }) => {
             const meta = await clbpx.getMeta(type, id);
             if (meta) return { meta };
         }
+        if (id.startsWith('hentaiz:') && isSourceEnabled('hentaiz', config)) {
+            const meta = await hentaiz.getMeta(type, id);
+            if (meta) return { meta };
+        }
     } catch (e) {
         console.error(`[Meta Error] ID: ${id}:`, e.message);
     }
@@ -140,6 +152,8 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
             streams = await animation.getStream('stp', id, type);
         } else if (id.startsWith('clbpx:') && isSourceEnabled('clbpx', config)) {
             streams = await clbpx.getStream(id, type);
+        } else if (id.startsWith('hentaiz:') && isSourceEnabled('hentaiz', config)) {
+            streams = await hentaiz.getStream(id, type, config.host);
         } else if (id.startsWith('tt')) {
             if (config.prefImdb !== false) {
                 streams = await imdb.getStream(id, type, config);

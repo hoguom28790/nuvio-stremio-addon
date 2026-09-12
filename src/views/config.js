@@ -385,6 +385,61 @@ function renderConfigPage(host, initialConfig = {}) {
       color: #fff;
     }
 
+    /* Thế Giới Khác (18+) Styles */
+    .tgk-lock-box {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 16px;
+      background: rgba(255, 42, 109, 0.06);
+      border: 1px dashed rgba(255, 42, 109, 0.4);
+      border-radius: 16px;
+      margin-top: 10px;
+    }
+
+    .tgk-input-group {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .tgk-input {
+      flex: 1;
+      min-width: 180px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-card);
+      color: #fff;
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 0.95rem;
+      outline: none;
+      font-family: inherit;
+      transition: all 0.2s ease;
+    }
+
+    .tgk-input:focus {
+      border-color: var(--accent-pink);
+      box-shadow: 0 0 12px rgba(255, 42, 109, 0.35);
+    }
+
+    .tgk-btn-unlock {
+      padding: 12px 22px;
+      background: linear-gradient(135deg, #ff2a6d, #9d4edd);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s ease;
+    }
+
+    .tgk-btn-unlock:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 15px rgba(255, 42, 109, 0.45);
+    }
+
     /* Action CTA Box */
     .action-box {
       background: var(--bg-card);
@@ -672,6 +727,35 @@ function renderConfigPage(host, initialConfig = {}) {
     </div>
   </div>
 
+  <!-- Thế Giới Khác (18+) -->
+  <div class="card" id="card-tgk" style="border-color: rgba(255, 42, 109, 0.3);">
+    <div class="cat-header">
+      <div class="section-title" style="margin: 0; color: #ff5e8a;">
+        <span>🔞 Thế Giới Khác (Anime 18+)</span>
+      </div>
+    </div>
+    
+    <div id="tgk-locked" class="tgk-lock-box" style="${isSourceActive('hentaiz') ? 'display: none;' : ''}">
+      <div style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.5;">
+        🔒 Mục này chứa nguồn phim anime 18+ từ <b>HentaiZ</b>. Mặc định bị tắt. Vui lòng nhập đúng mật mã để mở khóa và kích hoạt nguồn này.
+      </div>
+      <div class="tgk-input-group">
+        <input type="password" id="tgk-pass" class="tgk-input" placeholder="Nhập mật khẩu để mở khóa..." onkeydown="if(event.key==='Enter') unlockTheGioiKhac()">
+        <button type="button" class="tgk-btn-unlock" onclick="unlockTheGioiKhac()">Mở Khóa</button>
+      </div>
+    </div>
+
+    <div id="tgk-unlocked" style="${isSourceActive('hentaiz') ? '' : 'display: none;'} margin-top: 14px;">
+      <div style="font-size: 0.85rem; color: var(--accent-green); margin-bottom: 12px; font-weight: 500;">
+        ✓ Đã mở khóa thành công danh mục Thế Giới Khác.
+      </div>
+      <label class="${sourceClass('hentaiz')}">
+        <input type="checkbox" name="source" value="hentaiz" ${sourceChecked('hentaiz')} onchange="updateUI()">
+        <span>🔞 HentaiZ (Anime 18+ Vietsub)</span>
+      </label>
+    </div>
+  </div>
+
   <!-- Action CTA Box -->
   <div class="action-box">
     <div class="cta-group">
@@ -758,10 +842,33 @@ function renderConfigPage(host, initialConfig = {}) {
   }
 
   function toggleAllSources() {
-    const checkboxes = document.querySelectorAll('input[name="source"]');
+    const checkboxes = document.querySelectorAll('.category-grid input[name="source"]');
     const anyUnchecked = Array.from(checkboxes).some(cb => !cb.checked);
     checkboxes.forEach(cb => cb.checked = anyUnchecked);
     updateUI();
+  }
+
+  function unlockTheGioiKhac() {
+    const passInput = document.getElementById('tgk-pass');
+    const pass = passInput ? passInput.value.trim() : '';
+    if (pass === '097082') {
+      const lockedDiv = document.getElementById('tgk-locked');
+      const unlockedDiv = document.getElementById('tgk-unlocked');
+      if (lockedDiv) lockedDiv.style.display = 'none';
+      if (unlockedDiv) {
+        unlockedDiv.style.display = 'block';
+        const cb = unlockedDiv.querySelector('input[name="source"]');
+        if (cb) cb.checked = true;
+      }
+      showToast('Đã mở khóa mục Thế Giới Khác!');
+      updateUI();
+    } else {
+      showToast('Mật khẩu không chính xác!');
+      if (passInput) {
+        passInput.value = '';
+        passInput.focus();
+      }
+    }
   }
 
   function copyManifestUrl() {

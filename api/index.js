@@ -53,9 +53,14 @@ app.get(['/', '/configure', '/:config/configure'], (req, res) => {
 });
 
 // Resource handler helper
+const hentaiz = require('../src/scrapers/hentaiz');
+
 async function handleResource(req, res, config) {
     const { resource, type, id } = req.params;
     const extra = req.params.extra ? qs.parse(req.url.split('/').pop().slice(0, -5)) : {};
+    
+    // Inject current host into config for dynamic stream URLs
+    config.host = req.headers.host || 'hophimaddon.vercel.app';
 
     try {
         const resp = await addonInterface.get(resource, type, id, extra, config);
@@ -71,6 +76,21 @@ async function handleResource(req, res, config) {
         }
     }
 }
+
+// HentaiZ HLS M3U8 Stream Delivery Route
+app.get('/hentaiz/stream/:videoId/:quality.m3u8', async (req, res) => {
+    const { videoId, quality } = req.params;
+    try {
+        const playlist = await hentaiz.getM3u8(videoId, quality);
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Cache-Control', 'max-age=1800, public');
+        res.send(playlist);
+    } catch (err) {
+        console.error('[HentaiZ M3U8 Error]:', err.message);
+        res.status(500).send('Error generating playlist');
+    }
+});
 
 // Configured Resource routes
 app.get('/:config/:resource(catalog|stream|meta|subtitles)/:type/:id/:extra?.json', (req, res) => {
