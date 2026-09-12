@@ -559,14 +559,13 @@ function renderConfigPage(host) {
   <div class="hero">
     <h1>Hồ Phim - Stremio & Nuvio</h1>
     <p class="subtitle">
-      Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ NguonC, Siêu Tầm Phim, Hoạt Hình 3D, CLB Phim Xưa, VSMOV, YanHH3D, KKPhim, StreamFree Live và Thể Thao Trực Tiếp.
+      Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ NguonC, Siêu Tầm Phim, Hoạt Hình 3D, CLB Phim Xưa, VSMOV, YanHH3D, KKPhim.
     </p>
     <div class="badge-bar">
       <span class="pill-tag">⚡ CDN Tốc Độ Cao</span>
       <span class="pill-tag">🎞️ 4K / 1080p Full HD</span>
       <span class="pill-tag">🛡️ Proxy Dự Phòng</span>
-      <span class="pill-tag">⚽ Thể Thao Live</span>
-      <span class="pill-tag">📺 Truyền Hình IPTV</span>
+      <span class="pill-tag">🎬 Phim Lẻ & Bộ Mới Nhất</span>
     </div>
   </div>
 
@@ -586,7 +585,7 @@ function renderConfigPage(host) {
         </div>
       </div>
       <label class="switch">
-        <input type="checkbox" id="pref-cdn" checked>
+        <input type="checkbox" id="pref-cdn" checked onchange="updateUI()">
         <span class="slider"></span>
       </label>
     </div>
@@ -601,7 +600,7 @@ function renderConfigPage(host) {
         </div>
       </div>
       <label class="switch">
-        <input type="checkbox" id="pref-proxy" checked>
+        <input type="checkbox" id="pref-proxy" checked onchange="updateUI()">
         <span class="slider"></span>
       </label>
     </div>
@@ -616,7 +615,7 @@ function renderConfigPage(host) {
         </div>
       </div>
       <label class="switch">
-        <input type="checkbox" id="pref-imdb" checked>
+        <input type="checkbox" id="pref-imdb" checked onchange="updateUI()">
         <span class="slider"></span>
       </label>
     </div>
@@ -655,14 +654,6 @@ function renderConfigPage(host) {
       <label class="cat-checkbox checked">
         <input type="checkbox" name="source" value="clbpx" checked onchange="updateUI()">
         <span>⚡ CLB Phim Xưa (Kinh Điển)</span>
-      </label>
-      <label class="cat-checkbox checked">
-        <input type="checkbox" name="source" value="sports" checked onchange="updateUI()">
-        <span>⚽ Thể Thao Trực Tiếp (Live)</span>
-      </label>
-      <label class="cat-checkbox checked">
-        <input type="checkbox" name="source" value="streamfree" checked onchange="updateUI()">
-        <span>📺 StreamFree Live (IPTV)</span>
       </label>
       <label class="cat-checkbox checked">
         <input type="checkbox" name="source" value="nguonc" checked onchange="updateUI()">
@@ -722,6 +713,16 @@ function renderConfigPage(host) {
 <div id="toast" class="toast">Đã sao chép liên kết vào bộ nhớ tạm!</div>
 
 <script>
+  const host = "${host}";
+
+  function getSelectedConfig() {
+    const sources = Array.from(document.querySelectorAll('input[name="source"]:checked')).map(cb => cb.value);
+    const prefCdn = document.getElementById('pref-cdn')?.checked ?? true;
+    const prefProxy = document.getElementById('pref-proxy')?.checked ?? true;
+    const prefImdb = document.getElementById('pref-imdb')?.checked ?? true;
+    return { sources, prefCdn, prefProxy, prefImdb };
+  }
+
   function updateUI() {
     document.querySelectorAll('.cat-checkbox').forEach(label => {
       const input = label.querySelector('input[type="checkbox"]');
@@ -731,6 +732,19 @@ function renderConfigPage(host) {
         label.classList.remove('checked');
       }
     });
+
+    const cfg = getSelectedConfig();
+    const jsonStr = JSON.stringify(cfg);
+    const b64 = btoa(unescape(encodeURIComponent(jsonStr)));
+
+    const manifestUrl = "https://" + host + "/" + b64 + "/manifest.json";
+    const stremioUrl = "stremio://" + host + "/" + b64 + "/manifest.json";
+
+    const btnInstall = document.getElementById('btn-install');
+    if (btnInstall) btnInstall.href = stremioUrl;
+
+    const manifestText = document.getElementById('manifest-url-text');
+    if (manifestText) manifestText.innerText = manifestUrl;
   }
 
   function toggleAllSources() {
@@ -763,10 +777,14 @@ function renderConfigPage(host) {
       t.classList.remove('show');
     }, 2500);
   }
+
+  // Initialize on load
+  document.addEventListener('DOMContentLoaded', updateUI);
 </script>
 
 </body>
 </html>`;
+
 }
 
 module.exports = { renderConfigPage };

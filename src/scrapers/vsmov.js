@@ -1,6 +1,7 @@
 const axios = require('axios');
 const cache = require('../utils/cache');
 const { parseFilter } = require('../utils/filterHelper');
+const { findEpisode } = require('../utils/episodeHelper');
 
 const BASE_URL = 'https://vsmov.com/api';
 
@@ -26,7 +27,7 @@ async function getCatalog(type, extra = {}) {
                     } else {
                         url = `${BASE_URL}/danh-sach/phim-moi-cap-nhat?page=${page}`;
                     }
-                } else if (filter.filterType === 'country' || filter.filterType === 'year') {
+                } else if (filter.filterType === 'country' || filter.filterType === 'year' || filter.filterType === 'search') {
                     url = `${BASE_URL}/tim-kiem?keyword=${encodeURIComponent(filter.value)}&limit=24`;
                 }
             }
@@ -128,7 +129,7 @@ async function getStream(id, type) {
     try {
         const parts = id.replace('vsmov:', '').split(':');
         const slug = parts[0];
-        const targetEpSlug = parts[2];
+        const targetEp = parts[2] || (type === 'series' ? parts[1] : null);
 
         const res = await axios.get(`${BASE_URL}/phim/${slug}`, {
             timeout: 10000,
@@ -144,13 +145,7 @@ async function getStream(id, type) {
             const serverName = server.server_name || 'VSMOV VIP';
             const serverData = server.server_data || [];
 
-            let targetItem = null;
-            if (targetEpSlug) {
-                targetItem = serverData.find(it => it.slug === targetEpSlug || it.name === targetEpSlug);
-            }
-            if (!targetItem) {
-                targetItem = serverData[0];
-            }
+            const targetItem = findEpisode(serverData, targetEp);
 
             if (targetItem) {
                 if (targetItem.link_m3u8) {

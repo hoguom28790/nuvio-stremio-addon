@@ -1,6 +1,7 @@
 const axios = require('axios');
 const cache = require('../utils/cache');
 const { parseFilter } = require('../utils/filterHelper');
+const { findEpisode } = require('../utils/episodeHelper');
 
 const BASE_URL = 'https://phim.nguonc.com/api';
 
@@ -24,8 +25,8 @@ async function getCatalog(type, extra = {}) {
                     } else {
                         url = `${BASE_URL}/films/danh-sach/${filter.slug}?page=${page}`;
                     }
-                } else if (filter.filterType === 'year') {
-                    url = `${BASE_URL}/films/search?keyword=${encodeURIComponent(filter.slug)}&page=1`;
+                } else if (filter.filterType === 'year' || filter.filterType === 'search') {
+                    url = `${BASE_URL}/films/search?keyword=${encodeURIComponent(filter.value)}&page=1`;
                 }
             }
         }
@@ -118,7 +119,7 @@ async function getStream(id, type) {
     try {
         const parts = id.replace('nguonc:', '').split(':');
         const slug = parts[0];
-        const targetEpSlug = parts[2];
+        const targetEp = parts[2] || (type === 'series' ? parts[1] : null);
 
         const res = await axios.get(`${BASE_URL}/film/${slug}`, { timeout: 10000 });
         const movie = res.data?.movie;
@@ -130,13 +131,7 @@ async function getStream(id, type) {
             const serverName = server.server_name || 'NguonC';
             const items = server.items || [];
 
-            let targetItem = null;
-            if (targetEpSlug) {
-                targetItem = items.find(it => it.slug === targetEpSlug || it.name === targetEpSlug);
-            }
-            if (!targetItem) {
-                targetItem = items[0];
-            }
+            const targetItem = findEpisode(items, targetEp);
 
             if (targetItem && targetItem.embed) {
                 streams.push({

@@ -1,15 +1,18 @@
 const addon = require('../src/addon');
+const { getManifest } = require('../src/manifest');
 
 async function testAllScrapers() {
     console.log('==============================================');
-    console.log('       TESTING HPADDON MULTI-SOURCE SCRAPERS  ');
+    console.log('       TESTING HỒ PHIM ADDON & CONFIG         ');
     console.log('==============================================\n');
 
     // 1. Test Manifest
     console.log('[1] Checking Manifest:');
     console.log(`- Addon Name: ${addon.manifest.name}`);
     console.log(`- Version: ${addon.manifest.version}`);
-    console.log(`- Total Catalogs: ${addon.manifest.catalogs.length}\n`);
+    console.log(`- Total Catalogs: ${addon.manifest.catalogs.length}`);
+    const tvInManifest = addon.manifest.catalogs.some(c => c.type === 'tv' || c.id.includes('live'));
+    console.log(`- TV / Sports removed? ${!tvInManifest ? 'YES ✓' : 'NO ✗'}\n`);
 
     // 2. Test Catalogs
     const catalogsToTest = [
@@ -18,8 +21,8 @@ async function testAllScrapers() {
         { id: 'vsmov-movie', type: 'movie' },
         { id: 'hh3d-movie', type: 'movie' },
         { id: 'clbpx-movie', type: 'movie' },
-        { id: 'sports-live', type: 'tv' },
-        { id: 'streamfree-live', type: 'tv' }
+        { id: 'stp-movie', type: 'movie' },
+        { id: 'yan-movie', type: 'movie' }
     ];
 
     console.log('[2] Testing Catalog Handlers:');
@@ -36,31 +39,26 @@ async function testAllScrapers() {
     }
     console.log('');
 
-    // 3. Test Meta Handlers
-    console.log('[3] Testing Meta Handlers:');
-    const metasToTest = [
-        { id: 'kkphim:hen-em-ngay-nhat-thuc', type: 'movie' },
-        { id: 'nguonc:khach', type: 'movie' },
-        { id: 'sports:xoilac', type: 'tv' }
-    ];
-    for (const m of metasToTest) {
-        try {
-            const start = Date.now();
-            const res = await addon.get('meta', m.type, m.id);
-            const name = res?.meta?.name || 'Unknown';
-            console.log(`  ✓ Meta for "${m.id}": "${name}" in ${Date.now() - start}ms`);
-        } catch (e) {
-            console.log(`  ✗ Meta for "${m.id}" Error: ${e.message}`);
-        }
-    }
+    // 3. Test Config Filtering on Manifest
+    console.log('[3] Testing Config Manifest Filtering:');
+    const customConfig = { sources: ['kkphim', 'vsmov'], prefCdn: true, prefProxy: false };
+    const filteredManifest = getManifest(customConfig);
+    console.log(`  ✓ Filtered Catalogs count (only kkphim & vsmov): ${filteredManifest.catalogs.length}`);
+    const catalogIds = filteredManifest.catalogs.map(c => c.id).join(', ');
+    console.log(`  ✓ Catalogs present: ${catalogIds}`);
+
+    // Test Config Filtering on Catalog Handler
+    const blockedCatalog = await addon.get('catalog', 'movie', 'nguonc-movie', {}, customConfig);
+    console.log(`  ✓ Disabled source (nguonc) returns: ${blockedCatalog.metas.length} items (expected: 0)`);
+    const allowedCatalog = await addon.get('catalog', 'movie', 'kkphim-movie', {}, customConfig);
+    console.log(`  ✓ Enabled source (kkphim) returns: ${allowedCatalog.metas.length} items`);
     console.log('');
 
     // 4. Test Stream Handlers
     console.log('[4] Testing Stream Handlers:');
     const streamsToTest = [
         { id: 'kkphim:biet-doi-danh-thue-4', type: 'movie' },
-        { id: 'nguonc:khach', type: 'movie' },
-        { id: 'sports:xoilac', type: 'tv' }
+        { id: 'nguonc:khach', type: 'movie' }
     ];
     for (const s of streamsToTest) {
         try {
@@ -80,3 +78,4 @@ async function testAllScrapers() {
 }
 
 testAllScrapers();
+

@@ -1,6 +1,7 @@
 const axios = require('axios');
 const cache = require('../utils/cache');
 const { parseFilter } = require('../utils/filterHelper');
+const { findEpisode } = require('../utils/episodeHelper');
 
 const BASE_URL = 'https://phimapi.com';
 const CDN_URL = 'https://phimimg.com';
@@ -129,9 +130,10 @@ async function getMeta(type, id) {
 
 async function getStream(id, type) {
     try {
+        // id format: kkphim:slug or kkphim:slug:season:episode
         const parts = id.replace('kkphim:', '').split(':');
         const slug = parts[0];
-        const targetEpSlug = parts[2];
+        const targetEp = parts[2] || (type === 'series' ? parts[1] : null);
 
         const res = await axios.get(`${BASE_URL}/phim/${slug}`, { timeout: 10000 });
         const episodes = res.data?.episodes || [];
@@ -143,13 +145,7 @@ async function getStream(id, type) {
             const serverName = server.server_name || 'VIP';
             const serverData = server.server_data || [];
 
-            let targetItem = null;
-            if (targetEpSlug) {
-                targetItem = serverData.find(item => item.slug === targetEpSlug || item.name === targetEpSlug);
-            }
-            if (!targetItem) {
-                targetItem = serverData[0];
-            }
+            const targetItem = findEpisode(serverData, targetEp);
 
             if (targetItem && targetItem.link_m3u8) {
                 streams.push({

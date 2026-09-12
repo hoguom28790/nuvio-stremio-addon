@@ -5,7 +5,6 @@ const nguonc = require('./scrapers/nguonc');
 const vsmov = require('./scrapers/vsmov');
 const animation = require('./scrapers/animation');
 const clbpx = require('./scrapers/clbpx');
-const live = require('./scrapers/live');
 const imdb = require('./scrapers/imdb');
 const cache = require('./utils/cache');
 
@@ -39,30 +38,35 @@ function CustomAddonBuilder(manifest) {
 
 const builder = new CustomAddonBuilder(manifest);
 
+// Helper to check if source is enabled in config
+function isSourceEnabled(sourcePrefix, config) {
+    if (!config || !config.sources || !Array.isArray(config.sources)) {
+        return true; // default enabled
+    }
+    return config.sources.includes(sourcePrefix);
+}
+
 // 1. CATALOG HANDLER
-builder.defineCatalogHandler(async ({ type, id, extra = {} }) => {
+builder.defineCatalogHandler(async ({ type, id, extra = {}, config = {} }) => {
     console.log(`[Catalog Request] Type: ${type}, ID: ${id}, Extra:`, extra);
     try {
-        if (id === 'kkphim-movie') return { metas: await kkphim.getCatalog('movie', extra) };
-        if (id === 'kkphim-series') return { metas: await kkphim.getCatalog('series', extra) };
+        if (id === 'kkphim-movie' && isSourceEnabled('kkphim', config)) return { metas: await kkphim.getCatalog('movie', extra) };
+        if (id === 'kkphim-series' && isSourceEnabled('kkphim', config)) return { metas: await kkphim.getCatalog('series', extra) };
 
-        if (id === 'nguonc-movie') return { metas: await nguonc.getCatalog('movie', extra) };
-        if (id === 'nguonc-series') return { metas: await nguonc.getCatalog('series', extra) };
+        if (id === 'nguonc-movie' && isSourceEnabled('nguonc', config)) return { metas: await nguonc.getCatalog('movie', extra) };
+        if (id === 'nguonc-series' && isSourceEnabled('nguonc', config)) return { metas: await nguonc.getCatalog('series', extra) };
 
-        if (id === 'vsmov-movie') return { metas: await vsmov.getCatalog('movie', extra) };
-        if (id === 'vsmov-series') return { metas: await vsmov.getCatalog('series', extra) };
+        if (id === 'vsmov-movie' && isSourceEnabled('vsmov', config)) return { metas: await vsmov.getCatalog('movie', extra) };
+        if (id === 'vsmov-series' && isSourceEnabled('vsmov', config)) return { metas: await vsmov.getCatalog('series', extra) };
 
-        if (id === 'hh3d-movie') return { metas: await animation.getCatalog('hh3d-movie', 'movie', extra) };
-        if (id === 'hh3d-series') return { metas: await animation.getCatalog('hh3d-series', 'series', extra) };
+        if (id === 'hh3d-movie' && isSourceEnabled('hh3d', config)) return { metas: await animation.getCatalog('hh3d-movie', 'movie', extra) };
+        if (id === 'hh3d-series' && isSourceEnabled('hh3d', config)) return { metas: await animation.getCatalog('hh3d-series', 'series', extra) };
 
-        if (id === 'yan-movie') return { metas: await animation.getCatalog('yan-movie', 'movie', extra) };
-        if (id === 'stp-movie') return { metas: await animation.getCatalog('stp-movie', 'movie', extra) };
+        if (id === 'yan-movie' && isSourceEnabled('yan', config)) return { metas: await animation.getCatalog('yan-movie', 'movie', extra) };
+        if (id === 'stp-movie' && isSourceEnabled('stp', config)) return { metas: await animation.getCatalog('stp-movie', 'movie', extra) };
 
-        if (id === 'clbpx-movie') return { metas: await clbpx.getCatalog('movie', extra) };
-        if (id === 'clbpx-series') return { metas: await clbpx.getCatalog('series', extra) };
-
-        if (id === 'streamfree-live') return { metas: await live.getCatalog('streamfree-live', 'tv', extra) };
-        if (id === 'sports-live') return { metas: await live.getCatalog('sports-live', 'tv', extra) };
+        if (id === 'clbpx-movie' && isSourceEnabled('clbpx', config)) return { metas: await clbpx.getCatalog('movie', extra) };
+        if (id === 'clbpx-series' && isSourceEnabled('clbpx', config)) return { metas: await clbpx.getCatalog('series', extra) };
     } catch (e) {
         console.error(`[Catalog Error] ID: ${id}:`, e.message);
     }
@@ -70,39 +74,35 @@ builder.defineCatalogHandler(async ({ type, id, extra = {} }) => {
 });
 
 // 2. META HANDLER
-builder.defineMetaHandler(async ({ type, id }) => {
+builder.defineMetaHandler(async ({ type, id, config = {} }) => {
     console.log(`[Meta Request] Type: ${type}, ID: ${id}`);
     try {
-        if (id.startsWith('kkphim:')) {
+        if (id.startsWith('kkphim:') && isSourceEnabled('kkphim', config)) {
             const meta = await kkphim.getMeta(type, id);
             if (meta) return { meta };
         }
-        if (id.startsWith('nguonc:')) {
+        if (id.startsWith('nguonc:') && isSourceEnabled('nguonc', config)) {
             const meta = await nguonc.getMeta(type, id);
             if (meta) return { meta };
         }
-        if (id.startsWith('vsmov:')) {
+        if (id.startsWith('vsmov:') && isSourceEnabled('vsmov', config)) {
             const meta = await vsmov.getMeta(type, id);
             if (meta) return { meta };
         }
-        if (id.startsWith('hh3d:')) {
+        if (id.startsWith('hh3d:') && isSourceEnabled('hh3d', config)) {
             const meta = await animation.getMeta('hh3d', type, id);
             if (meta) return { meta };
         }
-        if (id.startsWith('yan:')) {
+        if (id.startsWith('yan:') && isSourceEnabled('yan', config)) {
             const meta = await animation.getMeta('yan', type, id);
             if (meta) return { meta };
         }
-        if (id.startsWith('stp:')) {
+        if (id.startsWith('stp:') && isSourceEnabled('stp', config)) {
             const meta = await animation.getMeta('stp', type, id);
             if (meta) return { meta };
         }
-        if (id.startsWith('clbpx:')) {
+        if (id.startsWith('clbpx:') && isSourceEnabled('clbpx', config)) {
             const meta = await clbpx.getMeta(type, id);
-            if (meta) return { meta };
-        }
-        if (id.startsWith('streamfree:') || id.startsWith('sports:')) {
-            const meta = await live.getMeta(type, id);
             if (meta) return { meta };
         }
     } catch (e) {
@@ -112,10 +112,11 @@ builder.defineMetaHandler(async ({ type, id }) => {
 });
 
 // 3. STREAM HANDLER
-builder.defineStreamHandler(async ({ type, id }) => {
+builder.defineStreamHandler(async ({ type, id, config = {} }) => {
     console.log(`[Stream Request] Type: ${type}, ID: ${id}`);
     
-    const cacheKey = `stream:${type}:${id}`;
+    const configHash = config && config.sources ? JSON.stringify(config) : 'default';
+    const cacheKey = `stream:${type}:${id}:${configHash}`;
     const cachedStreams = cache.get(cacheKey);
     if (cachedStreams) {
         console.log(`[Cache Hit] Returning ${cachedStreams.length} streams for ${id}`);
@@ -125,24 +126,24 @@ builder.defineStreamHandler(async ({ type, id }) => {
     let streams = [];
 
     try {
-        if (id.startsWith('kkphim:')) {
+        if (id.startsWith('kkphim:') && isSourceEnabled('kkphim', config)) {
             streams = await kkphim.getStream(id, type);
-        } else if (id.startsWith('nguonc:')) {
+        } else if (id.startsWith('nguonc:') && isSourceEnabled('nguonc', config)) {
             streams = await nguonc.getStream(id, type);
-        } else if (id.startsWith('vsmov:')) {
+        } else if (id.startsWith('vsmov:') && isSourceEnabled('vsmov', config)) {
             streams = await vsmov.getStream(id, type);
-        } else if (id.startsWith('hh3d:')) {
+        } else if (id.startsWith('hh3d:') && isSourceEnabled('hh3d', config)) {
             streams = await animation.getStream('hh3d', id, type);
-        } else if (id.startsWith('yan:')) {
+        } else if (id.startsWith('yan:') && isSourceEnabled('yan', config)) {
             streams = await animation.getStream('yan', id, type);
-        } else if (id.startsWith('stp:')) {
+        } else if (id.startsWith('stp:') && isSourceEnabled('stp', config)) {
             streams = await animation.getStream('stp', id, type);
-        } else if (id.startsWith('clbpx:')) {
+        } else if (id.startsWith('clbpx:') && isSourceEnabled('clbpx', config)) {
             streams = await clbpx.getStream(id, type);
-        } else if (id.startsWith('streamfree:') || id.startsWith('sports:')) {
-            streams = await live.getStream(id, type);
         } else if (id.startsWith('tt')) {
-            streams = await imdb.getStream(id, type);
+            if (config.prefImdb !== false) {
+                streams = await imdb.getStream(id, type, config);
+            }
         }
 
         if (streams && streams.length > 0) {
@@ -156,3 +157,4 @@ builder.defineStreamHandler(async ({ type, id }) => {
 });
 
 module.exports = builder.getInterface();
+
