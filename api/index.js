@@ -92,28 +92,31 @@ app.get('/hentaiz/stream/:videoId/:quality.m3u8', async (req, res) => {
     }
 });
 
-// Debug route for hentaiz
+// Debug route for hentaiz mirrors
 app.get('/debug/hentaiz', async (req, res) => {
     const axios = require('axios');
-    try {
-        const r = await axios.get('https://hentaiz2.com/browse/__data.json', {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            },
-            timeout: 10000
-        });
-        res.json({
-            status: r.status,
-            nodesCount: r.data?.nodes?.length,
-            sample: JSON.stringify(r.data?.nodes?.[2]?.data).slice(0, 200)
-        });
-    } catch (err) {
-        res.status(500).json({
-            error: err.message,
-            status: err.response?.status,
-            data: typeof err.response?.data === 'string' ? err.response?.data.slice(0, 500) : err.response?.data
-        });
+    const domains = [
+        'https://hentaiz2.com',
+        'https://hentaiz.bike',
+        'https://hentaiz.zone',
+        'https://hentaiz.taxi',
+        'https://hentaivs.cc'
+    ];
+    const results = {};
+    for (const d of domains) {
+        try {
+            const r = await axios.get(`${d}/browse/__data.json`, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                },
+                timeout: 5000
+            });
+            results[d] = { status: r.status, nodes: r.data?.nodes?.length };
+        } catch (err) {
+            results[d] = { status: err.response?.status || err.message };
+        }
     }
+    res.json(results);
 });
 
 // Configured Resource routes
