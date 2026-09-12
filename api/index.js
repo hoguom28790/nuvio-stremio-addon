@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const qs = require('querystring');
+const axios = require('axios');
 const addonInterface = require('../src/addon');
 const { getManifest } = require('../src/manifest');
 const { renderConfigPage } = require('../src/views/config');
@@ -95,20 +96,89 @@ app.get('/hentaiz/stream/:videoId/:quality.m3u8', async (req, res) => {
     }
 });
 
-// JavHD HLS M3U8 Stream Delivery Route (Fallback proxy)
+// JavHD HLS M3U8 Stream Delivery Route
 app.get('/javhd/stream/:slug/:quality.m3u8', async (req, res) => {
     const { slug, quality } = req.params;
+    const host = req.headers.host || 'hophimaddon.vercel.app';
     try {
-        const playlist = await javhd.getM3u8(slug, quality);
+        const playlist = await javhd.getM3u8(slug, quality, host);
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', '*');
-        res.setHeader('Cache-Control', 'max-age=1800, public');
+        res.setHeader('Cache-Control', 'max-age=600, stale-while-revalidate=1200, public');
         res.send(playlist);
     } catch (err) {
         console.error('[JavHD M3U8 Error]:', err.message);
         res.status(500).send('Error generating playlist');
+    }
+});
+
+// JavHD Segment Unwrapper (Strips 95-byte PNG fake header to output pure MPEG-TS)
+app.get('/javhd/segment.ts', async (req, res) => {
+    const rawUrl = req.query.url;
+    if (!rawUrl) return res.status(400).send('Missing url');
+
+    try {
+        const upstream = await axios.get(rawUrl, {
+            responseType: 'stream',
+            timeout: 15000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Referer': 'https://javhdz.ac/'
+            }
+        });
+
+        res.setHeader('Content-Type', 'video/mp2t');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', '*');
+        res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400, immutable');
+        res.setHeader('CDN-Cache-Control', 'public, max-age=86400');
+        res.setHeader('Vercel-CDN-Cache-Control', 'public, max-age=86400');
+
+        let stripped = false;
+        let buf = Buffer.alloc(0);
+
+        upstream.data.on('data', (chunk) => {
+            if (!stripped) {
+                buf = Buffer.concat([buf, chunk]);
+                if (buf.length >= 95) {
+                    // Check for PNG signature: 0x89 0x50 0x4E 0x47
+                    if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) {
+                        res.write(buf.slice(95));
+                    } else {
+                        res.write(buf);
+                    }
+                    stripped = true;
+                    buf = null;
+                }
+            } else {
+                res.write(chunk);
+            }
+        });
+
+        upstream.data.on('end', () => {
+            if (!stripped && buf && buf.length > 0) {
+                res.write(buf);
+            }
+            res.end();
+        });
+
+        upstream.data.on('error', (err) => {
+            console.error('[JavHD Segment Stream Error]:', err.message);
+            if (!res.headersSent) res.status(502).send('Stream error');
+            else res.end();
+        });
+
+        req.on('close', () => {
+            if (upstream.data && typeof upstream.data.destroy === 'function') {
+                upstream.data.destroy();
+            }
+        });
+    } catch (err) {
+        console.error('[JavHD Segment Proxy Error]:', err.message);
+        if (!res.headersSent) res.status(502).send('Upstream error');
     }
 });
 

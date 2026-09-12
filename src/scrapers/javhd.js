@@ -289,25 +289,27 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
 
         const streams = [];
 
-        // 1. Full HD 1080p (Ưu tiên số 1 - Tương thích 100% mọi thiết bị và trình duyệt)
+        // 1. Full HD 1080p (Ưu tiên số 1 - Sắc nét nhất, mượt mà nhất)
         streams.push({
             name: '🔞 JavHD',
-            title: `[Full HD 1080p] ${title}\n⚡ Siêu Nét 1080p • Phát Mượt Mà`,
+            title: `[Full HD 1080p] ${title}\n⚡ Siêu Nét 1080p • Phát Mượt Mà • Tua Tức Thì`,
             url: `${hostBase}/javhd/stream/${slug}/1080.m3u8`,
             behaviorHints: {
-                notWebReady: false,
-                bingeGroup: 'javhd-1080p'
+                notWebReady: true,
+                bingeGroup: 'javhd-1080p',
+                proxyHeaders: proxyHeaders
             }
         });
 
-        // 2. HD 720p (Tốc độ cao, tua nhanh mượt mà)
+        // 2. HD 720p (Tốc độ cao)
         streams.push({
             name: '🔞 JavHD',
             title: `[HD 720p] ${title}\n⚡ Tốc Độ Cao • Tua Nhanh Mượt Mà`,
             url: `${hostBase}/javhd/stream/${slug}/720.m3u8`,
             behaviorHints: {
-                notWebReady: false,
-                bingeGroup: 'javhd-720p'
+                notWebReady: true,
+                bingeGroup: 'javhd-720p',
+                proxyHeaders: proxyHeaders
             }
         });
 
@@ -317,15 +319,16 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
             title: `[Tự Động Auto] ${title}\n⚡ Đa Độ Phân Giải Thích Ứng (1080p/720p/480p)`,
             url: `${hostBase}/javhd/stream/${slug}/master.m3u8`,
             behaviorHints: {
-                notWebReady: false,
-                bingeGroup: 'javhd-auto'
+                notWebReady: true,
+                bingeGroup: 'javhd-auto',
+                proxyHeaders: proxyHeaders
             }
         });
 
-        // 4. Direct CDN (Dành cho MPV, VLC hoặc player có hỗ trợ custom headers)
+        // 4. Direct CDN (Dự phòng trực tiếp CDN)
         streams.push({
             name: '🔞 JavHD [Direct]',
-            title: `[Direct CDN] ${title}\n⚡ Luồng Trực Tiếp CDN (Cần Player hỗ trợ Header)`,
+            title: `[Direct CDN] ${title}\n⚡ Luồng Trực Tiếp CDN`,
             url: url1080,
             behaviorHints: {
                 notWebReady: true,
@@ -345,10 +348,11 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
 }
 
 /**
- * Proxy M3U8 content for fallback playback
+ * Proxy M3U8 content and unwrap segments
  */
-async function getM3u8(slug, quality = '1080') {
-    const cacheKey = `javhd:m3u8:${slug}:${quality}`;
+async function getM3u8(slug, quality = '1080', host = 'hophimaddon.vercel.app') {
+    const hostBase = host.includes('://') ? host : `https://${host}`;
+    const cacheKey = `javhd:m3u8:${slug}:${quality}:${host}`;
     const cached = cache.get(cacheKey);
     if (cached) return cached;
 
@@ -389,8 +393,22 @@ async function getM3u8(slug, quality = '1080') {
     });
 
     let content = m3u8Res.data;
-    if (isMaster && typeof content === 'string') {
-        content = content.replace(/javhd-\d+-(\d+)\.m3u8/g, '$1.m3u8');
+    if (typeof content === 'string') {
+        if (isMaster) {
+            content = content.replace(/javhd-\d+-(\d+)\.m3u8/g, (match, p1) => {
+                return `${hostBase}/javhd/stream/${slug}/${p1}.m3u8`;
+            });
+        } else {
+            const lines = content.split('\n');
+            const rewritten = lines.map(line => {
+                const trimmed = line.trim();
+                if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+                    return `${hostBase}/javhd/segment.ts?url=${encodeURIComponent(trimmed)}`;
+                }
+                return line;
+            });
+            content = rewritten.join('\n');
+        }
     }
 
     if (content) {
