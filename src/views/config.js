@@ -727,17 +727,17 @@ function renderConfigPage(host, initialConfig = {}) {
     </div>
   </div>
 
-  <!-- Thế Giới Khác (18+) -->
+  <!-- Thế Giới Khác -->
   <div class="card" id="card-tgk" style="border-color: rgba(255, 42, 109, 0.3);">
     <div class="cat-header">
       <div class="section-title" style="margin: 0; color: #ff5e8a;">
-        <span>🔞 Thế Giới Khác (Anime 18+)</span>
+        <span>🔒 Thế Giới Khác</span>
       </div>
     </div>
     
     <div id="tgk-locked" class="tgk-lock-box" style="${isSourceActive('hentaiz') ? 'display: none;' : ''}">
       <div style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.5;">
-        🔒 Mục này chứa nguồn phim anime 18+ từ <b>HentaiZ</b>. Mặc định bị tắt. Vui lòng nhập đúng mật mã để mở khóa và kích hoạt nguồn này.
+        🔒 Mục này chứa nguồn phim từ <b>HentaiZ</b>. Mặc định bị tắt. Vui lòng nhập đúng mật mã để mở khóa và kích hoạt nguồn này.
       </div>
       <div class="tgk-input-group">
         <input type="password" id="tgk-pass" class="tgk-input" placeholder="Nhập mật khẩu để mở khóa..." onkeydown="if(event.key==='Enter') unlockTheGioiKhac()">
@@ -751,7 +751,7 @@ function renderConfigPage(host, initialConfig = {}) {
       </div>
       <label class="${sourceClass('hentaiz')}">
         <input type="checkbox" name="source" value="hentaiz" ${sourceChecked('hentaiz')} onchange="updateUI()">
-        <span>🔞 HentaiZ (Anime 18+ Vietsub)</span>
+        <span>⚡ HentaiZ (Vietsub)</span>
       </label>
     </div>
   </div>

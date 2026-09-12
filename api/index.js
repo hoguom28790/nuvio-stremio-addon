@@ -57,7 +57,7 @@ const hentaiz = require('../src/scrapers/hentaiz');
 
 async function handleResource(req, res, config) {
     const { resource, type, id } = req.params;
-    const extra = req.params.extra ? qs.parse(req.url.split('/').pop().slice(0, -5)) : {};
+    const extra = req.params.extra ? qs.parse(req.params.extra) : {};
     
     // Inject current host into config for dynamic stream URLs
     config.host = req.headers.host || 'hophimaddon.vercel.app';

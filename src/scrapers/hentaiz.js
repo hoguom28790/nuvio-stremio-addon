@@ -86,13 +86,19 @@ async function getCatalog(type, extra = {}) {
     if (extra.search) {
         url += `&q=${encodeURIComponent(extra.search)}`;
     } else if (extra.genre) {
-        const genreName = extra.genre.trim();
-        if (genreName.includes('Không Che') || genreName.toLowerCase().includes('uncensored')) {
-            url += `&contentRating=UNCENSORED`;
-        } else if (genreName !== 'Tất Cả') {
-            const gSlug = slugifyGenre(genreName);
-            if (gSlug) {
-                url += `&genres=${encodeURIComponent(gSlug)}`;
+        const rawGenre = typeof extra.genre === 'string' ? extra.genre.trim() : '';
+        const cleanGenre = rawGenre.replace(/^Thể loại:\s*/i, '').replace(/^Danh mục:\s*/i, '').trim();
+        const lower = cleanGenre.toLowerCase();
+
+        // If it is a default label or placeholder, do not apply genre filtering
+        if (lower && !['genre', 'tất cả', 'all', 'default', 'hentaiz-movie', 'hentaiz-anime', 'hentaiz-series'].includes(lower)) {
+            if (cleanGenre.includes('Không Che') || lower.includes('uncensored')) {
+                url += `&contentRating=UNCENSORED`;
+            } else {
+                const gSlug = slugifyGenre(cleanGenre);
+                if (gSlug) {
+                    url += `&genres=${encodeURIComponent(gSlug)}`;
+                }
             }
         }
     }
