@@ -546,7 +546,7 @@ function renderConfigPage(host) {
   <!-- Top Bar -->
   <div class="top-bar">
     <div class="brand-group">
-      <img src="https://dl.strem.io/addon-logo.png" alt="Hồ Phim Logo" class="brand-logo">
+      <img src="/logo.png" alt="Hồ Phim Logo" class="brand-logo" style="object-fit: contain; background: #fff; padding: 2px;">
       <div class="brand-name">Hồ Phim Addon</div>
     </div>
     <div class="status-badge">

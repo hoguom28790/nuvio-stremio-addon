@@ -23,12 +23,20 @@ function parseConfig(configParam) {
     }
 }
 
+// Serve logo.png
+const path = require('path');
+app.get('/logo.png', (req, res) => {
+    res.setHeader('Cache-Control', 'max-age=86400, public');
+    res.sendFile(path.join(__dirname, '..', 'logo.png'));
+});
+
 // Serve the Config / Landing page on root and /configure
 app.get(['/', '/configure'], (req, res) => {
     const host = req.headers.host || 'hophimaddon.vercel.app';
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(renderConfigPage(host));
 });
+
 
 // Manifest routes
 app.get('/manifest.json', (req, res) => {

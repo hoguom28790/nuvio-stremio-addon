@@ -8,7 +8,7 @@ const baseManifest = {
     version: "1.4.0",
     name: "Hồ Phim",
     description: "Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ NguonC, Siêu Tầm Phim, Hoạt Hình 3D, CLB Phim Xưa, VSMOV, YanHH3D, KKPhim",
-    logo: "https://dl.strem.io/addon-logo.png",
+    logo: "https://raw.githubusercontent.com/hoguom28790/nuvio-stremio-addon/master/logo.png",
     resources: [
         "catalog",
         {
