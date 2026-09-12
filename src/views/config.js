@@ -1,4 +1,14 @@
-function renderConfigPage(host) {
+function renderConfigPage(host, initialConfig = {}) {
+    const defaultSources = ['kkphim', 'vsmov', 'hh3d', 'yan', 'stp', 'clbpx', 'nguonc'];
+    const activeSources = Array.isArray(initialConfig.sources) ? initialConfig.sources : defaultSources;
+    const prefCdnChecked = initialConfig.prefCdn !== false ? 'checked' : '';
+    const prefProxyChecked = initialConfig.prefProxy !== false ? 'checked' : '';
+    const prefImdbChecked = initialConfig.prefImdb !== false ? 'checked' : '';
+
+    const isSourceActive = (src) => activeSources.includes(src);
+    const sourceClass = (src) => isSourceActive(src) ? 'cat-checkbox checked' : 'cat-checkbox';
+    const sourceChecked = (src) => isSourceActive(src) ? 'checked' : '';
+
     const defaultManifestUrl = `https://${host}/manifest.json`;
     const stremioUrl = `stremio://${host}/manifest.json`;
 
@@ -585,7 +595,7 @@ function renderConfigPage(host) {
         </div>
       </div>
       <label class="switch">
-        <input type="checkbox" id="pref-cdn" checked onchange="updateUI()">
+        <input type="checkbox" id="pref-cdn" ${prefCdnChecked} onchange="updateUI()">
         <span class="slider"></span>
       </label>
     </div>
@@ -600,7 +610,7 @@ function renderConfigPage(host) {
         </div>
       </div>
       <label class="switch">
-        <input type="checkbox" id="pref-proxy" checked onchange="updateUI()">
+        <input type="checkbox" id="pref-proxy" ${prefProxyChecked} onchange="updateUI()">
         <span class="slider"></span>
       </label>
     </div>
@@ -615,7 +625,7 @@ function renderConfigPage(host) {
         </div>
       </div>
       <label class="switch">
-        <input type="checkbox" id="pref-imdb" checked onchange="updateUI()">
+        <input type="checkbox" id="pref-imdb" ${prefImdbChecked} onchange="updateUI()">
         <span class="slider"></span>
       </label>
     </div>
@@ -631,32 +641,32 @@ function renderConfigPage(host) {
     </div>
 
     <div class="category-grid">
-      <label class="cat-checkbox checked">
-        <input type="checkbox" name="source" value="kkphim" checked onchange="updateUI()">
+      <label class="${sourceClass('kkphim')}">
+        <input type="checkbox" name="source" value="kkphim" ${sourceChecked('kkphim')} onchange="updateUI()">
         <span>⚡ KKPhim (Phim Lẻ & Bộ)</span>
       </label>
-      <label class="cat-checkbox checked">
-        <input type="checkbox" name="source" value="vsmov" checked onchange="updateUI()">
+      <label class="${sourceClass('vsmov')}">
+        <input type="checkbox" name="source" value="vsmov" ${sourceChecked('vsmov')} onchange="updateUI()">
         <span>⚡ VSMOV (Phim 4K VIP)</span>
       </label>
-      <label class="cat-checkbox checked">
-        <input type="checkbox" name="source" value="hh3d" checked onchange="updateUI()">
+      <label class="${sourceClass('hh3d')}">
+        <input type="checkbox" name="source" value="hh3d" ${sourceChecked('hh3d')} onchange="updateUI()">
         <span>⚡ Hoạt Hình 3D (HH3D)</span>
       </label>
-      <label class="cat-checkbox checked">
-        <input type="checkbox" name="source" value="yan" checked onchange="updateUI()">
+      <label class="${sourceClass('yan')}">
+        <input type="checkbox" name="source" value="yan" ${sourceChecked('yan')} onchange="updateUI()">
         <span>⚡ YanHH3D (3D & Anime)</span>
       </label>
-      <label class="cat-checkbox checked">
-        <input type="checkbox" name="source" value="stp" checked onchange="updateUI()">
+      <label class="${sourceClass('stp')}">
+        <input type="checkbox" name="source" value="stp" ${sourceChecked('stp')} onchange="updateUI()">
         <span>⚡ Siêu Tầm Phim (STP)</span>
       </label>
-      <label class="cat-checkbox checked">
-        <input type="checkbox" name="source" value="clbpx" checked onchange="updateUI()">
+      <label class="${sourceClass('clbpx')}">
+        <input type="checkbox" name="source" value="clbpx" ${sourceChecked('clbpx')} onchange="updateUI()">
         <span>⚡ CLB Phim Xưa (Kinh Điển)</span>
       </label>
-      <label class="cat-checkbox checked">
-        <input type="checkbox" name="source" value="nguonc" checked onchange="updateUI()">
+      <label class="${sourceClass('nguonc')}">
+        <input type="checkbox" name="source" value="nguonc" ${sourceChecked('nguonc')} onchange="updateUI()">
         <span>🛡️ NguonC (Phim Lẻ & Bộ)</span>
       </label>
     </div>

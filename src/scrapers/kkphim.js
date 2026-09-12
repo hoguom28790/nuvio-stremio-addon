@@ -10,11 +10,11 @@ function formatPoster(path, cdnDomain = CDN_URL) {
     if (!path) return '';
     if (path.startsWith('http://') || path.startsWith('https://')) return path;
     const clean = path.replace(/^\/+/, '');
-    if (clean.startsWith('upload/')) {
-        return `${cdnDomain}/${clean}`;
+    const domain = (cdnDomain || CDN_URL).replace(/\/+$/, '');
+    if (clean.startsWith('upload/') || clean.startsWith('uploads/')) {
+        return `${domain}/${clean}`;
     }
-    const cleanUploads = clean.replace(/^uploads\/movies\//, '');
-    return `${cdnDomain}/uploads/movies/${cleanUploads}`;
+    return `${domain}/uploads/movies/${clean}`;
 }
 
 async function getCatalog(type, extra = {}) {

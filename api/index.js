@@ -30,25 +30,26 @@ app.get('/logo.png', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'logo.png'));
 });
 
-// Serve the Config / Landing page on root and /configure
-app.get(['/', '/configure'], (req, res) => {
+// Serve the Config / Landing page on root, /configure, and /:config/configure
+app.get(['/', '/configure', '/:config/configure', '/:config'], (req, res) => {
     const host = req.headers.host || 'hophimaddon.vercel.app';
+    const config = parseConfig(req.params.config);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(renderConfigPage(host));
+    res.send(renderConfigPage(host, config));
 });
 
 
 // Manifest routes
 app.get('/manifest.json', (req, res) => {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.setHeader('Cache-Control', 'max-age=3600, public');
+    res.setHeader('Cache-Control', 'max-age=300, stale-while-revalidate=600, public');
     res.json(getManifest({}));
 });
 
 app.get('/:config/manifest.json', (req, res) => {
     const config = parseConfig(req.params.config);
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.setHeader('Cache-Control', 'max-age=3600, public');
+    res.setHeader('Cache-Control', 'max-age=300, stale-while-revalidate=600, public');
     res.json(getManifest(config));
 });
 
@@ -60,7 +61,7 @@ async function handleResource(req, res, config) {
     try {
         const resp = await addonInterface.get(resource, type, id, extra, config);
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.setHeader('Cache-Control', 'max-age=1800, public');
+        res.setHeader('Cache-Control', 'max-age=120, stale-while-revalidate=600, public');
         res.json(resp);
     } catch (err) {
         if (err.noHandler) {
