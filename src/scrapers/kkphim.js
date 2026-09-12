@@ -6,11 +6,15 @@ const { findEpisode } = require('../utils/episodeHelper');
 const BASE_URL = 'https://phimapi.com';
 const CDN_URL = 'https://phimimg.com';
 
-function formatPoster(path) {
+function formatPoster(path, cdnDomain = CDN_URL) {
     if (!path) return '';
-    if (path.startsWith('http')) return path;
-    const cleanPath = path.replace(/^\/?uploads\/movies\//, '');
-    return `${CDN_URL}/uploads/movies/${cleanPath}`;
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    const clean = path.replace(/^\/+/, '');
+    if (clean.startsWith('upload/')) {
+        return `${cdnDomain}/${clean}`;
+    }
+    const cleanUploads = clean.replace(/^uploads\/movies\//, '');
+    return `${cdnDomain}/uploads/movies/${cleanUploads}`;
 }
 
 async function getCatalog(type, extra = {}) {
@@ -56,9 +60,8 @@ async function getCatalog(type, extra = {}) {
         const cdnDomain = res.data?.data?.APP_DOMAIN_CDN_IMAGE || CDN_URL;
 
         const metas = items.map(item => {
-            const poster = item.poster_url?.startsWith('http') 
-                ? item.poster_url 
-                : `${cdnDomain}/uploads/movies/${(item.poster_url || '').replace(/^\/?uploads\/movies\//, '')}`;
+            const rawPoster = item.poster_url || item.thumb_url || '';
+            const poster = formatPoster(rawPoster, cdnDomain);
             
             return {
                 id: `kkphim:${item.slug}`,
@@ -73,6 +76,7 @@ async function getCatalog(type, extra = {}) {
         cache.set(cacheKey, metas, 600);
         return metas;
     } catch (err) {
+
         console.error('[KKPhim Catalog Error]:', err.message);
         return [];
     }
@@ -166,4 +170,5 @@ async function getStream(id, type) {
     }
 }
 
-module.exports = { getCatalog, getMeta, getStream };
+module.exports = { getCatalog, getMeta, getStream, formatPoster };
+

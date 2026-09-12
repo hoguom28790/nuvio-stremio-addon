@@ -77,7 +77,8 @@ async function getMeta(type, id) {
         if (!movie) return null;
 
         const episodes = movie.episodes || [];
-        const isSeries = type === 'series' || (movie.total_episodes && movie.total_episodes !== '1');
+        const totalEpNum = parseInt(movie.total_episodes, 10);
+        const isSeries = type === 'series' || (totalEpNum && totalEpNum > 1);
 
         const videos = [];
         if (isSeries && episodes.length > 0) {
@@ -93,6 +94,25 @@ async function getMeta(type, id) {
             });
         }
 
+        // Extract year & genres properly from movie.category
+        const genres = [];
+        let extractedYear = movie.year ? String(movie.year) : '';
+        if (movie.category && typeof movie.category === 'object') {
+            Object.values(movie.category).forEach(cat => {
+                if (cat && Array.isArray(cat.list)) {
+                    cat.list.forEach(item => {
+                        if (item && item.name) {
+                            if (cat.group?.name === 'Năm' && !extractedYear) {
+                                extractedYear = String(item.name);
+                            } else if (cat.group?.name !== 'Năm' && cat.group?.name !== 'Định dạng') {
+                                genres.push(item.name);
+                            }
+                        }
+                    });
+                }
+            });
+        }
+
         const meta = {
             id: `nguonc:${slug}`,
             type: isSeries ? 'series' : 'movie',
@@ -100,8 +120,8 @@ async function getMeta(type, id) {
             poster: movie.poster_url || movie.thumb_url || '',
             background: movie.thumb_url || movie.poster_url || '',
             description: (movie.description || '').replace(/<[^>]*>?/gm, ''),
-            releaseInfo: String(movie.year || ''),
-            genres: (movie.category ? Object.values(movie.category) : []).map(c => c.name || c),
+            releaseInfo: extractedYear,
+            genres: genres.length > 0 ? genres : ['Phim'],
             director: movie.director ? [movie.director] : [],
             cast: movie.casts ? [movie.casts] : [],
             videos: videos.length > 0 ? videos : undefined
@@ -113,6 +133,7 @@ async function getMeta(type, id) {
         console.error('[NguonC Meta Error]:', err.message);
         return null;
     }
+
 }
 
 async function getStream(id, type) {

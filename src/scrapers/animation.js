@@ -48,9 +48,8 @@ async function getCatalog(catalogId, type, extra = {}) {
         const cdnDomain = res.data?.data?.APP_DOMAIN_CDN_IMAGE || CDN_URL;
 
         const metas = items.map(item => {
-            const poster = item.poster_url?.startsWith('http') 
-                ? item.poster_url 
-                : `${cdnDomain}/uploads/movies/${(item.poster_url || '').replace(/^\/?uploads\/movies\//, '')}`;
+            const rawPoster = item.poster_url || item.thumb_url || '';
+            const poster = kkphim.formatPoster ? kkphim.formatPoster(rawPoster, cdnDomain) : (rawPoster.startsWith('http') ? rawPoster : `${cdnDomain}/${rawPoster.replace(/^\/+/, '')}`);
 
             return {
                 id: `${prefix}:${item.slug}`,
@@ -63,6 +62,7 @@ async function getCatalog(catalogId, type, extra = {}) {
         });
 
         cache.set(cacheKey, metas, 600);
+
         return metas;
     } catch (err) {
         console.error('[Animation Scraper Catalog Error]:', err.message);
