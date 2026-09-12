@@ -211,21 +211,6 @@ async function getStream(id, type) {
             console.error('[NguonC Cross-source Error]:', e.message);
         }
 
-        // 2. Include original embed as externalUrl (opened in external browser)
-        movie.episodes.forEach(server => {
-            const serverName = server.server_name || 'NguonC';
-            const items = server.items || [];
-            const targetItem = findEpisode(items, targetEp);
-
-            if (targetItem && targetItem.embed) {
-                streams.push({
-                    name: `🛡️ [Web] NguonC • ${serverName}`,
-                    title: `${movie.name} - Tập ${targetItem.name}\n🌐 Mở xem trực tiếp trên trình duyệt Web (StreamC Embed)\n📌 Yêu cầu mở ngoài bằng trình duyệt`,
-                    externalUrl: targetItem.embed
-                });
-            }
-        });
-
         return streams;
     } catch (err) {
         console.error('[NguonC Stream Error]:', err.message);

@@ -5,7 +5,7 @@ const filteredCatalogs = reference.catalogs.filter(c => c.type !== 'tv' && c.id 
 
 const baseManifest = {
     id: "org.hophim.stremio",
-    version: "1.4.2",
+    version: "1.4.3",
     name: "Hồ Phim",
     description: "Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ NguonC, Siêu Tầm Phim, Hoạt Hình 3D, CLB Phim Xưa, VSMOV, YanHH3D, KKPhim",
     logo: "https://raw.githubusercontent.com/hoguom28790/nuvio-stremio-addon/master/logo.png",
