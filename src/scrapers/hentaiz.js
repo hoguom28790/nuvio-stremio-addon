@@ -62,6 +62,294 @@ function getSlugMap() {
     return slugMap || new Map();
 }
 
+// Franchise definitions for multi-season/multi-part anime
+const FRANCHISES = [
+    {
+        id: 'bible-black',
+        name: 'Bible Black',
+        match: (ep) => /bible\s*black/i.test(ep.title) || /bible-black/i.test(ep.slug),
+        description: 'Tượng đài anime kinh điển huyền thoại với cốt truyện học đường thần bí đầy ma mị và cuốn hút.',
+        seasons: [
+            { name: 'Night of the Walpulgiss', match: (ep) => /night of the walpulgiss/i.test(ep.title) || /walpulgiss/i.test(ep.slug) },
+            { name: 'Gaiden', match: (ep) => /gaiden/i.test(ep.title) || /gaiden/i.test(ep.slug) },
+            { name: 'New Testament', match: (ep) => /new testament/i.test(ep.title) || /new-testament/i.test(ep.slug) },
+            { name: 'Only Version', match: (ep) => /only version/i.test(ep.title) || /only-version/i.test(ep.slug) }
+        ]
+    },
+    {
+        id: 'discipline',
+        name: 'Discipline',
+        match: (ep) => /discipline/i.test(ep.title) || /discipline/i.test(ep.slug),
+        description: 'Tác phẩm anime kinh điển nổi tiếng xoay quanh ngôi trường bí ẩn Discipline.',
+        seasons: [
+            { name: 'Hentai Academy', match: (ep) => /hentai academy/i.test(ep.title) || /hentai-academy/i.test(ep.slug) },
+            { name: 'Zero', match: (ep) => /zero/i.test(ep.title) || /zero/i.test(ep.slug) },
+            { name: 'Back Alley', match: (ep) => /back alley/i.test(ep.title) || /back-alley/i.test(ep.slug) }
+        ]
+    },
+    {
+        id: 'kuroinu',
+        name: 'Kuroinu',
+        match: (ep) => /kuroinu/i.test(ep.title) || /kuroinu/i.test(ep.slug),
+        description: 'Bi kịch hắc ám huyền thoại của thánh nữ và binh đoàn lính đánh thuê.',
+        seasons: [
+            { name: 'Kedakaki Seijo wa Hakudaku ni Somaru', match: (ep) => /kedakaki/i.test(ep.title) || /kedakaki/i.test(ep.slug) },
+            { name: 'II The Animation', match: (ep) => /ii the animation/i.test(ep.title) || /kuroinu-ii/i.test(ep.slug) },
+            { name: 'The Beginning', match: (ep) => /beginning/i.test(ep.title) || /beginning/i.test(ep.slug) }
+        ]
+    },
+    {
+        id: 'oni-chichi',
+        name: 'Oni Chichi',
+        match: (ep) => /oni\s*chichi/i.test(ep.title) || /oni-chichi/i.test(ep.slug),
+        description: 'Series kinh điển nhiều mùa nổi tiếng nhất qua nhiều năm phát sóng.',
+        seasons: [
+            { name: 'Phần 1: Khởi đầu (2009)', match: (ep) => /oni chichi$/i.test(ep.title.trim()) || (ep.releaseYear === 2009) },
+            { name: 'Phần 2: Oni Chichi 2 (2010)', match: (ep) => /oni chichi 2 ep/i.test(ep.title) || (ep.releaseYear === 2010) },
+            { name: 'Phần 3: Re-birth & Re-born (2011)', match: (ep) => /re-birth|re-born/i.test(ep.title) || (ep.releaseYear === 2011) },
+            { name: 'Phần 4: Revenge & Rebuild (2013)', match: (ep) => /revenge|rebuild/i.test(ep.title) || (ep.releaseYear === 2013) },
+            { name: 'Phần 5: Harvest, Refresh & Vacation (2015-2016)', match: (ep) => /harvest|refresh|vacation/i.test(ep.title) || [2015, 2016].includes(ep.releaseYear) },
+            { name: 'Phần 6: Oni Chichi Harem (2024-2025)', match: (ep) => /harem/i.test(ep.title) || [2024, 2025].includes(ep.releaseYear) }
+        ]
+    },
+    {
+        id: 'taimanin',
+        name: 'Taimanin (Ninja Asagi)',
+        match: (ep) => /taimanin/i.test(ep.title) || /taimanin/i.test(ep.slug),
+        description: 'Cuộc chiến chống thế lực tà ác của các nữ ninja Taimanin.',
+        seasons: [
+            { name: 'Taimanin Asagi', match: (ep) => /anti-demon ninja asagi/i.test(ep.title) || /toraware no niku/i.test(ep.title) || /taimanin-asagi-\d/i.test(ep.slug) },
+            { name: 'Taimanin Asagi 2', match: (ep) => /asagi 2/i.test(ep.title) || /asagi-2/i.test(ep.slug) },
+            { name: 'Taimanin Asagi 3', match: (ep) => /asagi 3/i.test(ep.title) || /asagi-3/i.test(ep.slug) },
+            { name: 'Taimanin Yukikaze', match: (ep) => /yukikaze/i.test(ep.title) || /yukikaze/i.test(ep.slug) },
+            { name: 'Taimanin Shiranui & Oboro', match: (ep) => /shiranui|oboro/i.test(ep.title) || /shiranui|oboro/i.test(ep.slug) }
+        ]
+    },
+    {
+        id: 'words-worth',
+        name: 'Words Worth',
+        match: (ep) => /words\s*worth/i.test(ep.title) || /words-worth/i.test(ep.slug),
+        description: 'Tác phẩm phiêu lưu giả tưởng huyền thoại kinh điển.',
+        seasons: [
+            { name: 'Words Worth', match: (ep) => !/gaiden/i.test(ep.title) && !/gaiden/i.test(ep.slug) },
+            { name: 'Words Worth Gaiden', match: (ep) => /gaiden/i.test(ep.title) || /gaiden/i.test(ep.slug) }
+        ]
+    }
+];
+
+function cleanSeriesTitle(raw) {
+    if (!raw) return '';
+    let t = raw.trim();
+    t = t.replace(/\s*[-–—:]?\s*(?:Ep|Episode|Tập|Part)\.?\s*\d+\s*$/i, '');
+    t = t.replace(/\s*[\(\[](?:Ep|Episode|Tập|Part)\.?\s*\d+[\)\]]\s*$/i, '');
+    return t.trim();
+}
+
+function getEffectiveEpNum(ep) {
+    if (ep.title) {
+        const m = ep.title.match(/(?:Ep|Episode|Tập|Part)\.?\s*(\d+)/i);
+        if (m) return parseInt(m[1], 10);
+    }
+    if (typeof ep.episodeNumber === 'number' && ep.episodeNumber > 0) {
+        return ep.episodeNumber;
+    }
+    if (ep.slug) {
+        const m = ep.slug.match(/-(\d+)$/);
+        if (m) return parseInt(m[1], 10);
+    }
+    return 1;
+}
+
+let cachedSeriesList = null;
+let cachedSeriesMap = null;
+
+function getSeriesCatalog() {
+    if (cachedSeriesList && cachedSeriesMap) {
+        return { seriesList: cachedSeriesList, seriesMap: cachedSeriesMap };
+    }
+
+    const rawCatalog = getStaticCatalog();
+    const claimedEps = new Set();
+    const seriesList = [];
+    const seriesMap = new Map();
+
+    // Step 1: Claim franchise episodes
+    for (const fr of FRANCHISES) {
+        const matched = rawCatalog.filter(ep => fr.match(ep));
+        if (matched.length === 0) continue;
+        matched.forEach(ep => claimedEps.add(ep.slug));
+
+        const seasonMap = new Map();
+        fr.seasons.forEach((sDef, idx) => {
+            seasonMap.set(idx + 1, { name: sDef.name, episodes: [] });
+        });
+        const fallbackSeason = fr.seasons.length + 1;
+
+        for (const ep of matched) {
+            let placed = false;
+            for (let i = 0; i < fr.seasons.length; i++) {
+                if (fr.seasons[i].match(ep)) {
+                    seasonMap.get(i + 1).episodes.push(ep);
+                    placed = true;
+                    break;
+                }
+            }
+            if (!placed) {
+                if (!seasonMap.has(fallbackSeason)) {
+                    seasonMap.set(fallbackSeason, { name: 'Phần mở rộng', episodes: [] });
+                }
+                seasonMap.get(fallbackSeason).episodes.push(ep);
+            }
+        }
+
+        const videos = [];
+        const allGenres = new Set();
+        let isUncensored = false;
+        let repEp = matched[0];
+        let minYear = 9999;
+        let maxYear = 0;
+
+        for (const [seasonNum, sObj] of seasonMap.entries()) {
+            if (sObj.episodes.length === 0) continue;
+            sObj.episodes.sort((a, b) => {
+                const numA = getEffectiveEpNum(a);
+                const numB = getEffectiveEpNum(b);
+                if (numA !== numB) return numA - numB;
+                return (a.releaseYear || 0) - (b.releaseYear || 0);
+            });
+
+            sObj.episodes.forEach((ep, epIdx) => {
+                if (ep.contentRating === 'UNCENSORED') isUncensored = true;
+                if (ep.genres && Array.isArray(ep.genres)) ep.genres.forEach(g => allGenres.add(g));
+                if (ep.releaseYear) {
+                    if (ep.releaseYear < minYear) minYear = ep.releaseYear;
+                    if (ep.releaseYear > maxYear) maxYear = ep.releaseYear;
+                }
+
+                const epNumberInSeason = epIdx + 1;
+                const videoId = `hentaiz:${ep.slug}:${seasonNum}:${epNumberInSeason}`;
+                videos.push({
+                    id: videoId,
+                    title: `P.${seasonNum} Tập ${epNumberInSeason} - ${sObj.name || ep.title}`,
+                    season: seasonNum,
+                    episode: epNumberInSeason,
+                    released: ep.publishedAt || (ep.releaseYear ? `${ep.releaseYear}-01-01` : undefined),
+                    thumbnail: ep.poster || (ep.posterImage?.filePath ? `${STORAGE_URL}${ep.posterImage.filePath}` : undefined)
+                });
+            });
+        }
+
+        const yearStr = minYear <= maxYear && minYear !== 9999 ? (minYear === maxYear ? `${minYear}` : `${minYear}-${maxYear}`) : undefined;
+        const seriesObj = {
+            id: `hentaiz:series:${fr.id}`,
+            canonicalSlug: fr.id,
+            name: fr.name,
+            type: 'series',
+            poster: repEp.poster || (repEp.posterImage?.filePath ? `${STORAGE_URL}${repEp.posterImage.filePath}` : undefined),
+            background: repEp.background || (repEp.backdropImage?.filePath ? `${STORAGE_URL}${repEp.backdropImage.filePath}` : undefined),
+            description: `[Trọn bộ ${videos.length} tập • ${seasonMap.size} phần] ${fr.description || repEp.description || ''}`.trim(),
+            releaseInfo: yearStr,
+            genres: Array.from(allGenres),
+            isUncensored: isUncensored,
+            videos: videos
+        };
+
+        seriesList.push(seriesObj);
+        seriesMap.set(fr.id, seriesObj);
+        seriesMap.set(`series:${fr.id}`, seriesObj);
+        seriesMap.set(`hentaiz:series:${fr.id}`, seriesObj);
+        seriesMap.set(`hentaiz:${fr.id}`, seriesObj);
+
+        for (const ep of matched) {
+            seriesMap.set(ep.slug, seriesObj);
+            seriesMap.set(`hentaiz:${ep.slug}`, seriesObj);
+        }
+    }
+
+    // Step 2: Group regular titles
+    const regularGroups = new Map();
+    for (const ep of rawCatalog) {
+        if (claimedEps.has(ep.slug)) continue;
+        const cleanTitle = cleanSeriesTitle(ep.title);
+        if (!regularGroups.has(cleanTitle)) {
+            regularGroups.set(cleanTitle, []);
+        }
+        regularGroups.get(cleanTitle).push(ep);
+    }
+
+    for (const [cleanTitle, episodes] of regularGroups.entries()) {
+        episodes.sort((a, b) => {
+            const numA = getEffectiveEpNum(a);
+            const numB = getEffectiveEpNum(b);
+            if (numA !== numB) return numA - numB;
+            return (a.releaseYear || 0) - (b.releaseYear || 0);
+        });
+
+        const firstEp = episodes[0];
+        let baseSlug = firstEp.slug.replace(/-\d+$/, '').replace(/-ep\.\d+$/i, '');
+        if (!baseSlug) baseSlug = firstEp.slug;
+
+        const allGenres = new Set();
+        let isUncensored = false;
+        let minYear = 9999;
+        let maxYear = 0;
+
+        const videos = episodes.map((ep, idx) => {
+            if (ep.contentRating === 'UNCENSORED') isUncensored = true;
+            if (ep.genres && Array.isArray(ep.genres)) ep.genres.forEach(g => allGenres.add(g));
+            if (ep.releaseYear) {
+                if (ep.releaseYear < minYear) minYear = ep.releaseYear;
+                if (ep.releaseYear > maxYear) maxYear = ep.releaseYear;
+            }
+            const epNum = idx + 1;
+            const videoId = `hentaiz:${ep.slug}:1:${epNum}`;
+            return {
+                id: videoId,
+                title: episodes.length > 1 ? `Tập ${epNum} - ${ep.title}` : ep.title,
+                season: 1,
+                episode: epNum,
+                released: ep.publishedAt || (ep.releaseYear ? `${ep.releaseYear}-01-01` : undefined),
+                thumbnail: ep.poster || (ep.posterImage?.filePath ? `${STORAGE_URL}${ep.posterImage.filePath}` : undefined)
+            };
+        });
+
+        const yearStr = minYear <= maxYear && minYear !== 9999 ? (minYear === maxYear ? `${minYear}` : `${minYear}-${maxYear}`) : undefined;
+        const epCountLabel = episodes.length > 1 ? `[Trọn bộ ${episodes.length} tập]` : `[1 tập]`;
+        const seriesObj = {
+            id: `hentaiz:series:${baseSlug}`,
+            canonicalSlug: baseSlug,
+            name: cleanTitle || firstEp.title,
+            type: 'series',
+            poster: firstEp.poster || (firstEp.posterImage?.filePath ? `${STORAGE_URL}${firstEp.posterImage.filePath}` : undefined),
+            background: firstEp.background || (firstEp.backdropImage?.filePath ? `${STORAGE_URL}${firstEp.backdropImage.filePath}` : undefined),
+            description: `${epCountLabel} ${firstEp.description || (firstEp.studios ? '• ' + firstEp.studios : '')}`.trim(),
+            releaseInfo: yearStr,
+            genres: Array.from(allGenres),
+            isUncensored: isUncensored,
+            videos: videos
+        };
+
+        seriesList.push(seriesObj);
+        seriesMap.set(baseSlug, seriesObj);
+        seriesMap.set(`series:${baseSlug}`, seriesObj);
+        seriesMap.set(`hentaiz:series:${baseSlug}`, seriesObj);
+        seriesMap.set(`hentaiz:${baseSlug}`, seriesObj);
+
+        for (const ep of episodes) {
+            seriesMap.set(ep.slug, seriesObj);
+            seriesMap.set(`hentaiz:${ep.slug}`, seriesObj);
+        }
+    }
+
+    cachedSeriesList = seriesList;
+    cachedSeriesMap = seriesMap;
+    return { seriesList, seriesMap };
+}
+
+function getSeriesMap() {
+    return getSeriesCatalog().seriesMap;
+}
+
 // Load cached streams with lazy-loading
 let cachedStreams = null;
 function getCachedStreams() {
@@ -151,16 +439,23 @@ function stripHtml(html) {
  * 1. GET CATALOG
  */
 async function getCatalog(type, extra = {}) {
-    const catalog = getStaticCatalog();
-    const mediaType = type === 'movie' ? 'movie' : 'series';
+    const { seriesList } = getSeriesCatalog();
+    const isMovie = type === 'movie';
 
-    let results = catalog;
+    let results = seriesList;
+
+    // For movie catalog: filter to standalone single-episode movies/OVAs
+    if (isMovie) {
+        results = results.filter(s => s.videos && s.videos.length === 1);
+    }
 
     if (extra.search) {
         const q = extra.search.toLowerCase().trim();
-        results = results.filter(ep => {
-            return (ep.title && ep.title.toLowerCase().includes(q)) ||
-                   (ep.slug && ep.slug.toLowerCase().includes(q));
+        results = results.filter(s => {
+            return (s.name && s.name.toLowerCase().includes(q)) ||
+                   (s.canonicalSlug && s.canonicalSlug.toLowerCase().includes(q)) ||
+                   (s.id && s.id.toLowerCase().includes(q)) ||
+                   (s.videos && s.videos.some(v => (v.title && v.title.toLowerCase().includes(q)) || (v.id && v.id.toLowerCase().includes(q))));
         });
     } else if (extra.genre) {
         const rawGenre = typeof extra.genre === 'string' ? extra.genre.trim() : '';
@@ -170,12 +465,12 @@ async function getCatalog(type, extra = {}) {
         // If it is a default label or placeholder, do not apply genre filtering
         if (lower && !['genre', 'tất cả', 'all', 'default', 'hentaiz-movie', 'hentaiz-anime', 'hentaiz-series'].includes(lower)) {
             if (cleanGenre.includes('Không Che') || lower.includes('uncensored')) {
-                results = results.filter(ep => ep.contentRating === 'UNCENSORED');
+                results = results.filter(s => s.isUncensored);
             } else {
                 const targetSlug = slugifyGenre(cleanGenre);
-                results = results.filter(ep => {
-                    if (!ep.genres || !Array.isArray(ep.genres)) return false;
-                    return ep.genres.some(g => {
+                results = results.filter(s => {
+                    if (!s.genres || !Array.isArray(s.genres)) return false;
+                    return s.genres.some(g => {
                         const gLower = g.toLowerCase();
                         return gLower === lower || slugifyGenre(g) === targetSlug;
                     });
@@ -187,15 +482,15 @@ async function getCatalog(type, extra = {}) {
     const skip = extra.skip ? parseInt(extra.skip, 10) || 0 : 0;
     const paged = results.slice(skip, skip + 24);
 
-    return paged.map(ep => ({
-        id: ep.id && ep.id.startsWith('hentaiz:') ? ep.id : `hentaiz:${ep.slug}`,
-        name: ep.title,
-        type: mediaType,
-        poster: ep.poster || (ep.posterImage?.filePath ? `${STORAGE_URL}${ep.posterImage.filePath}` : undefined),
-        background: ep.background || (ep.backdropImage?.filePath ? `${STORAGE_URL}${ep.backdropImage.filePath}` : undefined),
-        description: ep.description || `Tập ${ep.episodeNumber || 1}${ep.studios ? ' • ' + ep.studios : ''}`,
-        releaseInfo: ep.releaseYear ? String(ep.releaseYear) : undefined,
-        genres: ep.genres || []
+    return paged.map(s => ({
+        id: s.id,
+        name: s.name,
+        type: isMovie ? 'movie' : 'series',
+        poster: s.poster,
+        background: s.background,
+        description: s.description,
+        releaseInfo: s.releaseInfo,
+        genres: s.genres || []
     }));
 }
 
@@ -205,6 +500,34 @@ async function getCatalog(type, extra = {}) {
 async function getMeta(type, id) {
     const cleanId = id.replace(/^hentaiz:/, '').replace(/\.json$/, '');
     const slug = cleanId.split(':')[0];
+
+    // Check in unified seriesMap first (matches series ID, canonical slug, franchise, or ANY episode slug)
+    const smapSeries = getSeriesMap();
+    const seriesObj = smapSeries.get(cleanId) || smapSeries.get(slug);
+
+    if (seriesObj) {
+        // Find if request is focused on a specific episode
+        const targetVideo = seriesObj.videos.find(v => v.id.includes(cleanId) || v.id.includes(slug));
+        const defaultVid = targetVideo ? targetVideo.id : (seriesObj.videos[0]?.id || `hentaiz:${seriesObj.canonicalSlug}`);
+
+        const meta = {
+            id: seriesObj.id,
+            name: seriesObj.name,
+            type: type === 'movie' && seriesObj.videos.length === 1 ? 'movie' : 'series',
+            poster: seriesObj.poster,
+            background: seriesObj.background,
+            description: seriesObj.description,
+            releaseInfo: seriesObj.releaseInfo,
+            genres: seriesObj.genres || [],
+            videos: seriesObj.videos,
+            behaviorHints: {
+                defaultVideoId: defaultVid
+            }
+        };
+        return meta;
+    }
+
+    // Fallback to single episode from static catalog
     const smap = getSlugMap();
     const ep = smap.get(slug);
 
@@ -335,7 +658,23 @@ async function fetchAndDecryptStreamData(videoId) {
  */
 async function getStream(id, type, host = 'hophimaddon.vercel.app') {
     const cleanId = id.replace(/^hentaiz:/, '').replace(/\.json$/, '');
-    const slug = cleanId.split(':')[0];
+    let slug = cleanId.split(':')[0];
+
+    // Handle compound series/franchise video ID: e.g. series:bible-black:1:1
+    if (cleanId.startsWith('series:') || cleanId.startsWith('franchise:')) {
+        const parts = cleanId.split(':');
+        const seriesSlug = parts[1];
+        const sNum = parseInt(parts[2], 10) || 1;
+        const epNum = parseInt(parts[3], 10) || 1;
+        const sMap = getSeriesMap();
+        const seriesObj = sMap.get(seriesSlug);
+        const video = seriesObj?.videos?.find(v => v.season === sNum && v.episode === epNum);
+        if (video) {
+            const vClean = video.id.replace(/^hentaiz:/, '');
+            slug = vClean.split(':')[0];
+        }
+    }
+
     const cacheKey = `hentaiz:streams:${slug}:${host}`;
     const cached = cache.get(cacheKey);
     if (cached) return cached;
