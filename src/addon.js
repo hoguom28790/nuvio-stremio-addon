@@ -113,7 +113,7 @@ builder.defineMetaHandler(async ({ type, id, config = {} }) => {
             const meta = await clbpx.getMeta(type, id);
             if (meta) return { meta };
         }
-        if (id.startsWith('hentaiz:') && isSourceEnabled('hentaiz', config)) {
+        if (id.startsWith('hentaiz:')) {
             const meta = await hentaiz.getMeta(type, id);
             if (meta) return { meta };
         }
@@ -152,7 +152,7 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
             streams = await animation.getStream('stp', id, type);
         } else if (id.startsWith('clbpx:') && isSourceEnabled('clbpx', config)) {
             streams = await clbpx.getStream(id, type);
-        } else if (id.startsWith('hentaiz:') && isSourceEnabled('hentaiz', config)) {
+        } else if (id.startsWith('hentaiz:')) {
             streams = await hentaiz.getStream(id, type, config.host);
         } else if (id.startsWith('tt')) {
             if (config.prefImdb !== false) {

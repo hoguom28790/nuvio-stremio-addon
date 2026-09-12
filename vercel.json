@@ -1,6 +1,12 @@
 {
   "version": 2,
   "regions": ["hnd1"],
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "src/data/**",
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
     {
       "source": "/(.*)",

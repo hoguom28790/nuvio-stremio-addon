@@ -96,34 +96,24 @@ app.get('/hentaiz/stream/:videoId/:quality.m3u8', async (req, res) => {
 
 // Debug route
 app.get('/debug/hentaiz', async (req, res) => {
-    const axios = require('axios');
-    const segUrl = 'https://c1.animez.top/7b9ab61d-239a-4641-bee1-6c018acfd21d/2R0nZA/4rDfPXoeWG6LOzLkqZ-_xR8jUsQ.png';
-    const result = {};
+    let catalogCount = 0;
+    let sampleStreams = null;
     try {
-        const fetchRes = await fetch(segUrl, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Referer': 'https://x.haiten.org/',
-                'Range': 'bytes=8343-10343'
-            }
-        });
-        result.fetchStatus = fetchRes.status;
-        result.fetchHeaders = Object.fromEntries(fetchRes.headers.entries());
+        const cat = await hentaiz.getCatalog('series', {});
+        catalogCount = cat ? cat.length : 0;
     } catch (e) {
-        result.fetchError = e.message;
+        catalogCount = e.message;
+    }
+    try {
+        sampleStreams = await hentaiz.getStream('hentaiz:choro-mesu-days-2:1:2', 'series', req.headers.host);
+    } catch (e) {
+        sampleStreams = e.message;
     }
 
-    try {
-        const rawStream = await hentaiz.fetchAndDecryptStreamData('7b9ab61d-239a-4641-bee1-6c018acfd21d');
-        result.streamDataKeys = Object.keys(rawStream || {});
-        result.domain = rawStream?.domain;
-        result.segmentDomains = rawStream?.segmentDomains;
-        result.streamType = rawStream?.streamType;
-    } catch (e) {
-        result.mimixError = e.message;
-    }
-
-    res.json(result);
+    res.json({
+        catalogCount,
+        sampleStreams
+    });
 });
 
 // Configured Resource routes

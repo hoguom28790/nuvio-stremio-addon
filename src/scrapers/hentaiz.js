@@ -23,23 +23,36 @@ let slugMap = null;
 function getStaticCatalog() {
     if (cachedCatalog) return cachedCatalog;
     try {
-        const filePath = path.join(__dirname, '..', 'data', 'hentaiz_catalog.json');
-        if (fs.existsSync(filePath)) {
-            const raw = fs.readFileSync(filePath, 'utf8');
-            cachedCatalog = JSON.parse(raw);
-            slugMap = new Map();
-            for (const ep of cachedCatalog) {
-                if (ep.slug) slugMap.set(ep.slug, ep);
-                if (ep.id) {
-                    slugMap.set(ep.id, ep);
-                    const cleanId = ep.id.replace('hentaiz:', '');
-                    slugMap.set(cleanId, ep);
+        cachedCatalog = require('../data/hentaiz_catalog.json');
+    } catch (e1) {
+        try {
+            const possiblePaths = [
+                path.join(__dirname, '..', 'data', 'hentaiz_catalog.json'),
+                path.join(process.cwd(), 'src', 'data', 'hentaiz_catalog.json'),
+                path.join(process.cwd(), 'data', 'hentaiz_catalog.json')
+            ];
+            for (const p of possiblePaths) {
+                if (fs.existsSync(p)) {
+                    cachedCatalog = JSON.parse(fs.readFileSync(p, 'utf8'));
+                    break;
                 }
             }
-            return cachedCatalog;
+        } catch (e2) {
+            console.error('[HentaiZ] Failed to load static catalog:', e2.message);
         }
-    } catch (e) {
-        console.error('[HentaiZ] Failed to load static catalog:', e.message);
+    }
+
+    if (cachedCatalog && Array.isArray(cachedCatalog)) {
+        slugMap = new Map();
+        for (const ep of cachedCatalog) {
+            if (ep.slug) slugMap.set(ep.slug, ep);
+            if (ep.id) {
+                slugMap.set(ep.id, ep);
+                const cleanId = ep.id.replace('hentaiz:', '');
+                slugMap.set(cleanId, ep);
+            }
+        }
+        return cachedCatalog;
     }
     return [];
 }
@@ -54,14 +67,24 @@ let cachedStreams = null;
 function getCachedStreams() {
     if (cachedStreams) return cachedStreams;
     try {
-        const filePath = path.join(__dirname, '..', 'data', 'hentaiz_streams.json');
-        if (fs.existsSync(filePath)) {
-            const raw = fs.readFileSync(filePath, 'utf8');
-            cachedStreams = JSON.parse(raw);
-            return cachedStreams;
+        cachedStreams = require('../data/hentaiz_streams.json');
+        return cachedStreams;
+    } catch (e1) {
+        try {
+            const possiblePaths = [
+                path.join(__dirname, '..', 'data', 'hentaiz_streams.json'),
+                path.join(process.cwd(), 'src', 'data', 'hentaiz_streams.json'),
+                path.join(process.cwd(), 'data', 'hentaiz_streams.json')
+            ];
+            for (const p of possiblePaths) {
+                if (fs.existsSync(p)) {
+                    cachedStreams = JSON.parse(fs.readFileSync(p, 'utf8'));
+                    return cachedStreams;
+                }
+            }
+        } catch (e2) {
+            console.error('[HentaiZ] Failed to load cached streams:', e2.message);
         }
-    } catch (e) {
-        console.error('[HentaiZ] Failed to load cached streams:', e.message);
     }
     return {};
 }
@@ -180,7 +203,7 @@ async function getCatalog(type, extra = {}) {
  * 2. GET META
  */
 async function getMeta(type, id) {
-    const cleanId = id.replace(/^hentaiz:/, '');
+    const cleanId = id.replace(/^hentaiz:/, '').replace(/\.json$/, '');
     const slug = cleanId.split(':')[0];
     const smap = getSlugMap();
     const ep = smap.get(slug);
@@ -311,7 +334,7 @@ async function fetchAndDecryptStreamData(videoId) {
  * 3. GET STREAM
  */
 async function getStream(id, type, host = 'hophimaddon.vercel.app') {
-    const cleanId = id.replace(/^hentaiz:/, '');
+    const cleanId = id.replace(/^hentaiz:/, '').replace(/\.json$/, '');
     const slug = cleanId.split(':')[0];
     const cacheKey = `hentaiz:streams:${slug}:${host}`;
     const cached = cache.get(cacheKey);
