@@ -94,16 +94,33 @@ app.get('/hentaiz/stream/:videoId/:quality.m3u8', async (req, res) => {
 
 // Debug route
 app.get('/debug/hentaiz', async (req, res) => {
+    const axios = require('axios');
+    const segUrl = 'https://c1.animez.top/7b9ab61d-239a-4641-bee1-6c018acfd21d/2R0nZA/4rDfPXoeWG6LOzLkqZ-_xR8jUsQ.png';
+    const result = {};
+    try {
+        const rSeg = await axios.get(segUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Referer': 'https://x.haiten.org/',
+                'Range': 'bytes=8343-10343'
+            },
+            timeout: 8000
+        });
+        result.segStatus = rSeg.status;
+        result.segLen = rSeg.data?.length;
+    } catch (e) {
+        result.segError = { status: e.response?.status, message: e.message };
+    }
+
     try {
         const streams = await hentaiz.getStream('hentaiz:kanojo-saimin-2', 'series', 'hophimaddon.vercel.app');
-        res.json({
-            status: 'ok',
-            streamsCount: streams.length,
-            sample: streams[0]
-        });
+        result.streamsCount = streams.length;
+        result.sample = streams[0];
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        result.streamError = e.message;
     }
+
+    res.json(result);
 });
 
 // Configured Resource routes
