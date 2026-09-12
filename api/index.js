@@ -92,28 +92,31 @@ app.get('/hentaiz/stream/:videoId/:quality.m3u8', async (req, res) => {
     }
 });
 
-// Debug route for hentaiz mirrors
+// Debug route for hentaiz with full browser headers
 app.get('/debug/hentaiz', async (req, res) => {
     const axios = require('axios');
-    const domains = [
-        'https://hentaiz2.com',
-        'https://hentaiz.bike',
-        'https://hentaiz.zone',
-        'https://hentaiz.taxi',
-        'https://hentaivs.cc'
-    ];
+    const headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Referer': 'https://hentaiz2.com/browse',
+        'Sec-Ch-Ua': '"Not A(Brand";v="8", "Chromium";v="132", "Google Chrome";v="132"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-origin',
+        'x-sveltekit-invalidated': '001'
+    };
+
     const results = {};
+    const domains = ['https://hentaiz2.com', 'https://hentaiz.bike'];
     for (const d of domains) {
         try {
-            const r = await axios.get(`${d}/browse/__data.json`, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                },
-                timeout: 5000
-            });
+            const r = await axios.get(`${d}/browse/__data.json`, { headers: { ...headers, 'Referer': `${d}/browse` }, timeout: 7000 });
             results[d] = { status: r.status, nodes: r.data?.nodes?.length };
-        } catch (err) {
-            results[d] = { status: err.response?.status || err.message };
+        } catch (e) {
+            results[d] = { status: e.response?.status || e.message };
         }
     }
     res.json(results);
