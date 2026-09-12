@@ -84,6 +84,8 @@ app.get('/hentaiz/stream/:videoId/:quality.m3u8', async (req, res) => {
         const playlist = await hentaiz.getM3u8(videoId, quality);
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
         res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', '*');
         res.setHeader('Cache-Control', 'max-age=1800, public');
         res.send(playlist);
     } catch (err) {

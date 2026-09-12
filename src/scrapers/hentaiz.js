@@ -359,73 +359,95 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
         const streamMap = getCachedStreams();
         const streamData = streamMap[videoId];
 
+        const cdnDomain = (streamData?.segmentDomains && streamData.segmentDomains[0]) || 'https://c1.animez.top';
         const cleanTitle = (streamData?.title || ep?.title || slug).replace(/\.mp4$/i, '');
         const hostBase = host.includes('://') ? host : `https://${host}`;
 
-        const streams = [];
+        // Standard proxyHeaders for Stremio / Nuvio native libmpv engine
+        const proxyHeaders = {
+            request: {
+                'User-Agent': USER_AGENT,
+                'Referer': 'https://x.haiten.org/'
+            }
+        };
 
-        // 1080p
-        if (streamData?.defaultM3u8?.playlists?.['2']) {
-            streams.push({
-                name: '🔞 HentaiZ',
-                title: `[Full HD 1080p] ${cleanTitle}\n⚡ Tốc độ cao CDN`,
-                url: `${hostBase}/hentaiz/stream/${videoId}/2.m3u8`,
-                behaviorHints: {
-                    notWebReady: false
+        // Extract variant codes from master playlist
+        const masterStr = streamData?.defaultM3u8?.master || '';
+        const variantMatches = [...masterStr.matchAll(/([^\s\n/]+)\/playlist\.m3u8/g)].map(m => m[1]);
+        
+        let variant1080 = '';
+        let variant720 = '';
+        const lines = masterStr.split('\n');
+        let currentStreamInf = '';
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('#EXT-X-STREAM-INF')) {
+                currentStreamInf = trimmed;
+            } else if (trimmed.endsWith('playlist.m3u8')) {
+                const code = trimmed.replace('/playlist.m3u8', '').trim();
+                if (currentStreamInf.includes('1920x1080') || currentStreamInf.includes('1080')) {
+                    variant1080 = code;
+                } else if (currentStreamInf.includes('1280x720') || currentStreamInf.includes('720')) {
+                    variant720 = code;
                 }
-            });
-        }
-
-        // 720p
-        if (streamData?.defaultM3u8?.playlists?.['1']) {
-            streams.push({
-                name: '🔞 HentaiZ',
-                title: `[HD 720p] ${cleanTitle}\n⚡ Tốc độ cao CDN`,
-                url: `${hostBase}/hentaiz/stream/${videoId}/1.m3u8`,
-                behaviorHints: {
-                    notWebReady: false
-                }
-            });
-        }
-
-        // Master Auto
-        if (streamData?.defaultM3u8?.master) {
-            streams.push({
-                name: '🔞 HentaiZ',
-                title: `[Tự Động Auto] ${cleanTitle}\n⚡ Đa độ phân giải HLS`,
-                url: `${hostBase}/hentaiz/stream/${videoId}/master.m3u8`,
-                behaviorHints: {
-                    notWebReady: false
-                }
-            });
-        }
-
-        // Fallback to live fetch if not found in stream cache
-        if (streams.length === 0) {
-            try {
-                const liveData = await fetchAndDecryptStreamData(videoId);
-                if (liveData && liveData.defaultM3u8) {
-                    if (liveData.defaultM3u8.playlists?.['2']) {
-                        streams.push({
-                            name: '🔞 HentaiZ',
-                            title: `[Full HD 1080p] ${cleanTitle}\n⚡ Tốc độ cao CDN`,
-                            url: `${hostBase}/hentaiz/stream/${videoId}/2.m3u8`,
-                            behaviorHints: { notWebReady: false }
-                        });
-                    }
-                    if (liveData.defaultM3u8.playlists?.['1']) {
-                        streams.push({
-                            name: '🔞 HentaiZ',
-                            title: `[HD 720p] ${cleanTitle}\n⚡ Tốc độ cao CDN`,
-                            url: `${hostBase}/hentaiz/stream/${videoId}/1.m3u8`,
-                            behaviorHints: { notWebReady: false }
-                        });
-                    }
-                }
-            } catch (err) {
-                console.error(`[HentaiZ Live Fallback Error] ${slug}:`, err.message);
             }
         }
+        if (!variant1080 && variantMatches.length > 0) {
+            variant1080 = variantMatches[variantMatches.length - 1];
+        }
+        if (!variant720 && variantMatches.length > 1) {
+            variant720 = variantMatches[1];
+        }
+
+        const streams = [];
+
+        // 1. Direct CDN Master (Auto resolution - recommended for Stremio & Nuvio)
+        streams.push({
+            name: '🔞 HentaiZ',
+            title: `[Tự Động Auto] ${cleanTitle}\n⚡ CDN Tốc độ cao • Đa độ phân giải HLS (1080p/720p)`,
+            url: `${cdnDomain}/${videoId}/master.m3u8`,
+            behaviorHints: {
+                notWebReady: true,
+                proxyHeaders: proxyHeaders
+            }
+        });
+
+        // 2. Direct CDN 1080p Full HD
+        if (variant1080) {
+            streams.push({
+                name: '🔞 HentaiZ',
+                title: `[Full HD 1080p] ${cleanTitle}\n⚡ CDN Tốc độ cao • 1080p Siêu nét`,
+                url: `${cdnDomain}/${videoId}/${variant1080}/playlist.m3u8`,
+                behaviorHints: {
+                    notWebReady: true,
+                    proxyHeaders: proxyHeaders
+                }
+            });
+        }
+
+        // 3. Direct CDN 720p HD
+        if (variant720) {
+            streams.push({
+                name: '🔞 HentaiZ',
+                title: `[HD 720p] ${cleanTitle}\n⚡ CDN Tốc độ cao • 720p Mượt mà`,
+                url: `${cdnDomain}/${videoId}/${variant720}/playlist.m3u8`,
+                behaviorHints: {
+                    notWebReady: true,
+                    proxyHeaders: proxyHeaders
+                }
+            });
+        }
+
+        // 4. Server Reconstructed Stream (Backup route)
+        streams.push({
+            name: '🔞 HentaiZ [Dự phòng]',
+            title: `[Server Proxy] ${cleanTitle}\n⚡ Tuyến dự phòng định tuyến máy chủ`,
+            url: `${hostBase}/hentaiz/stream/${videoId}/master.m3u8`,
+            behaviorHints: {
+                notWebReady: true,
+                proxyHeaders: proxyHeaders
+            }
+        });
 
         if (streams.length > 0) {
             cache.set(cacheKey, streams, 1800);
@@ -453,23 +475,35 @@ async function getM3u8(videoId, quality) {
     }
 
     const { defaultM3u8, segmentDomains = ['https://c1.animez.top'] } = streamData;
+    const cdnDomain = segmentDomains[0] || 'https://c1.animez.top';
 
     if (quality === 'master') {
         let master = defaultM3u8.master;
+        // Rewrite variant paths to absolute CDN URLs so EVERY variant works!
         const variantMatches = [...master.matchAll(/([^\s\n]+\/playlist\.m3u8)/g)].map(m => m[1]);
-        variantMatches.forEach((match, idx) => {
-            master = master.replace(match, `${idx}.m3u8`);
+        variantMatches.forEach(match => {
+            master = master.replace(match, `${cdnDomain}/${videoId}/${match}`);
         });
         return master;
     }
 
-    const rawPlaylist = defaultM3u8.playlists?.[quality];
+    const rawPlaylist = defaultM3u8.playlists?.[quality] ||
+                        defaultM3u8.playlists?.['2'] ||
+                        defaultM3u8.playlists?.['1'];
+
     if (!rawPlaylist) {
         throw new Error(`Quality playlist ${quality} not found`);
     }
 
     const variantMatches = [...defaultM3u8.master.matchAll(/([^\s\n]+\/playlist\.m3u8)/g)].map(m => m[1]);
-    const variantPath = variantMatches[parseInt(quality)] || variantMatches[0] || '';
+    let variantPath = '';
+    if (quality === '2') {
+        variantPath = variantMatches[variantMatches.length - 1] || '';
+    } else if (quality === '1') {
+        variantPath = variantMatches[1] || variantMatches[0] || '';
+    } else {
+        variantPath = variantMatches[parseInt(quality)] || variantMatches[0] || '';
+    }
     const variantCode = variantPath.replace('playlist.m3u8', '').replace(/\/+$/, '');
 
     const lines = rawPlaylist.split('\n');
