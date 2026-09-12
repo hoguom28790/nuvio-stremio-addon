@@ -92,6 +92,30 @@ app.get('/hentaiz/stream/:videoId/:quality.m3u8', async (req, res) => {
     }
 });
 
+// Debug route for hentaiz
+app.get('/debug/hentaiz', async (req, res) => {
+    const axios = require('axios');
+    try {
+        const r = await axios.get('https://hentaiz2.com/browse/__data.json', {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            },
+            timeout: 10000
+        });
+        res.json({
+            status: r.status,
+            nodesCount: r.data?.nodes?.length,
+            sample: JSON.stringify(r.data?.nodes?.[2]?.data).slice(0, 200)
+        });
+    } catch (err) {
+        res.status(500).json({
+            error: err.message,
+            status: err.response?.status,
+            data: typeof err.response?.data === 'string' ? err.response?.data.slice(0, 500) : err.response?.data
+        });
+    }
+});
+
 // Configured Resource routes
 app.get('/:config/:resource(catalog|stream|meta|subtitles)/:type/:id/:extra?.json', (req, res) => {
     const config = parseConfig(req.params.config);
