@@ -386,13 +386,14 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
         const cleanTitle = (streamData?.title || ep?.title || slug).replace(/\.mp4$/i, '');
         const hostBase = host.includes('://') ? host : `https://${host}`;
 
-        // Standard proxyHeaders for Stremio / Nuvio native libmpv engine
+        // Standard proxyHeaders matching haiten.org web player for smooth seeking & caching
         const proxyHeaders = {
             request: {
                 'User-Agent': USER_AGENT,
                 'Referer': 'https://x.haiten.org/',
                 'Origin': 'https://x.haiten.org',
-                'Connection': 'keep-alive'
+                'X-Cache-Status': 'HIT',
+                'Cache-Control': 'max-age=3155695200'
             }
         };
 
@@ -426,21 +427,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
 
         const streams = [];
 
-        // 1. Direct CDN 720p HD (Tối ưu tốc độ cao, tua nhanh tức thì không giật lag)
-        if (variant720) {
-            streams.push({
-                name: '🔞 HentaiZ',
-                title: `[HD 720p - Khuyên Dùng] ${cleanTitle}\n⚡ Tốc độ cao • Tua nhanh tức thì • Tải mượt mà không độ trễ`,
-                url: `${cdnDomain}/${videoId}/${variant720}/playlist.m3u8`,
-                behaviorHints: {
-                    notWebReady: true,
-                    bingeGroup: 'hentaiz-720p',
-                    proxyHeaders: proxyHeaders
-                }
-            });
-        }
-
-        // 2. Direct CDN 1080p Full HD (Hình ảnh siêu nét)
+        // 1. Direct CDN 1080p Full HD (Ưu tiên số 1 - Hình ảnh siêu nét)
         if (variant1080) {
             streams.push({
                 name: '🔞 HentaiZ',
@@ -449,6 +436,20 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
                 behaviorHints: {
                     notWebReady: true,
                     bingeGroup: 'hentaiz-1080p',
+                    proxyHeaders: proxyHeaders
+                }
+            });
+        }
+
+        // 2. Direct CDN 720p HD (Tốc độ cao)
+        if (variant720) {
+            streams.push({
+                name: '🔞 HentaiZ',
+                title: `[HD 720p] ${cleanTitle}\n⚡ Tốc độ cao • Tua mượt mà`,
+                url: `${cdnDomain}/${videoId}/${variant720}/playlist.m3u8`,
+                behaviorHints: {
+                    notWebReady: true,
+                    bingeGroup: 'hentaiz-720p',
                     proxyHeaders: proxyHeaders
                 }
             });
@@ -541,8 +542,7 @@ async function getM3u8(videoId, quality) {
     const rewrittenLines = lines.map(line => {
         const trimmed = line.trim();
         if (trimmed.endsWith('.png')) {
-            const domain = segmentDomains[segIdx % segmentDomains.length];
-            segIdx++;
+            const domain = segmentDomains[0] || cdnDomain;
             const segBase = trimmed.replace('.png', '');
             return `${domain}/${videoId}/${variantCode}/${segBase}.png`;
         }
