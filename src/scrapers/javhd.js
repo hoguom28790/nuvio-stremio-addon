@@ -36,21 +36,26 @@ function parseMovieCards(html) {
     const metas = [];
     const seenSlugs = new Set();
 
-    // Match each movie card <li>...</li>
-    const cardRegex = /<li[^>]*>\s*<a\s+class="movie-item[^"]*"[^>]*href="(?:\/)?([^"\/]+)\.html"[^>]*title="([^"]*)"[\s\S]*?<\/li>/gi;
+    // Match each movie card <li><a class="movie-item...</li>
+    const cardRegex = /<li[^>]*>\s*<a\s+class="movie-item[\s\S]*?<\/li>/gi;
     let match;
 
     while ((match = cardRegex.exec(html)) !== null) {
         const fullCard = match[0];
-        const slug = match[1].trim();
-        let title = match[2].trim();
+        
+        const slugMatch = fullCard.match(/href="(?:\/)?([^"\/]+)\.html"/i);
+        if (!slugMatch || !slugMatch[1]) continue;
+        const slug = slugMatch[1].trim();
 
-        if (!slug || seenSlugs.has(slug)) continue;
+        if (seenSlugs.has(slug)) continue;
         seenSlugs.add(slug);
+
+        const titleMatch = fullCard.match(/title="([^"]*)"/i);
+        let title = (titleMatch && titleMatch[1]) ? titleMatch[1].trim() : slug;
 
         // Extract thumbnail image
         let poster = '';
-        const imgMatch = fullCard.match(/<img[^>]+(?:data-src|src)="([^"]+)"/i);
+        const imgMatch = fullCard.match(/(?:data-src|src)="([^"]+)"/i);
         if (imgMatch && imgMatch[1]) {
             poster = imgMatch[1].trim();
             if (poster.startsWith('//')) {
@@ -94,7 +99,7 @@ function parseMovieCards(html) {
  */
 async function getCatalog(catalogId, type, extra = {}) {
     try {
-        const page = extra.skip ? Math.floor(extra.skip / 24) + 1 : 1;
+        const page = extra.skip ? Math.floor(extra.skip / 18) + 1 : 1;
         let urlPath = '';
 
         if (extra.search) {
