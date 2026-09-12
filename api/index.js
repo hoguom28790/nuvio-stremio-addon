@@ -94,16 +94,15 @@ app.get('/hentaiz/stream/:videoId/:quality.m3u8', async (req, res) => {
 
 // Debug route
 app.get('/debug/hentaiz', async (req, res) => {
-    const axios = require('axios');
-    const fullUa = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36';
     try {
-        const r = await axios.get('https://hentaiz2.com/api/v1/episode/stats?ids=ZfdRyFpuNz_', {
-            headers: { 'User-Agent': fullUa },
-            timeout: 5000
+        const cat = await hentaiz.getCatalog('movie', {});
+        res.json({
+            status: 'ok',
+            catalogCount: cat.length,
+            sample: cat[0]
         });
-        res.json({ status: r.status, data: r.data });
     } catch (e) {
-        res.json({ status: e.response?.status || e.message });
+        res.status(500).json({ error: e.message });
     }
 });
 

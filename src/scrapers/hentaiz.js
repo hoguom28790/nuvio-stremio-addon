@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const axios = require('axios');
 const crypto = require('crypto');
 const cache = require('../utils/cache');
@@ -13,6 +15,39 @@ const client = axios.create({
         'User-Agent': USER_AGENT
     }
 });
+
+// Load static catalog with cache in memory
+let cachedCatalog = null;
+let slugMap = null;
+
+function getStaticCatalog() {
+    if (cachedCatalog) return cachedCatalog;
+    try {
+        const filePath = path.join(__dirname, '..', 'data', 'hentaiz_catalog.json');
+        if (fs.existsSync(filePath)) {
+            const raw = fs.readFileSync(filePath, 'utf8');
+            cachedCatalog = JSON.parse(raw);
+            slugMap = new Map();
+            for (const ep of cachedCatalog) {
+                if (ep.slug) slugMap.set(ep.slug, ep);
+                if (ep.id) {
+                    slugMap.set(ep.id, ep);
+                    const cleanId = ep.id.replace('hentaiz:', '');
+                    slugMap.set(cleanId, ep);
+                }
+            }
+            return cachedCatalog;
+        }
+    } catch (e) {
+        console.error('[HentaiZ] Failed to load static catalog:', e.message);
+    }
+    return [];
+}
+
+function getSlugMap() {
+    if (!slugMap) getStaticCatalog();
+    return slugMap || new Map();
+}
 
 // SvelteKit devalue unflatten helper
 function unflatten(parsed) {
@@ -76,15 +111,17 @@ function stripHtml(html) {
  * 1. GET CATALOG
  */
 async function getCatalog(type, extra = {}) {
-    const page = extra.skip ? Math.floor(extra.skip / 24) + 1 : 1;
-    const cacheKey = `hentaiz:catalog:${type}:${JSON.stringify(extra)}`;
-    const cached = cache.get(cacheKey);
-    if (cached) return cached;
+    const catalog = getStaticCatalog();
+    const mediaType = type === 'movie' ? 'movie' : 'series';
 
-    let url = `${BASE_URL}/browse/__data.json?page=${page}`;
+    let results = catalog;
 
     if (extra.search) {
-        url += `&q=${encodeURIComponent(extra.search)}`;
+        const q = extra.search.toLowerCase().trim();
+        results = results.filter(ep => {
+            return (ep.title && ep.title.toLowerCase().includes(q)) ||
+                   (ep.slug && ep.slug.toLowerCase().includes(q));
+        });
     } else if (extra.genre) {
         const rawGenre = typeof extra.genre === 'string' ? extra.genre.trim() : '';
         const cleanGenre = rawGenre.replace(/^Thể loại:\s*/i, '').replace(/^Danh mục:\s*/i, '').trim();
@@ -93,45 +130,33 @@ async function getCatalog(type, extra = {}) {
         // If it is a default label or placeholder, do not apply genre filtering
         if (lower && !['genre', 'tất cả', 'all', 'default', 'hentaiz-movie', 'hentaiz-anime', 'hentaiz-series'].includes(lower)) {
             if (cleanGenre.includes('Không Che') || lower.includes('uncensored')) {
-                url += `&contentRating=UNCENSORED`;
+                results = results.filter(ep => ep.contentRating === 'UNCENSORED');
             } else {
-                const gSlug = slugifyGenre(cleanGenre);
-                if (gSlug) {
-                    url += `&genres=${encodeURIComponent(gSlug)}`;
-                }
+                const targetSlug = slugifyGenre(cleanGenre);
+                results = results.filter(ep => {
+                    if (!ep.genres || !Array.isArray(ep.genres)) return false;
+                    return ep.genres.some(g => {
+                        const gLower = g.toLowerCase();
+                        return gLower === lower || slugifyGenre(g) === targetSlug;
+                    });
+                });
             }
         }
     }
 
-    try {
-        const res = await client.get(url);
-        const nodeData = res.data?.nodes?.[2]?.data;
-        if (!nodeData) return [];
+    const skip = extra.skip ? parseInt(extra.skip, 10) || 0 : 0;
+    const paged = results.slice(skip, skip + 24);
 
-        const unflat = unflatten(nodeData);
-        const episodes = unflat?.episodes || [];
-
-        const metas = episodes.map(ep => {
-            const poster = ep.posterImage?.filePath ? `${STORAGE_URL}${ep.posterImage.filePath}` : undefined;
-            const backdrop = ep.backdropImage?.filePath ? `${STORAGE_URL}${ep.backdropImage.filePath}` : undefined;
-            const studioName = ep.studios?.map(s => s.studio?.name).filter(Boolean).join(', ');
-
-            return {
-                id: `hentaiz:${ep.slug}`,
-                name: ep.title,
-                type: type === 'movie' ? 'movie' : 'series',
-                poster: poster,
-                background: backdrop,
-                description: `Tập ${ep.episodeNumber || 1}${studioName ? ' • ' + studioName : ''}`
-            };
-        });
-
-        cache.set(cacheKey, metas, 1800);
-        return metas;
-    } catch (e) {
-        console.error('[HentaiZ Catalog Error]:', e.message);
-        return [];
-    }
+    return paged.map(ep => ({
+        id: ep.id && ep.id.startsWith('hentaiz:') ? ep.id : `hentaiz:${ep.slug}`,
+        name: ep.title,
+        type: mediaType,
+        poster: ep.poster || (ep.posterImage?.filePath ? `${STORAGE_URL}${ep.posterImage.filePath}` : undefined),
+        background: ep.background || (ep.backdropImage?.filePath ? `${STORAGE_URL}${ep.backdropImage.filePath}` : undefined),
+        description: ep.description || `Tập ${ep.episodeNumber || 1}${ep.studios ? ' • ' + ep.studios : ''}`,
+        releaseInfo: ep.releaseYear ? String(ep.releaseYear) : undefined,
+        genres: ep.genres || []
+    }));
 }
 
 /**
@@ -139,6 +164,35 @@ async function getCatalog(type, extra = {}) {
  */
 async function getMeta(type, id) {
     const slug = id.replace('hentaiz:', '');
+    const smap = getSlugMap();
+    const ep = smap.get(slug);
+
+    if (ep) {
+        return {
+            id: `hentaiz:${slug}`,
+            name: ep.title,
+            type: type === 'movie' ? 'movie' : 'series',
+            poster: ep.poster || (ep.posterImage?.filePath ? `${STORAGE_URL}${ep.posterImage.filePath}` : undefined),
+            background: ep.background || (ep.backdropImage?.filePath ? `${STORAGE_URL}${ep.backdropImage.filePath}` : undefined),
+            description: ep.description || `Tập ${ep.episodeNumber || 1}${ep.studios ? ' • ' + ep.studios : ''}`,
+            releaseInfo: ep.releaseYear ? String(ep.releaseYear) : undefined,
+            genres: ep.genres || [],
+            videos: [
+                {
+                    id: `hentaiz:${slug}`,
+                    title: `Tập ${ep.episodeNumber || 1} - ${ep.title}`,
+                    season: 1,
+                    episode: ep.episodeNumber || 1,
+                    released: ep.publishedAt || undefined
+                }
+            ],
+            behaviorHints: {
+                defaultVideoId: `hentaiz:${slug}`
+            }
+        };
+    }
+
+    // Fallback to network
     const cacheKey = `hentaiz:meta:${slug}`;
     const cached = cache.get(cacheKey);
     if (cached) return cached;
@@ -149,30 +203,30 @@ async function getMeta(type, id) {
         if (!nodeData) return null;
 
         const unflat = unflatten(nodeData);
-        const ep = unflat?.episode;
-        if (!ep) return null;
+        const epNet = unflat?.episode;
+        if (!epNet) return null;
 
-        const poster = ep.posterImage?.filePath ? `${STORAGE_URL}${ep.posterImage.filePath}` : undefined;
-        const backdrop = ep.backdropImage?.filePath ? `${STORAGE_URL}${ep.backdropImage.filePath}` : undefined;
-        const genres = ep.genres?.map(g => g.genre?.name).filter(Boolean) || [];
-        const description = stripHtml(ep.description);
+        const poster = epNet.posterImage?.filePath ? `${STORAGE_URL}${epNet.posterImage.filePath}` : undefined;
+        const backdrop = epNet.backdropImage?.filePath ? `${STORAGE_URL}${epNet.backdropImage.filePath}` : undefined;
+        const genres = epNet.genres?.map(g => g.genre?.name).filter(Boolean) || [];
+        const description = stripHtml(epNet.description);
 
         const meta = {
             id: `hentaiz:${slug}`,
-            name: ep.title,
+            name: epNet.title,
             type: type === 'movie' ? 'movie' : 'series',
             poster: poster,
             background: backdrop,
             description: description,
-            releaseInfo: ep.releaseYear ? String(ep.releaseYear) : undefined,
+            releaseInfo: epNet.releaseYear ? String(epNet.releaseYear) : undefined,
             genres: genres,
             videos: [
                 {
                     id: `hentaiz:${slug}`,
-                    title: `Tập ${ep.episodeNumber || 1} - ${ep.title}`,
+                    title: `Tập ${epNet.episodeNumber || 1} - ${epNet.title}`,
                     season: 1,
-                    episode: ep.episodeNumber || 1,
-                    released: ep.publishedAt
+                    episode: epNet.episodeNumber || 1,
+                    released: epNet.publishedAt
                 }
             ],
             behaviorHints: {
@@ -180,8 +234,8 @@ async function getMeta(type, id) {
             }
         };
 
-        if (ep.id) {
-            cache.set(`hentaiz:epId:${slug}`, ep.id, 86400);
+        if (epNet.id) {
+            cache.set(`hentaiz:epId:${slug}`, epNet.id, 86400);
         }
 
         cache.set(cacheKey, meta, 3600);
@@ -229,34 +283,39 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
     if (cached) return cached;
 
     try {
-        let epId = cache.get(`hentaiz:epId:${slug}`);
-        if (!epId) {
-            const resWatch = await client.get(`${BASE_URL}/watch/${slug}/__data.json`);
-            const raw = JSON.stringify(resWatch.data);
-            const match = raw.match(/"id":"([a-zA-Z0-9_-]+)","title"/);
-            if (match) {
-                epId = match[1];
-            } else {
-                const unflat = unflatten(resWatch.data?.nodes?.[2]?.data);
-                epId = unflat?.episode?.id;
+        const smap = getSlugMap();
+        const ep = smap.get(slug);
+
+        let videoId = ep?.videoId;
+
+        if (!videoId) {
+            let epId = ep?.epId || cache.get(`hentaiz:epId:${slug}`);
+            if (!epId) {
+                const resWatch = await client.get(`${BASE_URL}/watch/${slug}/__data.json`);
+                const raw = JSON.stringify(resWatch.data);
+                const match = raw.match(/"id":"([a-zA-Z0-9_-]+)","title"/);
+                if (match) {
+                    epId = match[1];
+                } else {
+                    const unflat = unflatten(resWatch.data?.nodes?.[2]?.data);
+                    epId = unflat?.episode?.id;
+                }
+                if (epId) cache.set(`hentaiz:epId:${slug}`, epId, 86400);
             }
-            if (epId) cache.set(`hentaiz:epId:${slug}`, epId, 86400);
+
+            if (epId) {
+                const payload = toBase64Url(`[{"episodeId":1},"${epId}"]`);
+                const rEmbed = await client.get(`${BASE_URL}/_app/remote/1edhnia/getEpisodeEmbedUrl?payload=${payload}`, {
+                    headers: {
+                        'Referer': `${BASE_URL}/watch/${slug}`
+                    }
+                });
+
+                const videoIdMatch = (rEmbed.data?.data || '').match(/[?&]v=([a-f0-9-]+)/i);
+                videoId = videoIdMatch ? videoIdMatch[1] : null;
+            }
         }
 
-        if (!epId) {
-            console.error(`[HentaiZ] Could not resolve epId for ${slug}`);
-            return [];
-        }
-
-        const payload = toBase64Url(`[{"episodeId":1},"${epId}"]`);
-        const rEmbed = await client.get(`${BASE_URL}/_app/remote/1edhnia/getEpisodeEmbedUrl?payload=${payload}`, {
-            headers: {
-                'Referer': `${BASE_URL}/watch/${slug}`
-            }
-        });
-
-        const videoIdMatch = (rEmbed.data?.data || '').match(/[?&]v=([a-f0-9-]+)/i);
-        const videoId = videoIdMatch ? videoIdMatch[1] : null;
         if (!videoId) {
             console.error(`[HentaiZ] Could not extract videoId for ${slug}`);
             return [];
