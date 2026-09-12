@@ -25,9 +25,34 @@ function parseConfig(configParam) {
 
 // Serve logo.png
 const path = require('path');
+const axios = require('axios');
 app.get('/logo.png', (req, res) => {
     res.setHeader('Cache-Control', 'max-age=86400, public');
     res.sendFile(path.join(__dirname, '..', 'logo.png'));
+});
+
+// Debug endpoint to diagnose NguonC outbound connectivity from Vercel
+app.get('/debug-nguonc', async (req, res) => {
+    const url = req.query.url || 'https://phim.nguonc.com/api/films/danh-sach/phim-le?page=1';
+    try {
+        const t0 = Date.now();
+        const r = await axios.get(url, {
+            timeout: 10000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept': 'application/json, text/plain, */*'
+            }
+        });
+        res.json({ ok: true, duration: Date.now() - t0, status: r.status, itemsCount: r.data?.items?.length });
+    } catch(err) {
+        res.json({
+            ok: false,
+            message: err.message,
+            code: err.code,
+            responseStatus: err.response?.status,
+            responseData: err.response?.data
+        });
+    }
 });
 
 // Serve the Config / Landing page on root, /configure, and /:config/configure
