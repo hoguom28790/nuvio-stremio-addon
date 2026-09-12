@@ -94,35 +94,16 @@ app.get('/hentaiz/stream/:videoId/:quality.m3u8', async (req, res) => {
 
 // Debug route
 app.get('/debug/hentaiz', async (req, res) => {
-    const axios = require('axios');
-    const result = {};
-    try {
-        const rMimix = await axios.get('https://x.mimix.cc/watch/7b9ab61d-239a-4641-bee1-6c018acfd21d', {
-            headers: {
-                'Referer': 'https://x.haiten.org/',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            },
-            timeout: 8000
-        });
-        result.mimixStatus = rMimix.status;
-        result.mimixDataLen = rMimix.data?.length;
-    } catch (e) {
-        result.mimixError = {
-            message: e.message,
-            status: e.response?.status,
-            data: typeof e.response?.data === 'string' ? e.response.data.slice(0, 300) : e.response?.data
-        };
-    }
-
     try {
         const streams = await hentaiz.getStream('hentaiz:kanojo-saimin-2', 'series', 'hophimaddon.vercel.app');
-        result.streamsCount = streams.length;
-        result.streams = streams;
+        res.json({
+            status: 'ok',
+            streamsCount: streams.length,
+            sample: streams[0]
+        });
     } catch (e) {
-        result.streamError = e.message;
+        res.status(500).json({ error: e.message });
     }
-
-    res.json(result);
 });
 
 // Configured Resource routes

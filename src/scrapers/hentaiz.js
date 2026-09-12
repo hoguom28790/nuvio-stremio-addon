@@ -49,6 +49,23 @@ function getSlugMap() {
     return slugMap || new Map();
 }
 
+// Load cached streams with lazy-loading
+let cachedStreams = null;
+function getCachedStreams() {
+    if (cachedStreams) return cachedStreams;
+    try {
+        const filePath = path.join(__dirname, '..', 'data', 'hentaiz_streams.json');
+        if (fs.existsSync(filePath)) {
+            const raw = fs.readFileSync(filePath, 'utf8');
+            cachedStreams = JSON.parse(raw);
+            return cachedStreams;
+        }
+    } catch (e) {
+        console.error('[HentaiZ] Failed to load cached streams:', e.message);
+    }
+    return {};
+}
+
 // SvelteKit devalue unflatten helper
 function unflatten(parsed) {
     if (!Array.isArray(parsed) || parsed.length === 0) return parsed;
@@ -163,12 +180,13 @@ async function getCatalog(type, extra = {}) {
  * 2. GET META
  */
 async function getMeta(type, id) {
-    const slug = id.replace('hentaiz:', '');
+    const cleanId = id.replace(/^hentaiz:/, '');
+    const slug = cleanId.split(':')[0];
     const smap = getSlugMap();
     const ep = smap.get(slug);
 
     if (ep) {
-        return {
+        const meta = {
             id: `hentaiz:${slug}`,
             name: ep.title,
             type: type === 'movie' ? 'movie' : 'series',
@@ -176,20 +194,29 @@ async function getMeta(type, id) {
             background: ep.background || (ep.backdropImage?.filePath ? `${STORAGE_URL}${ep.backdropImage.filePath}` : undefined),
             description: ep.description || `Tập ${ep.episodeNumber || 1}${ep.studios ? ' • ' + ep.studios : ''}`,
             releaseInfo: ep.releaseYear ? String(ep.releaseYear) : undefined,
-            genres: ep.genres || [],
-            videos: [
+            genres: ep.genres || []
+        };
+
+        if (type === 'series') {
+            meta.videos = [
                 {
-                    id: `hentaiz:${slug}`,
+                    id: `hentaiz:${slug}:1:${ep.episodeNumber || 1}`,
                     title: `Tập ${ep.episodeNumber || 1} - ${ep.title}`,
                     season: 1,
                     episode: ep.episodeNumber || 1,
                     released: ep.publishedAt || undefined
                 }
-            ],
-            behaviorHints: {
+            ];
+            meta.behaviorHints = {
+                defaultVideoId: `hentaiz:${slug}:1:${ep.episodeNumber || 1}`
+            };
+        } else {
+            meta.behaviorHints = {
                 defaultVideoId: `hentaiz:${slug}`
-            }
-        };
+            };
+        }
+
+        return meta;
     }
 
     // Fallback to network
@@ -219,20 +246,27 @@ async function getMeta(type, id) {
             background: backdrop,
             description: description,
             releaseInfo: epNet.releaseYear ? String(epNet.releaseYear) : undefined,
-            genres: genres,
-            videos: [
+            genres: genres
+        };
+
+        if (type === 'series') {
+            meta.videos = [
                 {
-                    id: `hentaiz:${slug}`,
+                    id: `hentaiz:${slug}:1:${epNet.episodeNumber || 1}`,
                     title: `Tập ${epNet.episodeNumber || 1} - ${epNet.title}`,
                     season: 1,
                     episode: epNet.episodeNumber || 1,
                     released: epNet.publishedAt
                 }
-            ],
-            behaviorHints: {
+            ];
+            meta.behaviorHints = {
+                defaultVideoId: `hentaiz:${slug}:1:${epNet.episodeNumber || 1}`
+            };
+        } else {
+            meta.behaviorHints = {
                 defaultVideoId: `hentaiz:${slug}`
-            }
-        };
+            };
+        }
 
         if (epNet.id) {
             cache.set(`hentaiz:epId:${slug}`, epNet.id, 86400);
@@ -277,7 +311,8 @@ async function fetchAndDecryptStreamData(videoId) {
  * 3. GET STREAM
  */
 async function getStream(id, type, host = 'hophimaddon.vercel.app') {
-    const slug = id.replace('hentaiz:', '');
+    const cleanId = id.replace(/^hentaiz:/, '');
+    const slug = cleanId.split(':')[0];
     const cacheKey = `hentaiz:streams:${slug}:${host}`;
     const cached = cache.get(cacheKey);
     if (cached) return cached;
@@ -321,18 +356,16 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
             return [];
         }
 
-        const streamData = await fetchAndDecryptStreamData(videoId);
-        if (!streamData || !streamData.defaultM3u8) {
-            return [];
-        }
+        const streamMap = getCachedStreams();
+        const streamData = streamMap[videoId];
 
-        const cleanTitle = (streamData.title || slug).replace(/\.mp4$/i, '');
+        const cleanTitle = (streamData?.title || ep?.title || slug).replace(/\.mp4$/i, '');
         const hostBase = host.includes('://') ? host : `https://${host}`;
 
         const streams = [];
 
         // 1080p
-        if (streamData.defaultM3u8.playlists?.['2']) {
+        if (streamData?.defaultM3u8?.playlists?.['2']) {
             streams.push({
                 name: '🔞 HentaiZ',
                 title: `[Full HD 1080p] ${cleanTitle}\n⚡ Tốc độ cao CDN`,
@@ -344,7 +377,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
         }
 
         // 720p
-        if (streamData.defaultM3u8.playlists?.['1']) {
+        if (streamData?.defaultM3u8?.playlists?.['1']) {
             streams.push({
                 name: '🔞 HentaiZ',
                 title: `[HD 720p] ${cleanTitle}\n⚡ Tốc độ cao CDN`,
@@ -355,20 +388,8 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
             });
         }
 
-        // 480p
-        if (streamData.defaultM3u8.playlists?.['0']) {
-            streams.push({
-                name: '🔞 HentaiZ',
-                title: `[SD 480p] ${cleanTitle}\n⚡ Tốc độ cao CDN`,
-                url: `${hostBase}/hentaiz/stream/${videoId}/0.m3u8`,
-                behaviorHints: {
-                    notWebReady: false
-                }
-            });
-        }
-
         // Master Auto
-        if (streamData.defaultM3u8.master) {
+        if (streamData?.defaultM3u8?.master) {
             streams.push({
                 name: '🔞 HentaiZ',
                 title: `[Tự Động Auto] ${cleanTitle}\n⚡ Đa độ phân giải HLS`,
@@ -379,7 +400,36 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
             });
         }
 
-        cache.set(cacheKey, streams, 1800);
+        // Fallback to live fetch if not found in stream cache
+        if (streams.length === 0) {
+            try {
+                const liveData = await fetchAndDecryptStreamData(videoId);
+                if (liveData && liveData.defaultM3u8) {
+                    if (liveData.defaultM3u8.playlists?.['2']) {
+                        streams.push({
+                            name: '🔞 HentaiZ',
+                            title: `[Full HD 1080p] ${cleanTitle}\n⚡ Tốc độ cao CDN`,
+                            url: `${hostBase}/hentaiz/stream/${videoId}/2.m3u8`,
+                            behaviorHints: { notWebReady: false }
+                        });
+                    }
+                    if (liveData.defaultM3u8.playlists?.['1']) {
+                        streams.push({
+                            name: '🔞 HentaiZ',
+                            title: `[HD 720p] ${cleanTitle}\n⚡ Tốc độ cao CDN`,
+                            url: `${hostBase}/hentaiz/stream/${videoId}/1.m3u8`,
+                            behaviorHints: { notWebReady: false }
+                        });
+                    }
+                }
+            } catch (err) {
+                console.error(`[HentaiZ Live Fallback Error] ${slug}:`, err.message);
+            }
+        }
+
+        if (streams.length > 0) {
+            cache.set(cacheKey, streams, 1800);
+        }
         return streams;
     } catch (e) {
         console.error(`[HentaiZ Stream Error] ${slug}:`, e.message);
@@ -391,12 +441,18 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
  * 4. GET RECONSTRUCTED M3U8 CONTENT
  */
 async function getM3u8(videoId, quality) {
-    const streamData = await fetchAndDecryptStreamData(videoId);
+    const streamMap = getCachedStreams();
+    let streamData = streamMap[videoId];
+
+    if (!streamData || !streamData.defaultM3u8) {
+        streamData = await fetchAndDecryptStreamData(videoId);
+    }
+
     if (!streamData || !streamData.defaultM3u8) {
         throw new Error('Stream data not found or invalid');
     }
 
-    const { defaultM3u8, segmentDomains = ['https://c2.animez.top'] } = streamData;
+    const { defaultM3u8, segmentDomains = ['https://c1.animez.top'] } = streamData;
 
     if (quality === 'master') {
         let master = defaultM3u8.master;
