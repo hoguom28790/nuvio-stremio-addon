@@ -119,18 +119,13 @@ app.get('/debug/hentaiz', async (req, res) => {
     }
 
     try {
-        const sData = await hentaiz.getM3u8('7b9ab61d-239a-4641-bee1-6c018acfd21d', 'master');
-        result.masterLen = sData?.length;
+        const rawStream = await hentaiz.fetchAndDecryptStreamData('7b9ab61d-239a-4641-bee1-6c018acfd21d');
+        result.streamDataKeys = Object.keys(rawStream || {});
+        result.domain = rawStream?.domain;
+        result.segmentDomains = rawStream?.segmentDomains;
+        result.streamType = rawStream?.streamType;
     } catch (e) {
-        result.masterError = e.message;
-    }
-
-    try {
-        const streams = await hentaiz.getStream('hentaiz:kanojo-saimin-2', 'series', 'hophimaddon.vercel.app');
-        result.streamsCount = streams.length;
-        result.sample = streams[0];
-    } catch (e) {
-        result.streamError = e.message;
+        result.mimixError = e.message;
     }
 
     res.json(result);

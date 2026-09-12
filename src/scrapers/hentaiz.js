@@ -494,5 +494,6 @@ module.exports = {
     getMeta,
     getStream,
     getM3u8,
-    slugifyGenre
+    slugifyGenre,
+    fetchAndDecryptStreamData
 };
