@@ -6,6 +6,7 @@ const vsmov = require('./scrapers/vsmov');
 const animation = require('./scrapers/animation');
 const clbpx = require('./scrapers/clbpx');
 const hentaiz = require('./scrapers/hentaiz');
+const javhd = require('./scrapers/javhd');
 const imdb = require('./scrapers/imdb');
 const cache = require('./utils/cache');
 
@@ -41,8 +42,8 @@ const builder = new CustomAddonBuilder(manifest);
 
 // Helper to check if source is enabled in config
 function isSourceEnabled(sourcePrefix, config) {
-    if (sourcePrefix === 'hentaiz') {
-        return !!(config && Array.isArray(config.sources) && config.sources.includes('hentaiz'));
+    if (sourcePrefix === 'hentaiz' || sourcePrefix === 'javhd') {
+        return !!(config && Array.isArray(config.sources) && config.sources.includes(sourcePrefix));
     }
     if (!config || !config.sources || !Array.isArray(config.sources)) {
         return true; // default enabled
@@ -74,6 +75,10 @@ builder.defineCatalogHandler(async ({ type, id, extra = {}, config = {} }) => {
 
         if ((id === 'hentaiz-anime' || id === 'hentaiz-movie') && isSourceEnabled('hentaiz', config)) {
             return { metas: await hentaiz.getCatalog(type, extra) };
+        }
+
+        if (id.startsWith('javhd-') && isSourceEnabled('javhd', config)) {
+            return { metas: await javhd.getCatalog(id, type, extra) };
         }
     } catch (e) {
         console.error(`[Catalog Error] ID: ${id}:`, e.message);
@@ -117,6 +122,10 @@ builder.defineMetaHandler(async ({ type, id, config = {} }) => {
             const meta = await hentaiz.getMeta(type, id);
             if (meta) return { meta };
         }
+        if (id.startsWith('javhd:')) {
+            const meta = await javhd.getMeta(type, id);
+            if (meta) return { meta };
+        }
     } catch (e) {
         console.error(`[Meta Error] ID: ${id}:`, e.message);
     }
@@ -154,6 +163,8 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
             streams = await clbpx.getStream(id, type);
         } else if (id.startsWith('hentaiz:')) {
             streams = await hentaiz.getStream(id, type, config.host);
+        } else if (id.startsWith('javhd:')) {
+            streams = await javhd.getStream(id, type, config.host);
         } else if (id.startsWith('tt')) {
             if (config.prefImdb !== false) {
                 streams = await imdb.getStream(id, type, config);

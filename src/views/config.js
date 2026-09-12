@@ -735,9 +735,9 @@ function renderConfigPage(host, initialConfig = {}) {
       </div>
     </div>
     
-    <div id="tgk-locked" class="tgk-lock-box" style="${isSourceActive('hentaiz') ? 'display: none;' : ''}">
+    <div id="tgk-locked" class="tgk-lock-box" style="${(isSourceActive('hentaiz') || isSourceActive('javhd')) ? 'display: none;' : ''}">
       <div style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.5;">
-        🔒 Mục này chứa nguồn phim từ <b>HentaiZ</b>. Mặc định bị tắt. Vui lòng nhập đúng mật mã để mở khóa và kích hoạt nguồn này.
+        🔒 Mục này chứa nguồn phim từ <b>HentaiZ & JavHD</b>. Mặc định bị tắt. Vui lòng nhập đúng mật mã để mở khóa và kích hoạt các nguồn này.
       </div>
       <div class="tgk-input-group">
         <input type="password" id="tgk-pass" class="tgk-input" placeholder="Nhập mật khẩu để mở khóa..." onkeydown="if(event.key==='Enter') unlockTheGioiKhac()">
@@ -745,14 +745,20 @@ function renderConfigPage(host, initialConfig = {}) {
       </div>
     </div>
 
-    <div id="tgk-unlocked" style="${isSourceActive('hentaiz') ? '' : 'display: none;'} margin-top: 14px;">
+    <div id="tgk-unlocked" style="${(isSourceActive('hentaiz') || isSourceActive('javhd')) ? '' : 'display: none;'} margin-top: 14px;">
       <div style="font-size: 0.85rem; color: var(--accent-green); margin-bottom: 12px; font-weight: 500;">
         ✓ Đã mở khóa thành công danh mục Thế Giới Khác.
       </div>
-      <label class="${sourceClass('hentaiz')}">
-        <input type="checkbox" name="source" value="hentaiz" ${sourceChecked('hentaiz')} onchange="updateUI()">
-        <span>⚡ HentaiZ (Vietsub)</span>
-      </label>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+        <label class="${sourceClass('hentaiz')}">
+          <input type="checkbox" name="source" value="hentaiz" ${sourceChecked('hentaiz')} onchange="updateUI()">
+          <span>⚡ HentaiZ (Anime)</span>
+        </label>
+        <label class="${sourceClass('javhd')}">
+          <input type="checkbox" name="source" value="javhd" ${sourceChecked('javhd')} onchange="updateUI()">
+          <span>⚡ JavHD (Phim Nhật Bản)</span>
+        </label>
+      </div>
     </div>
   </div>
 
@@ -857,8 +863,8 @@ function renderConfigPage(host, initialConfig = {}) {
       if (lockedDiv) lockedDiv.style.display = 'none';
       if (unlockedDiv) {
         unlockedDiv.style.display = 'block';
-        const cb = unlockedDiv.querySelector('input[name="source"]');
-        if (cb) cb.checked = true;
+        const cbs = unlockedDiv.querySelectorAll('input[name="source"]');
+        cbs.forEach(cb => cb.checked = true);
       }
       showToast('Đã mở khóa mục Thế Giới Khác!');
       updateUI();

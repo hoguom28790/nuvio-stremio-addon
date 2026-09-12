@@ -54,6 +54,7 @@ app.get(['/', '/configure', '/:config/configure'], (req, res) => {
 
 // Resource handler helper
 const hentaiz = require('../src/scrapers/hentaiz');
+const javhd = require('../src/scrapers/javhd');
 
 async function handleResource(req, res, config) {
     const { resource, type, id } = req.params;
@@ -92,6 +93,44 @@ app.get('/hentaiz/stream/:videoId/:quality.m3u8', async (req, res) => {
         console.error('[HentaiZ M3U8 Error]:', err.message);
         res.status(500).send('Error generating playlist');
     }
+});
+
+// JavHD HLS M3U8 Stream Delivery Route (Fallback proxy)
+app.get('/javhd/stream/:slug/:quality.m3u8', async (req, res) => {
+    const { slug, quality } = req.params;
+    try {
+        const playlist = await javhd.getM3u8(slug, quality);
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', '*');
+        res.setHeader('Cache-Control', 'max-age=1800, public');
+        res.send(playlist);
+    } catch (err) {
+        console.error('[JavHD M3U8 Error]:', err.message);
+        res.status(500).send('Error generating playlist');
+    }
+});
+
+// Debug JavHD
+app.get('/debug/javhd', async (req, res) => {
+    let catalogCount = 0;
+    let sampleStreams = null;
+    try {
+        const cat = await javhd.getCatalog('javhd-latest', 'movie', {});
+        catalogCount = cat ? cat.length : 0;
+    } catch (e) {
+        catalogCount = e.message;
+    }
+    try {
+        sampleStreams = await javhd.getStream('javhd:giup-em-hang-xom-sua-ong-nuoc-marino-azusa-4024', 'movie', req.headers.host);
+    } catch (e) {
+        sampleStreams = e.message;
+    }
+    res.json({
+        catalogCount,
+        sampleStreams
+    });
 });
 
 // Debug route

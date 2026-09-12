@@ -1,0 +1,385 @@
+const axios = require('axios');
+const cache = require('../utils/cache');
+
+const BASE_URL = 'https://javhdz.ac';
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+const client = axios.create({
+    timeout: 12000,
+    headers: {
+        'User-Agent': USER_AGENT
+    }
+});
+
+// Genre to URL mapping on javhdz.ac
+const GENRE_MAP = {
+    'Vietsub': '/tag/vietsub/',
+    'Có Che (Censored)': '/category/censored-2/',
+    'Không Che (Uncensored)': '/category/uncensored-3/',
+    'Người Đẹp (Beauty)': '/category/beauty-4/',
+    'Tokyo Hot': '/tag/Tokyo+Hot/',
+    'S-Cute': '/tag/S-Cute/',
+    'Loạn Luân': '/tag/loạn+luân/',
+    'Gái Xinh': '/tag/gái+xinh/',
+    'Vụng Trộm': '/tag/vụng+trộm/',
+    'Gái Dâm': '/tag/gái+dâm/',
+    'Tập Thể': '/tag/tập+thể/',
+    'Học Đường': '/tag/sex+học+đường/',
+    'Văn Phòng': '/tag/sex+văn+phòng/',
+    'Bố Chồng Nàng Dâu': '/tag/bố+chồng+nàng+dâu/',
+    'Hiếp Dâm': '/tag/hiếp+dâm/',
+    'Sex Teen': '/tag/sex+teen/'
+};
+
+// Parse HTML page containing movie cards
+function parseMovieCards(html) {
+    const metas = [];
+    const seenSlugs = new Set();
+
+    // Match each movie card <li>...</li>
+    const cardRegex = /<li[^>]*>\s*<a\s+class="movie-item[^"]*"[^>]*href="(?:\/)?([^"\/]+)\.html"[^>]*title="([^"]*)"[\s\S]*?<\/li>/gi;
+    let match;
+
+    while ((match = cardRegex.exec(html)) !== null) {
+        const fullCard = match[0];
+        const slug = match[1].trim();
+        let title = match[2].trim();
+
+        if (!slug || seenSlugs.has(slug)) continue;
+        seenSlugs.add(slug);
+
+        // Extract thumbnail image
+        let poster = '';
+        const imgMatch = fullCard.match(/<img[^>]+(?:data-src|src)="([^"]+)"/i);
+        if (imgMatch && imgMatch[1]) {
+            poster = imgMatch[1].trim();
+            if (poster.startsWith('//')) {
+                poster = 'https:' + poster;
+            } else if (poster.startsWith('/')) {
+                poster = BASE_URL + poster;
+            } else if (!poster.startsWith('http')) {
+                poster = `${BASE_URL}/${poster}`;
+            }
+        }
+
+        // Extract subtitle badge (e.g. Vietsub)
+        let subBadge = '';
+        const subMatch = fullCard.match(/<span class="meta-sub">([^<]*)<\/span>/i);
+        if (subMatch && subMatch[1]) {
+            subBadge = subMatch[1].trim();
+        }
+
+        // Clean HTML entities from title
+        title = title.replace(/&amp;/g, '&')
+                     .replace(/&quot;/g, '"')
+                     .replace(/&#039;/g, "'")
+                     .replace(/&lt;/g, '<')
+                     .replace(/&gt;/g, '>');
+
+        metas.push({
+            id: `javhd:${slug}`,
+            type: 'movie',
+            name: title,
+            poster: poster,
+            posterShape: 'poster',
+            description: `JavHD • ${subBadge ? '[' + subBadge + '] ' : ''}${title}\n⚡ Định tuyến: TikTok CDN Tốc Độ Cao (1080p Full HD)\nNhật Bản Vietsub 18+`
+        });
+    }
+
+    return metas;
+}
+
+/**
+ * Get catalog movies for JavHD
+ */
+async function getCatalog(catalogId, type, extra = {}) {
+    try {
+        const page = extra.skip ? Math.floor(extra.skip / 24) + 1 : 1;
+        let urlPath = '';
+
+        if (extra.search) {
+            urlPath = `/search/${encodeURIComponent(extra.search)}/page/${page}/`;
+        } else if (extra.genre && GENRE_MAP[extra.genre]) {
+            const mappedPath = GENRE_MAP[extra.genre];
+            urlPath = `${mappedPath.replace(/\/$/, '')}/page/${page}/`;
+        } else {
+            switch (catalogId) {
+                case 'javhd-trending':
+                    urlPath = `/trending/page/${page}/`;
+                    break;
+                case 'javhd-censored':
+                    urlPath = `/category/censored-2/page/${page}/`;
+                    break;
+                case 'javhd-uncensored':
+                    urlPath = `/category/uncensored-3/page/${page}/`;
+                    break;
+                case 'javhd-beauty':
+                    urlPath = `/category/beauty-4/page/${page}/`;
+                    break;
+                case 'javhd-latest':
+                default:
+                    urlPath = `/video/page/${page}/`;
+                    break;
+            }
+        }
+
+        const targetUrl = `${BASE_URL}${urlPath}`;
+        const cacheKey = `javhd:catalog:${catalogId}:${targetUrl}`;
+        const cached = cache.get(cacheKey);
+        if (cached) return cached;
+
+        const res = await client.get(targetUrl);
+        const metas = parseMovieCards(res.data);
+
+        if (metas.length > 0) {
+            cache.set(cacheKey, metas, 600); // 10 minutes cache
+        }
+        return metas;
+    } catch (err) {
+        console.error('[JavHD Catalog Error]:', err.message);
+        return [];
+    }
+}
+
+/**
+ * Get movie metadata from single page
+ */
+async function getMeta(type, id) {
+    try {
+        const slug = id.replace('javhd:', '').split(':')[0];
+        const cacheKey = `javhd:meta:${slug}`;
+        const cached = cache.get(cacheKey);
+        if (cached) return cached;
+
+        const targetUrl = `${BASE_URL}/${slug}.html`;
+        const res = await client.get(targetUrl);
+        const html = res.data;
+
+        // Title
+        let title = '';
+        const titleMatch = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+        if (titleMatch && titleMatch[1]) {
+            title = titleMatch[1].replace(/<[^>]+>/g, '').trim();
+        }
+        if (!title) {
+            const ogTitle = html.match(/property="og:title"\s+content="([^"]+)"/i);
+            if (ogTitle) title = ogTitle[1].trim();
+        }
+        title = (title || slug).replace(/&amp;/g, '&').replace(/&#039;/g, "'").replace(/&quot;/g, '"');
+
+        // Poster & Background
+        let poster = '';
+        const ogImage = html.match(/property="og:image"\s+content="([^"]+)"/i);
+        if (ogImage && ogImage[1]) {
+            poster = ogImage[1].trim();
+            if (poster.startsWith('//')) {
+                poster = 'https:' + poster;
+            } else if (poster.startsWith('/')) {
+                poster = BASE_URL + poster;
+            } else if (!poster.startsWith('http')) {
+                poster = `${BASE_URL}/${poster}`;
+            }
+        }
+
+        // Description
+        let description = '';
+        const descMatch = html.match(/name="description"\s+content="([^"]+)"/i);
+        if (descMatch && descMatch[1]) {
+            description = descMatch[1].trim();
+        }
+
+        // Tags / Genres
+        const genres = [];
+        const tagRegex = /<a\s+class="tag-link"[^>]*>([^<]+)<\/a>/gi;
+        let tagMatch;
+        const seenTags = new Set();
+        while ((tagMatch = tagRegex.exec(html)) !== null) {
+            const tag = tagMatch[1].trim();
+            if (tag && !seenTags.has(tag.toLowerCase())) {
+                seenTags.add(tag.toLowerCase());
+                genres.push(tag);
+                if (genres.length >= 10) break;
+            }
+        }
+
+        const meta = {
+            id: `javhd:${slug}`,
+            type: 'movie',
+            name: title,
+            poster: poster,
+            background: poster,
+            posterShape: 'poster',
+            description: description || `Xem phim ${title} Vietsub Full HD tại JavHD.`,
+            genres: genres.length > 0 ? genres : ['JavHD', 'Vietsub', '18+'],
+            releaseInfo: '2026',
+            behaviorHints: {
+                defaultVideoId: `javhd:${slug}`
+            }
+        };
+
+        cache.set(cacheKey, meta, 3600); // 1 hour cache
+        return meta;
+    } catch (err) {
+        console.error('[JavHD Meta Error]:', err.message);
+        return null;
+    }
+}
+
+/**
+ * Extract streaming URLs for JavHD
+ */
+async function getStream(id, type, host = 'hophimaddon.vercel.app') {
+    try {
+        const slug = id.replace('javhd:', '').split(':')[0];
+        const cacheKey = `javhd:streams:${slug}`;
+        const cached = cache.get(cacheKey);
+        if (cached) return cached;
+
+        const targetUrl = `${BASE_URL}/${slug}.html`;
+        const res = await client.get(targetUrl);
+        const html = res.data;
+
+        // Extract window.atob base64 string
+        const atobMatch = html.match(/window\.atob\(["']([^"']+)["']\)/i);
+        if (!atobMatch || !atobMatch[1]) {
+            console.warn(`[JavHD] No atob stream found for ${slug}`);
+            return [];
+        }
+
+        const b64 = atobMatch[1].trim();
+        const masterUrl = Buffer.from(b64, 'base64').toString('utf8').trim();
+        if (!masterUrl.startsWith('http')) {
+            console.warn(`[JavHD] Invalid decoded master URL for ${slug}: ${masterUrl}`);
+            return [];
+        }
+
+        // Derive quality variants
+        let url1080 = masterUrl;
+        let url720 = masterUrl;
+
+        if (masterUrl.includes('-playlist.m3u8')) {
+            url1080 = masterUrl.replace('-playlist.m3u8', '-1080.m3u8');
+            url720 = masterUrl.replace('-playlist.m3u8', '-720.m3u8');
+        } else if (masterUrl.includes('.m3u8')) {
+            url1080 = masterUrl.replace(/\.m3u8$/, '-1080.m3u8');
+            url720 = masterUrl.replace(/\.m3u8$/, '-720.m3u8');
+        }
+
+        // Extract title
+        let title = '';
+        const titleMatch = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+        if (titleMatch && titleMatch[1]) {
+            title = titleMatch[1].replace(/<[^>]+>/g, '').trim();
+        }
+        title = (title || slug).replace(/&amp;/g, '&').replace(/&#039;/g, "'").replace(/&quot;/g, '"');
+
+        const hostBase = host.includes('://') ? host : `https://${host}`;
+
+        const proxyHeaders = {
+            request: {
+                'User-Agent': USER_AGENT,
+                'Referer': `${BASE_URL}/`
+            }
+        };
+
+        const streams = [];
+
+        // 1. Direct CDN 1080p Full HD (Ưu tiên số 1 - Sắc nét nhất)
+        streams.push({
+            name: '🔞 JavHD',
+            title: `[Full HD 1080p] ${title}\n⚡ Direct Stream • Hình ảnh siêu nét Full HD`,
+            url: url1080,
+            behaviorHints: {
+                notWebReady: true,
+                bingeGroup: 'javhd-1080p',
+                proxyHeaders: proxyHeaders
+            }
+        });
+
+        // 2. Direct CDN 720p HD (Tốc độ cao)
+        streams.push({
+            name: '🔞 JavHD',
+            title: `[HD 720p] ${title}\n⚡ Tốc độ cao • Tua nhanh mượt mà`,
+            url: url720,
+            behaviorHints: {
+                notWebReady: true,
+                bingeGroup: 'javhd-720p',
+                proxyHeaders: proxyHeaders
+            }
+        });
+
+        // 3. Direct CDN Master Playlist (Tự Động Đa Độ Phân Giải)
+        streams.push({
+            name: '🔞 JavHD',
+            title: `[Tự Động Auto] ${title}\n⚡ Đa độ phân giải thích ứng (1080p/720p/480p)`,
+            url: masterUrl,
+            behaviorHints: {
+                notWebReady: true,
+                bingeGroup: 'javhd-auto',
+                proxyHeaders: proxyHeaders
+            }
+        });
+
+        // 4. Server Reconstructed Stream (Dự phòng cho app không gửi headers)
+        streams.push({
+            name: '🔞 JavHD [Dự Phòng]',
+            title: `[Server Proxy] ${title}\n⚡ Tuyến dự phòng định tuyến máy chủ`,
+            url: `${hostBase}/javhd/stream/${slug}/1080.m3u8`,
+            behaviorHints: {
+                notWebReady: true,
+                bingeGroup: 'javhd-proxy',
+                proxyHeaders: proxyHeaders
+            }
+        });
+
+        if (streams.length > 0) {
+            cache.set(cacheKey, streams, 1800); // 30 minutes cache
+        }
+        return streams;
+    } catch (err) {
+        console.error('[JavHD Stream Error]:', err.message);
+        return [];
+    }
+}
+
+/**
+ * Proxy M3U8 content for fallback playback
+ */
+async function getM3u8(slug, quality = '1080') {
+    const targetUrl = `${BASE_URL}/${slug}.html`;
+    const res = await client.get(targetUrl);
+    const html = res.data;
+
+    const atobMatch = html.match(/window\.atob\(["']([^"']+)["']\)/i);
+    if (!atobMatch || !atobMatch[1]) {
+        throw new Error('Video stream not found');
+    }
+
+    const b64 = atobMatch[1].trim();
+    const masterUrl = Buffer.from(b64, 'base64').toString('utf8').trim();
+
+    let targetM3u8Url = masterUrl;
+    if (quality === '1080') {
+        targetM3u8Url = masterUrl.replace('-playlist.m3u8', '-1080.m3u8');
+    } else if (quality === '720') {
+        targetM3u8Url = masterUrl.replace('-playlist.m3u8', '-720.m3u8');
+    }
+
+    // Fetch the M3U8 content with proper Referer header
+    const m3u8Res = await client.get(targetM3u8Url, {
+        headers: {
+            'Referer': `${BASE_URL}/`,
+            'User-Agent': USER_AGENT
+        }
+    });
+
+    return m3u8Res.data;
+}
+
+module.exports = {
+    getCatalog,
+    getMeta,
+    getStream,
+    getM3u8,
+    GENRE_MAP
+};

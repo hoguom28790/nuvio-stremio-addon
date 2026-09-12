@@ -127,12 +127,89 @@ const hentaizCatalogs = [
     }
 ];
 
+const javhdGenres = [
+    "Tất Cả",
+    "Vietsub",
+    "Có Che (Censored)",
+    "Không Che (Uncensored)",
+    "Người Đẹp (Beauty)",
+    "Tokyo Hot",
+    "S-Cute",
+    "Loạn Luân",
+    "Gái Xinh",
+    "Vụng Trộm",
+    "Gái Dâm",
+    "Tập Thể",
+    "Học Đường",
+    "Văn Phòng",
+    "Bố Chồng Nàng Dâu",
+    "Hiếp Dâm",
+    "Sex Teen"
+];
+
+const javhdCatalogs = [
+    {
+        type: "movie",
+        id: "javhd-latest",
+        name: "Thế Giới Khác • JavHD Mới Nhất",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: javhdGenres }
+        ]
+    },
+    {
+        type: "movie",
+        id: "javhd-trending",
+        name: "Thế Giới Khác • JavHD Xu Hướng",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: javhdGenres }
+        ]
+    },
+    {
+        type: "movie",
+        id: "javhd-censored",
+        name: "Thế Giới Khác • JavHD Có Che",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: javhdGenres }
+        ]
+    },
+    {
+        type: "movie",
+        id: "javhd-uncensored",
+        name: "Thế Giới Khác • JavHD Không Che",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: javhdGenres }
+        ]
+    },
+    {
+        type: "movie",
+        id: "javhd-beauty",
+        name: "Thế Giới Khác • JavHD Người Đẹp",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: javhdGenres }
+        ]
+    }
+];
+
 function getManifest(config = {}) {
     let catalogs = filteredCatalogs;
     const isHentaiz = !!(config && Array.isArray(config.sources) && config.sources.includes('hentaiz'));
+    const isJavhd = !!(config && Array.isArray(config.sources) && config.sources.includes('javhd'));
 
     if (isHentaiz) {
         catalogs = [...catalogs, ...hentaizCatalogs];
+    }
+    if (isJavhd) {
+        catalogs = [...catalogs, ...javhdCatalogs];
     }
 
     if (config && config.sources && Array.isArray(config.sources)) {
@@ -142,9 +219,9 @@ function getManifest(config = {}) {
         });
     }
 
-    const idPrefixes = isHentaiz
-        ? [...baseManifest.idPrefixes, "hentaiz:"]
-        : baseManifest.idPrefixes;
+    let idPrefixes = [...baseManifest.idPrefixes];
+    if (isHentaiz) idPrefixes.push("hentaiz:");
+    if (isJavhd) idPrefixes.push("javhd:");
 
     const resources = baseManifest.resources.map(res => {
         if (typeof res === 'object' && res.idPrefixes) {
