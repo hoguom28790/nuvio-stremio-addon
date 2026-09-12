@@ -30,16 +30,7 @@ app.get('/logo.png', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'logo.png'));
 });
 
-// Serve the Config / Landing page on root, /configure, and /:config/configure
-app.get(['/', '/configure', '/:config/configure', '/:config'], (req, res) => {
-    const host = req.headers.host || 'hophimaddon.vercel.app';
-    const config = parseConfig(req.params.config);
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(renderConfigPage(host, config));
-});
-
-
-// Manifest routes
+// Manifest routes (Must be defined before generic parameterized routes)
 app.get('/manifest.json', (req, res) => {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Cache-Control', 'max-age=300, stale-while-revalidate=600, public');
@@ -51,6 +42,14 @@ app.get('/:config/manifest.json', (req, res) => {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Cache-Control', 'max-age=300, stale-while-revalidate=600, public');
     res.json(getManifest(config));
+});
+
+// Serve the Config / Landing page on root, /configure, and /:config/configure
+app.get(['/', '/configure', '/:config/configure'], (req, res) => {
+    const host = req.headers.host || 'hophimaddon.vercel.app';
+    const config = parseConfig(req.params.config);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(renderConfigPage(host, config));
 });
 
 // Resource handler helper
