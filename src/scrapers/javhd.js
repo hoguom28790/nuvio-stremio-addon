@@ -18,6 +18,9 @@ let slugMap = null;
 
 const REMOTE_CATALOG_URL = 'https://raw.githubusercontent.com/hoguom28790/nuvio-stremio-addon/master/src/data/javhd_catalog.json';
 
+let lastCatalogFetchTime = 0;
+const CATALOG_TTL = 3600 * 1000; // 1 hour TTL
+
 function initSlugMap() {
     if (cachedCatalog && Array.isArray(cachedCatalog)) {
         slugMap = new Map();
@@ -33,7 +36,10 @@ function initSlugMap() {
 }
 
 async function ensureStaticCatalog() {
-    if (cachedCatalog && Array.isArray(cachedCatalog) && cachedCatalog.length > 0) return cachedCatalog;
+    const isExpired = (Date.now() - lastCatalogFetchTime) > CATALOG_TTL;
+    if (cachedCatalog && Array.isArray(cachedCatalog) && cachedCatalog.length > 0 && !isExpired) {
+        return cachedCatalog;
+    }
 
     // Check local filesystem in Node.js
     if (typeof process !== 'undefined' && process.versions && process.versions.node) {
