@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node test/mock.js",
-    "build:worker": "esbuild src/workerEntry.js --bundle --platform=browser --format=esm --target=es2022 --alias:axios=./src/utils/fetchAxios.js --external:*hentaiz_catalog.json --outfile=cloudflare-worker/worker.js --minify"
+    "build:worker": "esbuild src/workerEntry.js --bundle --platform=browser --format=esm --target=es2022 --alias:axios=./src/utils/fetchAxios.js --external:*hentaiz_catalog.json --external:*javhd_catalog.json --outfile=cloudflare-worker/worker.js --minify"
   },
   "dependencies": {
     "axios": "^1.20.0",
