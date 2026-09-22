@@ -217,24 +217,47 @@ export default {
 
         // 9. Debug routes
         if (pathname === '/debug/javhd') {
+            const diag = {};
             try {
-                const targetUrl = 'https://javhdz.ac/video/page/1/';
-                const res = await fetch(targetUrl, {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                        'Referer': 'https://javhdz.ac/'
-                    }
-                });
-                const text = await res.text();
-                const cat = await javhd.getCatalog('javhd-latest', 'movie', {});
-                return new Response(JSON.stringify({
-                    fetchStatus: res.status,
-                    fetchHeaders: Object.fromEntries(res.headers.entries()),
-                    fetchHtmlLength: text.length,
-                    fetchHtmlSnippet: text.slice(0, 500),
-                    catalogCount: cat.length,
-                    firstItem: cat[0]
-                }), {
+                // Step 1: Direct fetch
+                try {
+                    const r1 = await fetch('https://javhdz.bz/video/page/1/', {
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                            'Referer': 'https://javhdz.bz/'
+                        }
+                    });
+                    diag.directStatus = r1.status;
+                    const t1 = await r1.text();
+                    diag.directLen = t1.length;
+                    diag.directTitle = (t1.match(/<title>([^<]*)<\/title>/i) || [])[1];
+                } catch (e1) {
+                    diag.directError = e1.message;
+                }
+
+                // Step 2: Jina fetch
+                try {
+                    const r2 = await fetch('https://r.jina.ai/https://javhdz.bz/video/page/1/', {
+                        headers: { 'X-Return-Format': 'html' }
+                    });
+                    diag.jinaStatus = r2.status;
+                    const t2 = await r2.text();
+                    diag.jinaLen = t2.length;
+                    diag.jinaCards = javhd.parseMovieCards(t2).length;
+                } catch (e2) {
+                    diag.jinaError = e2.message;
+                }
+
+                // Step 3: Full getCatalog
+                try {
+                    const cat = await javhd.getCatalog('javhd-latest', 'movie', {});
+                    diag.catalogCount = cat.length;
+                    diag.firstItem = cat[0];
+                } catch (e3) {
+                    diag.catalogError = e3.message;
+                }
+
+                return new Response(JSON.stringify(diag, null, 2), {
                     headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
                 });
             } catch (e) {
