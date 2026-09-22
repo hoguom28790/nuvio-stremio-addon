@@ -219,7 +219,7 @@ export default {
         if (pathname === '/debug/javhd') {
             const diag = {};
             try {
-                // Step 1: Direct fetch
+                // Step 1: Direct fetch with Chrome UA
                 try {
                     const r1 = await fetch('https://javhdz.bz/video/page/1/', {
                         headers: {
@@ -227,18 +227,85 @@ export default {
                             'Referer': 'https://javhdz.bz/'
                         }
                     });
-                    diag.directStatus = r1.status;
+                    diag.chromeStatus = r1.status;
                     const t1 = await r1.text();
-                    diag.directLen = t1.length;
-                    diag.directTitle = (t1.match(/<title>([^<]*)<\/title>/i) || [])[1];
+                    diag.chromeLen = t1.length;
+                    diag.chromeTitle = (t1.match(/<title>([^<]*)<\/title>/i) || [])[1];
                 } catch (e1) {
-                    diag.directError = e1.message;
+                    diag.chromeError = e1.message;
                 }
 
-                // Step 2: Jina fetch
+                // Step 2: Direct fetch with Googlebot UA
                 try {
+                    const rg = await fetch('https://javhdz.bz/video/page/1/', {
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+                            'Accept': 'text/html,*/*'
+                        }
+                    });
+                    diag.googlebotStatus = rg.status;
+                    const tg = await rg.text();
+                    diag.googlebotLen = tg.length;
+                    diag.googlebotTitle = (tg.match(/<title>([^<]*)<\/title>/i) || [])[1];
+                } catch (eg) {
+                    diag.googlebotError = eg.message;
+                }
+
+                // Step 3: Direct fetch with Bingbot UA
+                try {
+                    const rb = await fetch('https://javhdz.bz/video/page/1/', {
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)',
+                            'Accept': 'text/html,*/*'
+                        }
+                    });
+                    diag.bingbotStatus = rb.status;
+                    const tb = await rb.text();
+                    diag.bingbotLen = tb.length;
+                    diag.bingbotTitle = (tb.match(/<title>([^<]*)<\/title>/i) || [])[1];
+                } catch (eb) {
+                    diag.bingbotError = eb.message;
+                }
+
+                // Step 4: Direct fetch with Facebook UA
+                try {
+                    const rf = await fetch('https://javhdz.bz/video/page/1/', {
+                        headers: {
+                            'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+                            'Accept': 'text/html,*/*'
+                        }
+                    });
+                    diag.fbStatus = rf.status;
+                    const tf = await rf.text();
+                    diag.fbLen = tf.length;
+                    diag.fbTitle = (tf.match(/<title>([^<]*)<\/title>/i) || [])[1];
+                } catch (ef) {
+                    diag.fbError = ef.message;
+                }
+
+                // Step 5: Direct fetch with curl UA
+                try {
+                    const rc = await fetch('https://javhdz.bz/video/page/1/', {
+                        headers: {
+                            'User-Agent': 'curl/7.88.1',
+                            'Accept': '*/*'
+                        }
+                    });
+                    diag.curlStatus = rc.status;
+                    const tc = await rc.text();
+                    diag.curlLen = tc.length;
+                    diag.curlTitle = (tc.match(/<title>([^<]*)<\/title>/i) || [])[1];
+                } catch (ec) {
+                    diag.curlError = ec.message;
+                }
+
+                // Step 6: Jina fetch
+                try {
+                    const jinaKey = url.searchParams.get('jinaKey') || '';
+                    const jinaHeaders = { 'X-Return-Format': 'html' };
+                    if (jinaKey) jinaHeaders['Authorization'] = `Bearer ${jinaKey}`;
                     const r2 = await fetch('https://r.jina.ai/https://javhdz.bz/video/page/1/', {
-                        headers: { 'X-Return-Format': 'html' }
+                        headers: jinaHeaders
                     });
                     diag.jinaStatus = r2.status;
                     const t2 = await r2.text();
@@ -248,7 +315,7 @@ export default {
                     diag.jinaError = e2.message;
                 }
 
-                // Step 3: Full getCatalog
+                // Step 7: Full getCatalog
                 try {
                     const cat = await javhd.getCatalog('javhd-latest', 'movie', {});
                     diag.catalogCount = cat.length;

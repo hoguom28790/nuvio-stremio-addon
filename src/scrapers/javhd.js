@@ -98,23 +98,35 @@ function parseMovieCards(html) {
 
 // Fetch page with direct attempt and Cloudflare WAF bypass fallback via Jina Reader proxy
 async function fetchPage(targetUrl) {
-    try {
-        const res = await client.get(targetUrl, {
-            headers: {
-                'User-Agent': USER_AGENT,
-                'Referer': `${BASE_URL}/`,
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'vi,en-US;q=0.9,en;q=0.8'
+    const userAgents = [
+        'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+        'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+        'curl/7.88.1',
+        'Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)',
+        USER_AGENT
+    ];
+
+    for (const ua of userAgents) {
+        try {
+            const res = await client.get(targetUrl, {
+                headers: {
+                    'User-Agent': ua,
+                    'Referer': `${BASE_URL}/`,
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'vi,en-US;q=0.9,en;q=0.8'
+                },
+                timeout: 8000
+            });
+            const html = typeof res.data === 'string' ? res.data : '';
+            if (html && !html.includes('Attention Required') && !html.includes('Cloudflare</title>') && html.includes('movie-item')) {
+                return html;
             }
-        });
-        const html = typeof res.data === 'string' ? res.data : '';
-        if (html && !html.includes('Attention Required') && !html.includes('Cloudflare</title>')) {
-            return html;
+        } catch (e) {
+            // continue next attempt
         }
-    } catch (e) {
-        console.warn(`[JavHD] Direct fetch failed for ${targetUrl}: ${e.message}, falling back to bypass proxy...`);
     }
 
+    // Fallback to Jina Reader proxy
     try {
         const proxyUrl = `https://r.jina.ai/${targetUrl}`;
         const resProxy = await axios.get(proxyUrl, {
@@ -122,11 +134,14 @@ async function fetchPage(targetUrl) {
             timeout: 15000
         });
         const html = typeof resProxy.data === 'string' ? resProxy.data : '';
-        return html;
+        if (html && html.includes('movie-item')) {
+            return html;
+        }
     } catch (errProxy) {
         console.error(`[JavHD] Bypass proxy failed for ${targetUrl}:`, errProxy.message);
-        return '';
     }
+
+    return '';
 }
 
 /**
