@@ -96,6 +96,39 @@ function parseMovieCards(html) {
     return metas;
 }
 
+// Fetch page with direct attempt and Cloudflare WAF bypass fallback via Jina Reader proxy
+async function fetchPage(targetUrl) {
+    try {
+        const res = await client.get(targetUrl, {
+            headers: {
+                'User-Agent': USER_AGENT,
+                'Referer': `${BASE_URL}/`,
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'vi,en-US;q=0.9,en;q=0.8'
+            }
+        });
+        const html = typeof res.data === 'string' ? res.data : '';
+        if (html && !html.includes('Attention Required') && !html.includes('Cloudflare</title>')) {
+            return html;
+        }
+    } catch (e) {
+        console.warn(`[JavHD] Direct fetch failed for ${targetUrl}: ${e.message}, falling back to bypass proxy...`);
+    }
+
+    try {
+        const proxyUrl = `https://r.jina.ai/${targetUrl}`;
+        const resProxy = await axios.get(proxyUrl, {
+            headers: { 'X-Return-Format': 'html' },
+            timeout: 15000
+        });
+        const html = typeof resProxy.data === 'string' ? resProxy.data : '';
+        return html;
+    } catch (errProxy) {
+        console.error(`[JavHD] Bypass proxy failed for ${targetUrl}:`, errProxy.message);
+        return '';
+    }
+}
+
 /**
  * Get catalog movies for JavHD
  */
@@ -135,8 +168,8 @@ async function getCatalog(catalogId, type, extra = {}) {
         const cached = cache.get(cacheKey);
         if (cached) return cached;
 
-        const res = await client.get(targetUrl);
-        const metas = parseMovieCards(res.data);
+        const html = await fetchPage(targetUrl);
+        const metas = parseMovieCards(html);
 
         if (metas.length > 0) {
             cache.set(cacheKey, metas, 600); // 10 minutes cache
@@ -159,8 +192,7 @@ async function getMeta(type, id) {
         if (cached) return cached;
 
         const targetUrl = `${BASE_URL}/${slug}.html`;
-        const res = await client.get(targetUrl);
-        const html = res.data;
+        const html = await fetchPage(targetUrl);
 
         // Title
         let title = '';
@@ -243,8 +275,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
         if (cached) return cached;
 
         const targetUrl = `${BASE_URL}/${slug}.html`;
-        const res = await client.get(targetUrl);
-        const html = res.data;
+        const html = await fetchPage(targetUrl);
 
         // Extract window.atob base64 string
         const atobMatch = html.match(/window\.atob\(["']([^"']+)["']\)/i);
@@ -254,7 +285,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
         }
 
         const b64 = atobMatch[1].trim();
-        const masterUrl = Buffer.from(b64, 'base64').toString('utf8').trim();
+        const masterUrl = (typeof Buffer !== 'undefined' ? Buffer.from(b64, 'base64').toString('utf8') : atob(b64)).trim();
         if (!masterUrl.startsWith('http')) {
             console.warn(`[JavHD] Invalid decoded master URL for ${slug}: ${masterUrl}`);
             return [];
@@ -359,8 +390,7 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.vercel.app') 
     if (cached) return cached;
 
     const targetUrl = `${BASE_URL}/${slug}.html`;
-    const res = await client.get(targetUrl);
-    const html = res.data;
+    const html = await fetchPage(targetUrl);
 
     const atobMatch = html.match(/window\.atob\(["']([^"']+)["']\)/i);
     if (!atobMatch || !atobMatch[1]) {
@@ -368,7 +398,7 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.vercel.app') 
     }
 
     const b64 = atobMatch[1].trim();
-    const masterUrl = Buffer.from(b64, 'base64').toString('utf8').trim();
+    const masterUrl = (typeof Buffer !== 'undefined' ? Buffer.from(b64, 'base64').toString('utf8') : atob(b64)).trim();
 
     const qStr = String(quality).toLowerCase();
     let targetM3u8Url = masterUrl;
@@ -427,5 +457,6 @@ module.exports = {
     getMeta,
     getStream,
     getM3u8,
-    GENRE_MAP
+    GENRE_MAP,
+    parseMovieCards
 };
