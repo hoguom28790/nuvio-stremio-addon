@@ -46,6 +46,12 @@ async function request(urlOrConfig, maybeConfig = {}) {
         url = config.url || '';
     }
 
+    if (config.baseURL && !url.startsWith('http://') && !url.startsWith('https://')) {
+        const base = config.baseURL.replace(/\/+$/, '');
+        const rel = url.replace(/^\/+/, '');
+        url = rel ? `${base}/${rel}` : `${base}/`;
+    }
+
     const method = (config.method || 'GET').toUpperCase();
     const finalUrl = buildUrl(url, config.params);
     const headers = normalizeHeaders(config.headers);

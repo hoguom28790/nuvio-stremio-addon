@@ -1,5 +1,5 @@
 function renderConfigPage(host, initialConfig = {}) {
-    const defaultSources = ['kkphim', 'vsmov', 'hh3d', 'yan', 'stp', 'clbpx', 'nguonc'];
+    const defaultSources = ['kkphim', 'vsmov', 'hh3d', 'yan', 'stp', 'clbpx', 'nguonc', 'hentaiz', 'javhd', 'vlxx'];
     const activeSources = Array.isArray(initialConfig.sources) ? initialConfig.sources : defaultSources;
     const prefCdnChecked = initialConfig.prefCdn !== false ? 'checked' : '';
     const prefProxyChecked = initialConfig.prefProxy !== false ? 'checked' : '';
@@ -727,28 +727,14 @@ function renderConfigPage(host, initialConfig = {}) {
     </div>
   </div>
 
-  <!-- Thế Giới Khác -->
+  <!-- HentaiZ, JavHD & VLXX -->
   <div class="card" id="card-tgk" style="border-color: rgba(255, 42, 109, 0.3);">
     <div class="cat-header">
       <div class="section-title" style="margin: 0; color: #ff5e8a;">
-        <span>🔒 Thế Giới Khác</span>
+        <span>🔞 HentaiZ, JavHD & VLXX</span>
       </div>
     </div>
-    
-    <div id="tgk-locked" class="tgk-lock-box" style="${(isSourceActive('hentaiz') || isSourceActive('javhd') || isSourceActive('vlxx')) ? 'display: none;' : ''}">
-      <div style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.5;">
-        🔒 Mục này chứa nguồn phim từ <b>HentaiZ, JavHD & VLXX</b>. Mặc định bị tắt. Vui lòng nhập đúng mật mã để mở khóa và kích hoạt các nguồn này.
-      </div>
-      <div class="tgk-input-group">
-        <input type="password" id="tgk-pass" class="tgk-input" placeholder="Nhập mật khẩu để mở khóa..." onkeydown="if(event.key==='Enter') unlockTheGioiKhac()">
-        <button type="button" class="tgk-btn-unlock" onclick="unlockTheGioiKhac()">Mở Khóa</button>
-      </div>
-    </div>
-
-    <div id="tgk-unlocked" style="${(isSourceActive('hentaiz') || isSourceActive('javhd') || isSourceActive('vlxx')) ? '' : 'display: none;'} margin-top: 14px;">
-      <div style="font-size: 0.85rem; color: var(--accent-green); margin-bottom: 12px; font-weight: 500;">
-        ✓ Đã mở khóa thành công danh mục Thế Giới Khác.
-      </div>
+    <div style="margin-top: 14px;">
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
         <label class="${sourceClass('hentaiz')}">
           <input type="checkbox" name="source" value="hentaiz" ${sourceChecked('hentaiz')} onchange="updateUI()">

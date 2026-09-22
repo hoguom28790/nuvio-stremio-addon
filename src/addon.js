@@ -43,17 +43,17 @@ const builder = new CustomAddonBuilder(manifest);
 
 // Helper to check if source is enabled in config
 function isSourceEnabled(sourcePrefix, config) {
-    if (sourcePrefix === 'hentaiz' || sourcePrefix === 'javhd' || sourcePrefix === 'vlxx') {
-        return !!(config && Array.isArray(config.sources) && config.sources.includes(sourcePrefix));
-    }
     if (!config || !config.sources || !Array.isArray(config.sources)) {
-        return true; // default enabled
+        return true; // default enabled for all sources
     }
     return config.sources.includes(sourcePrefix);
 }
 
 // 1. CATALOG HANDLER
 builder.defineCatalogHandler(async ({ type, id, extra = {}, config = {} }) => {
+    if (id) {
+        try { id = decodeURIComponent(id); } catch (e) {}
+    }
     console.log(`[Catalog Request] Type: ${type}, ID: ${id}, Extra:`, extra);
     try {
         if (id === 'kkphim-movie' && isSourceEnabled('kkphim', config)) return { metas: await kkphim.getCatalog('movie', extra) };
@@ -93,6 +93,9 @@ builder.defineCatalogHandler(async ({ type, id, extra = {}, config = {} }) => {
 
 // 2. META HANDLER
 builder.defineMetaHandler(async ({ type, id, config = {} }) => {
+    if (id) {
+        try { id = decodeURIComponent(id); } catch (e) {}
+    }
     console.log(`[Meta Request] Type: ${type}, ID: ${id}`);
     try {
         if (id.startsWith('kkphim:') && isSourceEnabled('kkphim', config)) {
@@ -143,6 +146,9 @@ builder.defineMetaHandler(async ({ type, id, config = {} }) => {
 
 // 3. STREAM HANDLER
 builder.defineStreamHandler(async ({ type, id, config = {} }) => {
+    if (id) {
+        try { id = decodeURIComponent(id); } catch (e) {}
+    }
     console.log(`[Stream Request] Type: ${type}, ID: ${id}`);
     
     const configHash = config && config.sources ? JSON.stringify(config) : 'default';

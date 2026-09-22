@@ -235,7 +235,13 @@ export default {
             const configParam = resourceIdx > 0 ? segments[0] : null;
             const resource = segments[resourceIdx];
             const type = segments[resourceIdx + 1];
-            const id = segments[resourceIdx + 2];
+            const rawId = segments[resourceIdx + 2];
+            let id = rawId;
+            if (id) {
+                try {
+                    id = decodeURIComponent(id);
+                } catch (e) {}
+            }
             const extraStr = segments.slice(resourceIdx + 3).join('/');
 
             const config = parseConfig(configParam);
@@ -244,11 +250,18 @@ export default {
             let extra = {};
             if (extraStr) {
                 try {
-                    const searchParams = new URLSearchParams(extraStr);
+                    const searchParams = new URLSearchParams(decodeURIComponent(extraStr));
                     for (const [k, v] of searchParams.entries()) {
                         extra[k] = v;
                     }
-                } catch (e) {}
+                } catch (e) {
+                    try {
+                        const searchParams = new URLSearchParams(extraStr);
+                        for (const [k, v] of searchParams.entries()) {
+                            extra[k] = v;
+                        }
+                    } catch (err) {}
+                }
             }
 
             try {

@@ -3,31 +3,6 @@ const reference = require('../Reference.json');
 // Filter out tv/sports catalogs (streamfree-live, sports-live)
 const filteredCatalogs = reference.catalogs.filter(c => c.type !== 'tv' && c.id !== 'streamfree-live' && c.id !== 'sports-live');
 
-const baseManifest = {
-    id: "org.hophim.stremio",
-    version: "1.4.3",
-    name: "Hồ Phim",
-    description: "Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ NguonC, Siêu Tầm Phim, Hoạt Hình 3D, CLB Phim Xưa, VSMOV, YanHH3D, KKPhim",
-    logo: "https://raw.githubusercontent.com/hoguom28790/nuvio-stremio-addon/master/logo.png",
-    resources: [
-        "catalog",
-        {
-            name: "meta",
-            types: ["movie", "series"],
-            idPrefixes: ["tt", "nguonc:", "stp:", "hh3d:", "clbpx:", "vsmov:", "yan:", "kkphim:"]
-        },
-        {
-            name: "stream",
-            types: ["movie", "series"],
-            idPrefixes: ["tt", "nguonc:", "stp:", "hh3d:", "clbpx:", "vsmov:", "yan:", "kkphim:"]
-        }
-    ],
-    types: ["movie", "series"],
-    idPrefixes: ["tt", "nguonc:", "stp:", "hh3d:", "clbpx:", "vsmov:", "yan:", "kkphim:"],
-    catalogs: filteredCatalogs,
-    behaviorHints: { adult: false, p2p: false, configurable: true, configurationRequired: false }
-};
-
 const hentaizGenres = [
     "Tất Cả",
     "Không Che (Uncensored)",
@@ -308,33 +283,49 @@ const vlxxCatalogs = [
     }
 ];
 
+const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs];
+const allCatalogs = [...filteredCatalogs, ...adultCatalogs];
+const allPrefixes = ["tt", "nguonc:", "stp:", "hh3d:", "clbpx:", "vsmov:", "yan:", "kkphim:", "hentaiz:", "javhd:", "vlxx:"];
+
+const baseManifest = {
+    id: "org.hophim.stremio",
+    version: "1.4.4",
+    name: "Hồ Phim",
+    description: "Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ NguonC, Siêu Tầm Phim, Hoạt Hình 3D, CLB Phim Xưa, VSMOV, YanHH3D, KKPhim, HentaiZ, JavHD, VLXX",
+    logo: "https://raw.githubusercontent.com/hoguom28790/nuvio-stremio-addon/master/logo.png",
+    resources: [
+        "catalog",
+        {
+            name: "meta",
+            types: ["movie", "series"],
+            idPrefixes: allPrefixes
+        },
+        {
+            name: "stream",
+            types: ["movie", "series"],
+            idPrefixes: allPrefixes
+        }
+    ],
+    types: ["movie", "series"],
+    idPrefixes: allPrefixes,
+    catalogs: allCatalogs,
+    behaviorHints: { adult: false, p2p: false, configurable: true, configurationRequired: false }
+};
+
 function getManifest(config = {}) {
-    let catalogs = filteredCatalogs;
-    const isHentaiz = !!(config && Array.isArray(config.sources) && config.sources.includes('hentaiz'));
-    const isJavhd = !!(config && Array.isArray(config.sources) && config.sources.includes('javhd'));
-    const isVlxx = !!(config && Array.isArray(config.sources) && config.sources.includes('vlxx'));
+    let catalogs = allCatalogs;
+    let idPrefixes = [...allPrefixes];
 
-    if (isHentaiz) {
-        catalogs = [...catalogs, ...hentaizCatalogs];
-    }
-    if (isJavhd) {
-        catalogs = [...catalogs, ...javhdCatalogs];
-    }
-    if (isVlxx) {
-        catalogs = [...catalogs, ...vlxxCatalogs];
-    }
-
-    if (config && config.sources && Array.isArray(config.sources)) {
-        catalogs = catalogs.filter(cat => {
+    if (config && Array.isArray(config.sources) && config.sources.length > 0) {
+        catalogs = allCatalogs.filter(cat => {
             const prefix = cat.id.split('-')[0];
             return config.sources.includes(prefix);
         });
+        idPrefixes = allPrefixes.filter(p => {
+            if (p === 'tt') return true;
+            return config.sources.includes(p.replace(':', ''));
+        });
     }
-
-    let idPrefixes = [...baseManifest.idPrefixes];
-    if (isHentaiz) idPrefixes.push("hentaiz:");
-    if (isJavhd) idPrefixes.push("javhd:");
-    if (isVlxx) idPrefixes.push("vlxx:");
 
     const resources = baseManifest.resources.map(res => {
         if (typeof res === 'object' && res.idPrefixes) {
