@@ -1,18 +1,20 @@
 const axios = require('axios');
 const cache = require('../utils/cache');
 
-const BASE_URL = 'https://javhdz.ac';
+const BASE_URL = 'https://javhdz.bz';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 const client = axios.create({
     timeout: 12000,
     headers: {
-        'User-Agent': USER_AGENT
+        'User-Agent': USER_AGENT,
+        'Referer': `${BASE_URL}/`
     }
 });
 
-// Genre to URL mapping on javhdz.ac
+// Genre to URL mapping on javhdz.bz
 const GENRE_MAP = {
+    'Tất Cả': '/video/',
     'Vietsub': '/tag/vietsub/',
     'Có Che (Censored)': '/category/censored-2/',
     'Không Che (Uncensored)': '/category/uncensored-3/',

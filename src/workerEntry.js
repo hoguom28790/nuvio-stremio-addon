@@ -153,7 +153,7 @@ export default {
 
         // 4. JavHD Segment Unwrapper
         if (pathname === '/javhd/segment.ts') {
-            return handleSegmentProxy(url.searchParams.get('url'), 'https://javhdz.ac/');
+            return handleSegmentProxy(url.searchParams.get('url'), 'https://javhdz.bz/');
         }
 
         // 5. VLXX Segment Unwrapper
@@ -218,12 +218,27 @@ export default {
         // 9. Debug routes
         if (pathname === '/debug/javhd') {
             try {
+                const targetUrl = 'https://javhdz.ac/video/page/1/';
+                const res = await fetch(targetUrl, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Referer': 'https://javhdz.ac/'
+                    }
+                });
+                const text = await res.text();
                 const cat = await javhd.getCatalog('javhd-latest', 'movie', {});
-                return new Response(JSON.stringify({ count: cat.length, sample: cat[0] }), {
+                return new Response(JSON.stringify({
+                    fetchStatus: res.status,
+                    fetchHeaders: Object.fromEntries(res.headers.entries()),
+                    fetchHtmlLength: text.length,
+                    fetchHtmlSnippet: text.slice(0, 500),
+                    catalogCount: cat.length,
+                    firstItem: cat[0]
+                }), {
                     headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
                 });
             } catch (e) {
-                return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: CORS_HEADERS });
+                return new Response(JSON.stringify({ error: e.message, stack: e.stack }), { status: 500, headers: CORS_HEADERS });
             }
         }
 

@@ -84,15 +84,33 @@ async function request(urlOrConfig, maybeConfig = {}) {
     }
 
     try {
-        const fetchOptions = {
-            method,
-            headers,
-            body,
-            signal,
-            redirect: 'follow'
-        };
-
-        const res = await fetch(finalUrl, fetchOptions);
+        let currentUrl = finalUrl;
+        let redirectCount = 0;
+        let res;
+        while (redirectCount < 5) {
+            res = await fetch(currentUrl, {
+                method,
+                headers,
+                body: redirectCount === 0 ? body : undefined,
+                signal,
+                redirect: 'manual'
+            });
+            if ([301, 302, 303, 307, 308].includes(res.status)) {
+                const loc = res.headers.get('location');
+                if (loc) {
+                    currentUrl = new URL(loc, currentUrl).href;
+                    try {
+                        const currentOrigin = new URL(currentUrl).origin;
+                        if (headers['Referer'] && !headers['Referer'].startsWith(currentOrigin)) {
+                            headers['Referer'] = `${currentOrigin}/`;
+                        }
+                    } catch (e) {}
+                    redirectCount++;
+                    continue;
+                }
+            }
+            break;
+        }
 
         let data;
         const responseType = (config.responseType || '').toLowerCase();
@@ -101,7 +119,8 @@ async function request(urlOrConfig, maybeConfig = {}) {
         } else if (responseType === 'blob') {
             data = await res.blob();
         } else {
-            const text = await res.text();
+            const rawText = await res.text();
+            const text = rawText && rawText.charCodeAt(0) === 0xFEFF ? rawText.slice(1) : rawText;
             try {
                 data = JSON.parse(text);
             } catch {
