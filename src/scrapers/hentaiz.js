@@ -1,7 +1,4 @@
-const fs = require('fs');
-const path = require('path');
 const axios = require('axios');
-const crypto = require('crypto');
 const cache = require('../utils/cache');
 
 const BASE_URL = 'https://hentaiz2.com';
@@ -409,10 +406,16 @@ function unflatten(parsed) {
 
 // Base64URL string encoder
 function toBase64Url(str) {
-    return Buffer.from(str, 'utf-8').toString('base64')
-        .replace(/=/g, '')
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_');
+    if (typeof Buffer !== 'undefined') {
+        return Buffer.from(str, 'utf-8').toString('base64')
+            .replace(/=/g, '')
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_');
+    }
+    const bytes = new TextEncoder().encode(str);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 }
 
 // Convert Vietnamese text / genre to URL slug
@@ -647,13 +650,19 @@ async function fetchAndDecryptStreamData(videoId) {
         }
     });
 
-    const key = crypto.createHash('sha256').update(videoId).digest();
     const [ivHex, cipherHex] = res.data.split(':');
-    const iv = Buffer.from(ivHex, 'hex');
-    const ciphertext = Buffer.from(cipherHex, 'hex');
+    const iv = new Uint8Array(ivHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+    const ciphertext = new Uint8Array(cipherHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
 
-    const decipher = crypto.createDecipheriv('aes-256-ctr', key, iv);
-    const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf-8');
+    const keyHash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(videoId));
+    const cryptoKey = await crypto.subtle.importKey('raw', keyHash, { name: 'AES-CTR' }, false, ['decrypt']);
+
+    const decryptedBuf = await crypto.subtle.decrypt(
+        { name: 'AES-CTR', counter: iv, length: 64 },
+        cryptoKey,
+        ciphertext
+    );
+    const decrypted = new TextDecoder().decode(decryptedBuf);
     const streamData = JSON.parse(decrypted);
 
     cache.set(cacheKey, streamData, 3600);

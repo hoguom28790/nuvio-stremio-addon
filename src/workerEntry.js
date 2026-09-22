@@ -8,7 +8,9 @@ const vlxx = require('./scrapers/vlxx');
 function parseConfig(configParam) {
     if (!configParam) return {};
     try {
-        const decoded = Buffer.from(configParam, 'base64').toString('utf8');
+        const binary = atob(configParam.replace(/-/g, '+').replace(/_/g, '/'));
+        const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+        const decoded = new TextDecoder().decode(bytes);
         return JSON.parse(decoded);
     } catch (e) {
         try {
