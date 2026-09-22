@@ -35,24 +35,26 @@ function initSlugMap() {
 
 async function ensureStaticCatalog() {
     if (cachedCatalog && Array.isArray(cachedCatalog) && cachedCatalog.length > 0) return cachedCatalog;
-    try {
-        cachedCatalog = require('../data/hentaiz_catalog.json');
-    } catch (e1) {
+
+    // Check local filesystem in Node.js
+    if (typeof process !== 'undefined' && process.versions && process.versions.node) {
         try {
-            const possiblePaths = [
-                path.join(__dirname, '..', 'data', 'hentaiz_catalog.json'),
+            const fs = await import('node:fs');
+            const path = await import('node:path');
+            const possible = [
                 path.join(process.cwd(), 'src', 'data', 'hentaiz_catalog.json'),
                 path.join(process.cwd(), 'data', 'hentaiz_catalog.json')
             ];
-            for (const p of possiblePaths) {
-                if (fs.existsSync && fs.existsSync(p)) {
+            for (const p of possible) {
+                if (fs.existsSync(p)) {
                     cachedCatalog = JSON.parse(fs.readFileSync(p, 'utf8'));
                     break;
                 }
             }
-        } catch (e2) {}
+        } catch (e) {}
     }
 
+    // Fetch from GitHub CDN in Cloudflare Worker or if local not found
     if (!cachedCatalog || !Array.isArray(cachedCatalog) || cachedCatalog.length === 0) {
         try {
             const res = await axios.get(REMOTE_CATALOG_URL, { timeout: 15000 });
@@ -69,14 +71,7 @@ async function ensureStaticCatalog() {
 }
 
 function getStaticCatalog() {
-    if (cachedCatalog && Array.isArray(cachedCatalog)) return cachedCatalog;
-    try {
-        cachedCatalog = require('../data/hentaiz_catalog.json');
-        initSlugMap();
-        return cachedCatalog;
-    } catch (e) {
-        return cachedCatalog || [];
-    }
+    return cachedCatalog || [];
 }
 
 function getSlugMap() {
