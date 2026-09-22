@@ -5,12 +5,16 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/mock.js"
+    "test": "node test/mock.js",
+    "build:worker": "esbuild src/workerEntry.js --bundle --platform=node --format=esm --target=es2022 --external:*hentaiz_catalog.json --external:*hentaiz_streams.json --outfile=cloudflare-worker/worker.js --minify"
   },
   "dependencies": {
     "axios": "^1.20.0",
     "dotenv": "^16.6.1",
     "express": "^4.22.2",
     "stremio-addon-sdk": "^1.6.10"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
   }
 }

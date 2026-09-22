@@ -1,47 +1,42 @@
-# Cloudflare Worker Video Segment Proxy cho Hồ Phim Addon
+# Hướng Dẫn Triển Khai Toàn Bộ Hồ Phim Addon Lên Cloudflare Workers (1 Phút)
 
-Proxy chuyên dụng để bóc tách 95-byte PNG fake header cho các video stream (JavHD & VLXX).
-- **Chi phí**: 100% Miễn phí
-- **Băng thông (Egress Bandwidth)**: **KHÔNG GIỚI HẠN (Unlimited)**
-- **Giới hạn request**: 100.000 requests/ngày trên gói Free của Cloudflare (thoải mái xem hàng trăm tập phim mỗi ngày).
+Addon Hồ Phim đã được đóng gói toàn diện vào một file duy nhất (`cloudflare-worker/worker.js`) chạy 100% trên Cloudflare Workers.
+- **Băng thông (Egress Bandwidth)**: **KHÔNG GIỚI HẠN (Unlimited 100% Miễn phí)**
+- **Không cần Vercel**: Không sợ bị quá hạn 10 GB, không sợ lỗi `402 Payment Required`
+- **Tốc độ cực nhanh**: Chạy trực tiếp tại mạng lưới Edge toàn cầu của Cloudflare.
 
 ---
 
-## Cách 1: Triển khai trực tiếp qua Web Cloudflare (1 Phút - Không cần cài đặt gì)
+## Cách 1: Triển khai qua Web Cloudflare (1 Phút - Đơn giản nhất, không cần cài đặt)
 
-1. Đăng nhập vào [Cloudflare Dashboard](https://dash.cloudflare.com/) (nếu chưa có tài khoản thì đăng ký miễn phí).
-2. Ở thanh menu bên trái, chọn **Workers & Pages** -> Bấm **Create application** (Tạo ứng dụng).
-3. Chọn thẻ **Workers** -> Bấm nút **Create Worker**.
-4. Đặt tên cho Worker (ví dụ: `hophim-segment-proxy`) -> Bấm **Deploy**.
-5. Bấm nút **Edit code** (Chỉnh sửa mã).
-6. Xóa hết toàn bộ code mẫu có sẵn, mở file `worker.js` trong thư mục này, copy toàn bộ nội dung và dán vào.
-7. Bấm **Deploy** (hoặc Save and Deploy).
-8. Copy đường dẫn Worker vừa tạo, dạng:
+1. Truy cập [dash.cloudflare.com](https://dash.cloudflare.com/) và đăng nhập (hoặc đăng ký tài khoản miễn phí).
+2. Ở menu bên trái, bấm **Workers & Pages** -> Bấm nút **Create application** -> Chọn thẻ **Workers** -> Bấm **Create Worker**.
+3. Đặt tên cho Worker (ví dụ: `hophimaddon`) -> Bấm **Deploy**.
+4. Sau khi deploy xong, bấm nút **Edit code** (Chỉnh sửa mã).
+5. Mở file [worker.js](worker.js), copy toàn bộ nội dung (Ctrl+A -> Ctrl+C).
+6. Dán đè vào khung soạn thảo trên web Cloudflare (Ctrl+A -> Ctrl+V) -> Bấm nút **Deploy** ở góc trên cùng bên phải.
+7. Xong! Bạn đã có đường dẫn Addon riêng:
    ```
-   https://hophim-segment-proxy.<subdomain-cua-ban>.workers.dev
+   https://hophimaddon.<subdomain-cua-ban>.workers.dev
    ```
 
 ---
 
 ## Cách 2: Triển khai bằng dòng lệnh (Wrangler CLI)
 
-Nếu máy tính đã cài Node.js / npm:
-
+Nếu máy tính có cài Node.js:
 ```bash
-cd cloudflare-worker
 npx wrangler login
 npx wrangler deploy
 ```
 
-Sau khi deploy xong, wrangler sẽ in ra đường link của Worker.
-
 ---
 
-## Sử dụng trong Hồ Phim Addon
+## Cách sử dụng trên Stremio / Nuvio
 
-Sau khi có URL của Cloudflare Worker:
-1. Trong Vercel (hoặc Render / VPS / local `.env`), thêm biến môi trường:
-   ```env
-   SEGMENT_PROXY_URL=https://hophim-segment-proxy.<subdomain-cua-ban>.workers.dev
-   ```
-2. Toàn bộ các phân đoạn video `.ts` của JavHD và VLXX sẽ được tải và xử lý trực tiếp qua Cloudflare Worker với băng thông Unlimited, Vercel sẽ tiêu tốn 0 MB băng thông video!
+- **Mở trang Cài đặt / Cấu hình danh mục**:
+  Mở trình duyệt vào link:
+  `https://hophimaddon.<subdomain-cua-ban>.workers.dev/`
+- **Cài đặt vào Stremio**:
+  Copy link manifest dán vào ô tìm kiếm của Stremio:
+  `https://hophimaddon.<subdomain-cua-ban>.workers.dev/manifest.json`
