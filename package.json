@@ -4,7 +4,7 @@
   "description": "Nuvio Stremio Addon",
   "main": "server.js",
   "scripts": {
-    "start": "node src/index.js",
+    "start": "node server.js",
     "test": "node test/mock.js"
   },
   "dependencies": {

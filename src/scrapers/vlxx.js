@@ -348,11 +348,15 @@ async function getM3u8(vid, serverId = 1, host = 'hophimaddon.vercel.app') {
         timeout: 12000
     });
 
+    const rawProxy = process.env.SEGMENT_PROXY_URL;
+    const segmentBase = rawProxy ? rawProxy.replace(/\/+$/, '') : `${hostBase}/vlxx/segment.ts`;
+    const separator = segmentBase.includes('?') ? '&' : '?';
+
     const lines = res.data.split('\n');
     const rewritten = lines.map(line => {
         const trimmed = line.trim();
         if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-            return `${hostBase}/vlxx/segment.ts?url=${encodeURIComponent(trimmed)}`;
+            return `${segmentBase}${separator}url=${encodeURIComponent(trimmed)}`;
         }
         return line;
     }).join('\n');

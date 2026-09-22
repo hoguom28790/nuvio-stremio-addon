@@ -399,11 +399,14 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.vercel.app') 
                 return `${hostBase}/javhd/stream/${slug}/${p1}.m3u8`;
             });
         } else {
+            const rawProxy = process.env.SEGMENT_PROXY_URL;
+            const segmentBase = rawProxy ? rawProxy.replace(/\/+$/, '') : `${hostBase}/javhd/segment.ts`;
+            const separator = segmentBase.includes('?') ? '&' : '?';
             const lines = content.split('\n');
             const rewritten = lines.map(line => {
                 const trimmed = line.trim();
                 if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-                    return `${hostBase}/javhd/segment.ts?url=${encodeURIComponent(trimmed)}`;
+                    return `${segmentBase}${separator}url=${encodeURIComponent(trimmed)}`;
                 }
                 return line;
             });

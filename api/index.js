@@ -120,6 +120,12 @@ app.get('/javhd/segment.ts', async (req, res) => {
     const rawUrl = req.query.url;
     if (!rawUrl) return res.status(400).send('Missing url');
 
+    if (process.env.SEGMENT_PROXY_URL) {
+        const base = process.env.SEGMENT_PROXY_URL.replace(/\/+$/, '');
+        const sep = base.includes('?') ? '&' : '?';
+        return res.redirect(302, `${base}${sep}url=${encodeURIComponent(rawUrl)}`);
+    }
+
     try {
         const upstream = await axios.get(rawUrl, {
             responseType: 'stream',
@@ -205,6 +211,12 @@ app.get('/vlxx/stream/:vid/:server.m3u8', async (req, res) => {
 app.get('/vlxx/segment.ts', async (req, res) => {
     const rawUrl = req.query.url;
     if (!rawUrl) return res.status(400).send('Missing url');
+
+    if (process.env.SEGMENT_PROXY_URL) {
+        const base = process.env.SEGMENT_PROXY_URL.replace(/\/+$/, '');
+        const sep = base.includes('?') ? '&' : '?';
+        return res.redirect(302, `${base}${sep}url=${encodeURIComponent(rawUrl)}`);
+    }
 
     try {
         const upstream = await axios.get(rawUrl, {
