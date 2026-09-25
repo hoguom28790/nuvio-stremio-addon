@@ -290,7 +290,7 @@ async function resolveManifestUrl(vid, serverId = 1) {
 /**
  * 3. GET STREAM
  */
-async function getStream(id, type, host = 'hophimaddon.vercel.app') {
+async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.dev') {
     const cleanId = id.replace(/^vlxx:/, '').replace(/\.json$/, '');
     const parts = cleanId.split(':');
     const vid = parts.length > 1 ? parts[parts.length - 1] : parts[0];
@@ -312,7 +312,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
         title: `[Máy chủ #1 Full HD]\n⚡ Tốc độ cao • Tua mượt mà`,
         url: `${hostBase}/vlxx/stream/${vid}/1.m3u8`,
         behaviorHints: {
-            notWebReady: true,
+            notWebReady: false,
             bingeGroup: 'vlxx-s1',
             proxyHeaders: proxyHeaders
         }
@@ -324,7 +324,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
         title: `[Máy chủ #2 Dự phòng]\n⚡ Tuyến dự phòng Server #2`,
         url: `${hostBase}/vlxx/stream/${vid}/2.m3u8`,
         behaviorHints: {
-            notWebReady: true,
+            notWebReady: false,
             bingeGroup: 'vlxx-s2',
             proxyHeaders: proxyHeaders
         }
@@ -336,7 +336,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
 /**
  * 4. GET REWRITTEN M3U8 PLAYLIST
  */
-async function getM3u8(vid, serverId = 1, host = 'hophimaddon.vercel.app') {
+async function getM3u8(vid, serverId = 1, host = 'hophimaddon.hophim-4g6qbubt.workers.dev') {
     const manifestUrl = await resolveManifestUrl(vid, serverId);
     const hostBase = host.includes('://') ? host : `https://${host}`;
 

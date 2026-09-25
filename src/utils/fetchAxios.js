@@ -88,13 +88,27 @@ async function request(urlOrConfig, maybeConfig = {}) {
         let redirectCount = 0;
         let res;
         while (redirectCount < 5) {
-            res = await fetch(currentUrl, {
+            let refererVal = undefined;
+            for (const k of Object.keys(headers)) {
+                if (k.toLowerCase() === 'referer') {
+                    refererVal = headers[k];
+                    break;
+                }
+            }
+
+            const fetchOpts = {
                 method,
                 headers,
                 body: redirectCount === 0 ? body : undefined,
                 signal,
                 redirect: 'manual'
-            });
+            };
+            if (refererVal) {
+                fetchOpts.referrer = refererVal;
+                fetchOpts.referrerPolicy = 'unsafe-url';
+            }
+
+            res = await fetch(currentUrl, fetchOpts);
             if ([301, 302, 303, 307, 308].includes(res.status)) {
                 const loc = res.headers.get('location');
                 if (loc) {

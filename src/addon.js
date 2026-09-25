@@ -90,7 +90,7 @@ builder.defineCatalogHandler(async ({ type, id, extra = {}, config = {} }) => {
             return { metas: await vlxx.getCatalog(id, type, extra) };
         }
 
-        if (id.startsWith('avdb-') && isSourceEnabled(id.replace('-', '_'), config)) {
+        if (id.startsWith('avdb-') && (isSourceEnabled('avdb', config) || isSourceEnabled(id.replace('-', '_'), config))) {
             return { metas: await avdb.getCatalog(id, type, extra) };
         }
     } catch (e) {

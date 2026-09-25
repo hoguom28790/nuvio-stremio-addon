@@ -152,24 +152,12 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
             if (targetItem) {
                 const epTitle = targetItem.name || 'Full';
 
-                // 1. Direct m3u8 if available
+                // 1. If direct m3u8 is provided, check if it points to streamvsmov master.m3u8
                 if (targetItem.link_m3u8) {
-                    streams.push({
-                        name: `⚡ [CDN] VSMOV • ${serverName}`,
-                        title: `${movieName} - Tập ${epTitle}\n⚡ Định tuyến: CDN Tốc Độ Cao (Direct HLS 4K)\n🎞️ Chất lượng: 4K / Full HD`,
-                        url: targetItem.link_m3u8,
-                        behaviorHints: { notWebReady: false }
-                    });
-                }
-
-                // 2. Parse link_embed (format: https://{host}/video/{hash})
-                if (targetItem.link_embed) {
-                    const embedMatch = targetItem.link_embed.match(/https?:\/\/([^\/]+)\/video\/([a-f0-9-]+)/i);
-                    if (embedMatch) {
-                        const originHost = embedMatch[1];
-                        const videoHash = embedMatch[2];
-
-                        // Primary stream: Unwrapped through Worker (Stremio Web & Desktop 100% compatible)
+                    const m3u8Match = targetItem.link_m3u8.match(/https?:\/\/([^\/]+)\/stream\/([a-f0-9-]+)\/master\.m3u8/i);
+                    if (m3u8Match) {
+                        const originHost = m3u8Match[1];
+                        const videoHash = m3u8Match[2];
                         streams.push({
                             name: `⚡ [CDN Full HD] VSMOV • ${serverName}`,
                             title: `${movieName} - Tập ${epTitle}\n⚡ Định tuyến: VSMOV CDN Tốc Độ Cao (1080p/4K)\n🎞️ Phát mượt mà • Không quảng cáo`,
@@ -185,6 +173,42 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
                                 }
                             }
                         });
+                    } else {
+                        streams.push({
+                            name: `⚡ [CDN] VSMOV • ${serverName}`,
+                            title: `${movieName} - Tập ${epTitle}\n⚡ Định tuyến: CDN Tốc Độ Cao (Direct HLS 4K)\n🎞️ Chất lượng: 4K / Full HD`,
+                            url: targetItem.link_m3u8,
+                            behaviorHints: { notWebReady: false }
+                        });
+                    }
+                }
+
+                // 2. Parse link_embed (format: https://{host}/video/{hash})
+                if (targetItem.link_embed) {
+                    const embedMatch = targetItem.link_embed.match(/https?:\/\/([^\/]+)\/video\/([a-f0-9-]+)/i);
+                    if (embedMatch) {
+                        const originHost = embedMatch[1];
+                        const videoHash = embedMatch[2];
+
+                        // Avoid adding duplicate stream if link_m3u8 already added it
+                        const alreadyAdded = streams.some(s => s.url.includes(`/vsmov/stream/${videoHash}/`));
+                        if (!alreadyAdded) {
+                            streams.push({
+                                name: `⚡ [CDN Full HD] VSMOV • ${serverName}`,
+                                title: `${movieName} - Tập ${epTitle}\n⚡ Định tuyến: VSMOV CDN Tốc Độ Cao (1080p/4K)\n🎞️ Phát mượt mà • Không quảng cáo`,
+                                url: `${hostBase}/vsmov/stream/${videoHash}/master.m3u8?origin=${encodeURIComponent(originHost)}`,
+                                behaviorHints: {
+                                    notWebReady: false,
+                                    bingeGroup: `vsmov-${videoHash}`,
+                                    proxyHeaders: {
+                                        request: {
+                                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                                            'Referer': 'https://vsmov.com/'
+                                        }
+                                    }
+                                }
+                            });
+                        }
                     }
                 }
             }
@@ -207,15 +231,32 @@ async function getM3u8(originHost, videoHash, host = 'hophimaddon.hophim-4g6qbub
     if (cached) return cached;
 
     const masterUrl = `https://${originHost}/stream/${videoHash}/master.m3u8`;
-    const res = await axios.get(masterUrl, {
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Referer': 'https://vsmov.com/'
-        },
-        timeout: 10000
-    });
+    let content = '';
 
-    let content = res.data;
+    if (typeof fetch !== 'undefined') {
+        const res = await fetch(masterUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Referer': 'https://vsmov.com/'
+            },
+            referrer: 'https://vsmov.com/',
+            referrerPolicy: 'unsafe-url'
+        });
+        if (!res.ok) {
+            throw new Error(`Upstream master playlist returned status ${res.status}`);
+        }
+        content = await res.text();
+    } else {
+        const res = await axios.get(masterUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Referer': 'https://vsmov.com/'
+            },
+            timeout: 10000
+        });
+        content = res.data;
+    }
+
     if (typeof content === 'string') {
         const rawProxy = process.env.SEGMENT_PROXY_URL;
         const segmentBase = rawProxy ? rawProxy.replace(/\/+$/, '') : `${hostBase}/vsmov/segment.ts`;

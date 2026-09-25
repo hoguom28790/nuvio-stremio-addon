@@ -91,22 +91,62 @@ async function getMeta(type, id) {
     }
 }
 
+async function fetchText(url, referer) {
+    if (typeof fetch !== 'undefined') {
+        const headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        };
+        if (referer) {
+            headers['Referer'] = referer;
+        }
+        const fetchOpts = {
+            headers,
+            referrer: referer || undefined,
+            referrerPolicy: referer ? 'unsafe-url' : 'no-referrer'
+        };
+        const res = await fetch(url, fetchOpts);
+        if (!res.ok) {
+            throw new Error(`Fetch failed status ${res.status} for ${url}`);
+        }
+        return await res.text();
+    } else {
+        const headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        };
+        if (referer) {
+            headers['Referer'] = referer;
+        }
+        const res = await axios.get(url, { headers, timeout: 10000 });
+        return typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
+    }
+}
+
 async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.dev') {
     const rawId = id.replace('avdb:', '');
     const hostBase = host.includes('://') ? host : `https://${host}`;
 
     try {
         const res = await axios.get(`${BASE_URL}?ac=detail&ids=${encodeURIComponent(rawId)}`, {
-            timeout: 10000,
+            timeout: 15000,
             headers: { 'User-Agent': 'Mozilla/5.0' }
         });
 
         const item = res.data?.list?.[0];
         if (!item) return [];
 
-        const slug = item.slug || String(item.id);
-        const typeName = item.type_name || '1080p';
+        let slug = item.slug;
+        if (!slug && item.episodes?.server_data) {
+            const firstEp = Object.values(item.episodes.server_data)[0];
+            if (firstEp?.link_embed) {
+                const parts = firstEp.link_embed.split('/');
+                slug = parts[parts.length - 1];
+            } else if (firstEp?.slug) {
+                slug = firstEp.slug;
+            }
+        }
+        if (!slug) slug = String(item.id);
 
+        const typeName = item.type_name || '1080p';
         const streams = [];
 
         // Primary stream: Unwrapped / proxied via worker (with CORS headers & Referer)
@@ -134,29 +174,17 @@ async function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev') {
     if (cached) return cached;
 
     const embedUrl = `${EMBED_BASE}/${slug}`;
-    const res = await axios.get(embedUrl, {
-        timeout: 10000,
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Referer': 'https://avdbapi.com/'
-        }
-    });
+    const html = await fetchText(embedUrl, 'https://avdbapi.com/');
 
-    const match = res.data.match(/"m3u8":\s*"([^"]+)"/);
+    const match = html.match(/"m3u8":\s*"([^"]+)"/);
     if (!match) {
         throw new Error('m3u8 link not found in embed player HTML');
     }
 
     const m3u8Url = JSON.parse(`"${match[1]}"`);
-    const mRes = await axios.get(m3u8Url, {
-        timeout: 10000,
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Referer': 'https://upload18.org/'
-        }
-    });
+    const content = await fetchText(m3u8Url, 'https://upload18.org/');
 
-    let content = mRes.data;
+    let rewrittenContent = content;
     if (typeof content === 'string') {
         const rawProxy = process.env.SEGMENT_PROXY_URL;
         const segmentBase = rawProxy ? rawProxy.replace(/\/+$/, '') : `${hostBase}/avdb/segment.ts`;
@@ -176,13 +204,13 @@ async function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev') {
                 rewritten.push(line);
             }
         }
-        content = rewritten.join('\n');
+        rewrittenContent = rewritten.join('\n');
     }
 
-    if (content) {
-        cache.set(cacheKey, content, 900); // 15 min cache
+    if (rewrittenContent) {
+        cache.set(cacheKey, rewrittenContent, 900); // 15 min cache
     }
-    return content;
+    return rewrittenContent;
 }
 
 module.exports = {

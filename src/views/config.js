@@ -5,7 +5,12 @@ function renderConfigPage(host, initialConfig = {}) {
     const prefProxyChecked = initialConfig.prefProxy !== false ? 'checked' : '';
     const prefImdbChecked = initialConfig.prefImdb !== false ? 'checked' : '';
 
-    const isSourceActive = (src) => activeSources.includes(src);
+    const isSourceActive = (src) => {
+        if (src === 'avdb') {
+            return activeSources.includes('avdb') || activeSources.some(s => s.startsWith('avdb'));
+        }
+        return activeSources.includes(src);
+    };
     const sourceClass = (src) => isSourceActive(src) ? 'cat-checkbox checked' : 'cat-checkbox';
     const sourceChecked = (src) => isSourceActive(src) ? 'checked' : '';
 
@@ -765,33 +770,9 @@ function renderConfigPage(host, initialConfig = {}) {
           <input type="checkbox" name="source" value="vlxx" ${sourceChecked('vlxx')} onchange="updateUI()">
           <span>⚡ VLXX (Phim Chọn Lọc)</span>
         </label>
-        <label class="${sourceClass('avdb_censored')}">
-          <input type="checkbox" name="source" value="avdb_censored" ${sourceChecked('avdb_censored')} onchange="updateUI()">
-          <span>⚡ AVDB (Censored)</span>
-        </label>
-        <label class="${sourceClass('avdb_uncensored')}">
-          <input type="checkbox" name="source" value="avdb_uncensored" ${sourceChecked('avdb_uncensored')} onchange="updateUI()">
-          <span>⚡ AVDB (Uncensored)</span>
-        </label>
-        <label class="${sourceClass('avdb_leaked')}">
-          <input type="checkbox" name="source" value="avdb_leaked" ${sourceChecked('avdb_leaked')} onchange="updateUI()">
-          <span>⚡ AVDB (Uncensored Leaked)</span>
-        </label>
-        <label class="${sourceClass('avdb_amateur')}">
-          <input type="checkbox" name="source" value="avdb_amateur" ${sourceChecked('avdb_amateur')} onchange="updateUI()">
-          <span>⚡ AVDB (Amateur)</span>
-        </label>
-        <label class="${sourceClass('avdb_chinese')}">
-          <input type="checkbox" name="source" value="avdb_chinese" ${sourceChecked('avdb_chinese')} onchange="updateUI()">
-          <span>⚡ AVDB (Chinese AV)</span>
-        </label>
-        <label class="${sourceClass('avdb_hentai')}">
-          <input type="checkbox" name="source" value="avdb_hentai" ${sourceChecked('avdb_hentai')} onchange="updateUI()">
-          <span>⚡ AVDB (Hentai)</span>
-        </label>
-        <label class="${sourceClass('avdb_engsub')}">
-          <input type="checkbox" name="source" value="avdb_engsub" ${sourceChecked('avdb_engsub')} onchange="updateUI()">
-          <span>⚡ AVDB (English Subtitle)</span>
+        <label class="${sourceClass('avdb')}">
+          <input type="checkbox" name="source" value="avdb" ${sourceChecked('avdb')} onchange="updateUI()">
+          <span>⚡ AVDB (avdbapi.com)</span>
         </label>
       </div>
     </div>
