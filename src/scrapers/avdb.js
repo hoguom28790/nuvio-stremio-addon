@@ -14,20 +14,58 @@ const TYPE_MAPPING = {
     'avdb-engsub': 7
 };
 
+const GENRE_MAP = {
+    'tat ca': 0,
+    'co che (censored)': 1,
+    'censored': 1,
+    'khong che (uncensored)': 2,
+    'uncensored': 2,
+    'ro ri (uncensored leaked)': 3,
+    'uncensored leaked': 3,
+    'nghiep du (amateur)': 4,
+    'amateur': 4,
+    'trung quoc (chinese av)': 5,
+    'chinese av': 5,
+    'hentai': 6,
+    'phu de tieng anh (english sub)': 7,
+    'english subtitle': 7,
+    'english sub': 7
+};
+
+function slugify(str) {
+    if (!str) return '';
+    return str.normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .replace(/Đ/g, 'D')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+
 async function getCatalog(catalogId, type, extra = {}) {
     const cacheKey = `avdb:cat:${catalogId}:${JSON.stringify(extra)}`;
     const cached = cache.get(cacheKey);
     if (cached) return cached;
 
     try {
-        const typeId = TYPE_MAPPING[catalogId] || 1;
+        let typeId = TYPE_MAPPING[catalogId] || 0;
+        if (extra.genre) {
+            const cleanGenre = slugify(extra.genre);
+            if (GENRE_MAP[cleanGenre] !== undefined) {
+                typeId = GENRE_MAP[cleanGenre];
+            }
+        }
+
         const page = extra.skip ? Math.floor(extra.skip / 24) + 1 : 1;
 
         let url = `${BASE_URL}?ac=detail`;
         if (extra.search) {
             url += `&wd=${encodeURIComponent(extra.search)}`;
-        } else {
+        } else if (typeId > 0) {
             url += `&t=${typeId}&pg=${page}`;
+        } else {
+            url += `&pg=${page}`;
         }
 
         const res = await axios.get(url, {
@@ -94,7 +132,8 @@ async function getMeta(type, id) {
 async function fetchText(url, referer) {
     if (typeof fetch !== 'undefined') {
         const headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
         };
         if (referer) {
             headers['Referer'] = referer;
@@ -116,7 +155,7 @@ async function fetchText(url, referer) {
         if (referer) {
             headers['Referer'] = referer;
         }
-        const res = await axios.get(url, { headers, timeout: 10000 });
+        const res = await axios.get(url, { headers, timeout: 15000 });
         return typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
     }
 }
@@ -160,6 +199,13 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
             }
         });
 
+        // Fallback: Web player direct link
+        streams.push({
+            name: `🌐 [Xem Trực Tiếp] AVDB Web`,
+            title: `${item.name || item.movie_code}\n⚡ Mở trực tiếp trên trình phát web`,
+            externalUrl: `https://upload18.com/play/index/${encodeURIComponent(slug)}`
+        });
+
         return streams;
     } catch (err) {
         console.error(`[AVDB Stream Error] ${id}:`, err.message);
@@ -173,8 +219,25 @@ async function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev') {
     const cached = cache.get(cacheKey);
     if (cached) return cached;
 
-    const embedUrl = `${EMBED_BASE}/${slug}`;
-    const html = await fetchText(embedUrl, 'https://avdbapi.com/');
+    const embedUrls = [
+        `https://upload18.com/play/index/${slug}`,
+        `https://upload18.org/play/index/${slug}`
+    ];
+
+    let html = null;
+    let lastErr = null;
+    for (const url of embedUrls) {
+        try {
+            html = await fetchText(url);
+            if (html && html.includes('"m3u8"')) break;
+        } catch (e) {
+            lastErr = e;
+        }
+    }
+
+    if (!html || !html.includes('"m3u8"')) {
+        throw new Error(`m3u8 link not found in embed player HTML (${lastErr?.message || 'unknown error'})`);
+    }
 
     const match = html.match(/"m3u8":\s*"([^"]+)"/);
     if (!match) {

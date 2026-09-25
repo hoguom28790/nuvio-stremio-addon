@@ -15,6 +15,7 @@ const client = axios.create({
 
 // Category path mapping
 const CATEGORY_MAP = {
+    'vlxx-movie': '/',
     'vlxx-latest': '/',
     'vlxx-vietsub': '/vietsub/',
     'vlxx-uncensored': '/khong-che/',
@@ -28,6 +29,8 @@ const CATEGORY_MAP = {
 
 // Genre path mapping
 const GENRE_MAP = {
+    'tat ca': '/',
+    'moi cap nhat': '/',
     'vietsub': '/vietsub/',
     'khong che': '/khong-che/',
     'khong che (uncensored)': '/khong-che/',
@@ -330,6 +333,13 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
         }
     });
 
+    // Fallback: Web player direct link
+    streams.push({
+        name: '🌐 [Xem Trực Tiếp] VLXX Web',
+        title: `Video #${vid}\n⚡ Mở trực tiếp trên web VLXX`,
+        externalUrl: `${BASE_URL}/video/phim/${vid}/`
+    });
+
     return streams;
 }
 
@@ -340,19 +350,36 @@ async function getM3u8(vid, serverId = 1, host = 'hophimaddon.hophim-4g6qbubt.wo
     const manifestUrl = await resolveManifestUrl(vid, serverId);
     const hostBase = host.includes('://') ? host : `https://${host}`;
 
-    const res = await axios.get(manifestUrl, {
-        headers: {
-            'User-Agent': USER_AGENT,
-            'Referer': 'https://play.vlstream.net/'
-        },
-        timeout: 12000
-    });
+    let content = '';
+    if (typeof fetch !== 'undefined') {
+        const res = await fetch(manifestUrl, {
+            headers: {
+                'User-Agent': USER_AGENT,
+                'Referer': 'https://play.vlstream.net/'
+            },
+            referrer: 'https://play.vlstream.net/',
+            referrerPolicy: 'unsafe-url'
+        });
+        if (!res.ok) {
+            throw new Error(`Failed to fetch VLXX playlist status ${res.status}`);
+        }
+        content = await res.text();
+    } else {
+        const res = await axios.get(manifestUrl, {
+            headers: {
+                'User-Agent': USER_AGENT,
+                'Referer': 'https://play.vlstream.net/'
+            },
+            timeout: 12000
+        });
+        content = res.data;
+    }
 
     const rawProxy = process.env.SEGMENT_PROXY_URL;
     const segmentBase = rawProxy ? rawProxy.replace(/\/+$/, '') : `${hostBase}/vlxx/segment.ts`;
     const separator = segmentBase.includes('?') ? '&' : '?';
 
-    const lines = res.data.split('\n');
+    const lines = content.split('\n');
     const rewritten = lines.map(line => {
         const trimmed = line.trim();
         if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {

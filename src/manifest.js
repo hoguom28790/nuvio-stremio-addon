@@ -125,48 +125,8 @@ const javhdGenres = [
 const javhdCatalogs = [
     {
         type: "movie",
-        id: "javhd-latest",
-        name: "JavHD Mới Nhất",
-        extra: [
-            { name: "search", isRequired: false },
-            { name: "skip", isRequired: false },
-            { name: "genre", isRequired: false, options: javhdGenres }
-        ]
-    },
-    {
-        type: "movie",
-        id: "javhd-trending",
-        name: "JavHD Xu Hướng",
-        extra: [
-            { name: "search", isRequired: false },
-            { name: "skip", isRequired: false },
-            { name: "genre", isRequired: false, options: javhdGenres }
-        ]
-    },
-    {
-        type: "movie",
-        id: "javhd-censored",
-        name: "JavHD Có Che",
-        extra: [
-            { name: "search", isRequired: false },
-            { name: "skip", isRequired: false },
-            { name: "genre", isRequired: false, options: javhdGenres }
-        ]
-    },
-    {
-        type: "movie",
-        id: "javhd-uncensored",
-        name: "JavHD Không Che",
-        extra: [
-            { name: "search", isRequired: false },
-            { name: "skip", isRequired: false },
-            { name: "genre", isRequired: false, options: javhdGenres }
-        ]
-    },
-    {
-        type: "movie",
-        id: "javhd-beauty",
-        name: "JavHD Người Đẹp",
+        id: "javhd-movie",
+        name: "JavHD",
         extra: [
             { name: "search", isRequired: false },
             { name: "skip", isRequired: false },
@@ -177,6 +137,7 @@ const javhdCatalogs = [
 
 const vlxxGenres = [
     "Tất Cả",
+    "Mới Cập Nhật",
     "Vietsub",
     "Không Che",
     "Phim Hay",
@@ -193,88 +154,8 @@ const vlxxGenres = [
 const vlxxCatalogs = [
     {
         type: "movie",
-        id: "vlxx-latest",
-        name: "VLXX Mới Nhất",
-        extra: [
-            { name: "search", isRequired: false },
-            { name: "skip", isRequired: false },
-            { name: "genre", isRequired: false, options: vlxxGenres }
-        ]
-    },
-    {
-        type: "movie",
-        id: "vlxx-vietsub",
-        name: "VLXX Vietsub",
-        extra: [
-            { name: "search", isRequired: false },
-            { name: "skip", isRequired: false },
-            { name: "genre", isRequired: false, options: vlxxGenres }
-        ]
-    },
-    {
-        type: "movie",
-        id: "vlxx-uncensored",
-        name: "VLXX Không Che",
-        extra: [
-            { name: "search", isRequired: false },
-            { name: "skip", isRequired: false },
-            { name: "genre", isRequired: false, options: vlxxGenres }
-        ]
-    },
-    {
-        type: "movie",
-        id: "vlxx-popular",
-        name: "VLXX Phim Hay",
-        extra: [
-            { name: "search", isRequired: false },
-            { name: "skip", isRequired: false },
-            { name: "genre", isRequired: false, options: vlxxGenres }
-        ]
-    },
-    {
-        type: "movie",
-        id: "vlxx-jav",
-        name: "VLXX JAV",
-        extra: [
-            { name: "search", isRequired: false },
-            { name: "skip", isRequired: false },
-            { name: "genre", isRequired: false, options: vlxxGenres }
-        ]
-    },
-    {
-        type: "movie",
-        id: "vlxx-hocsinh",
-        name: "VLXX Học Sinh",
-        extra: [
-            { name: "search", isRequired: false },
-            { name: "skip", isRequired: false },
-            { name: "genre", isRequired: false, options: vlxxGenres }
-        ]
-    },
-    {
-        type: "movie",
-        id: "vlxx-vungtrom",
-        name: "VLXX Vụng Trộm",
-        extra: [
-            { name: "search", isRequired: false },
-            { name: "skip", isRequired: false },
-            { name: "genre", isRequired: false, options: vlxxGenres }
-        ]
-    },
-    {
-        type: "movie",
-        id: "vlxx-cap3",
-        name: "VLXX Phim Cấp 3",
-        extra: [
-            { name: "search", isRequired: false },
-            { name: "skip", isRequired: false },
-            { name: "genre", isRequired: false, options: vlxxGenres }
-        ]
-    },
-    {
-        type: "movie",
-        id: "vlxx-aumy",
-        name: "VLXX Âu Mỹ",
+        id: "vlxx-movie",
+        name: "VLXX",
         extra: [
             { name: "search", isRequired: false },
             { name: "skip", isRequired: false },
@@ -283,68 +164,26 @@ const vlxxCatalogs = [
     }
 ];
 
+const avdbGenres = [
+    "Tất Cả",
+    "Có Che (Censored)",
+    "Không Che (Uncensored)",
+    "Rò Rỉ (Uncensored Leaked)",
+    "Nghiệp Dư (Amateur)",
+    "Trung Quốc (Chinese AV)",
+    "Hentai",
+    "Phụ Đề Tiếng Anh (English Sub)"
+];
+
 const avdbCatalogs = [
     {
         type: "movie",
-        id: "avdb-censored",
-        name: "AVDB Có Che (Censored)",
+        id: "avdb-movie",
+        name: "AVDB",
         extra: [
             { name: "search", isRequired: false },
-            { name: "skip", isRequired: false }
-        ]
-    },
-    {
-        type: "movie",
-        id: "avdb-uncensored",
-        name: "AVDB Không Che (Uncensored)",
-        extra: [
-            { name: "search", isRequired: false },
-            { name: "skip", isRequired: false }
-        ]
-    },
-    {
-        type: "movie",
-        id: "avdb-leaked",
-        name: "AVDB Rò Rỉ (Uncensored Leaked)",
-        extra: [
-            { name: "search", isRequired: false },
-            { name: "skip", isRequired: false }
-        ]
-    },
-    {
-        type: "movie",
-        id: "avdb-amateur",
-        name: "AVDB Nghiệp Dư (Amateur)",
-        extra: [
-            { name: "search", isRequired: false },
-            { name: "skip", isRequired: false }
-        ]
-    },
-    {
-        type: "movie",
-        id: "avdb-chinese",
-        name: "AVDB Trung Quốc (Chinese AV)",
-        extra: [
-            { name: "search", isRequired: false },
-            { name: "skip", isRequired: false }
-        ]
-    },
-    {
-        type: "movie",
-        id: "avdb-hentai",
-        name: "AVDB Hentai",
-        extra: [
-            { name: "search", isRequired: false },
-            { name: "skip", isRequired: false }
-        ]
-    },
-    {
-        type: "movie",
-        id: "avdb-engsub",
-        name: "AVDB Phụ Đề Tiếng Anh (English Sub)",
-        extra: [
-            { name: "search", isRequired: false },
-            { name: "skip", isRequired: false }
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: avdbGenres }
         ]
     }
 ];
@@ -355,9 +194,9 @@ const allPrefixes = ["tt", "nguonc:", "stp:", "hh3d:", "clbpx:", "vsmov:", "yan:
 
 const baseManifest = {
     id: "org.hophim.stremio",
-    version: "1.4.4",
+    version: "1.4.5",
     name: "Hồ Phim",
-    description: "Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ NguonC, Siêu Tầm Phim, Hoạt Hình 3D, CLB Phim Xưa, VSMOV, YanHH3D, KKPhim, HentaiZ, JavHD, VLXX, AVDB",
+    description: "Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ NguonC, Siêu Tầm Phim, Hoạt Hình 3D, CLB Phim Xưa, VSMOV, YanHH3D, KKPhim",
     logo: "https://raw.githubusercontent.com/hoguom28790/nuvio-stremio-addon/master/logo.png",
     resources: [
         "catalog",
@@ -384,19 +223,12 @@ function getManifest(config = {}) {
 
     if (config && Array.isArray(config.sources) && config.sources.length > 0) {
         catalogs = allCatalogs.filter(cat => {
-            if (cat.id.startsWith('avdb-')) {
-                const subKey = cat.id.replace('-', '_');
-                return config.sources.includes(subKey) || config.sources.includes('avdb');
-            }
             const prefix = cat.id.split('-')[0];
             return config.sources.includes(prefix);
         });
         idPrefixes = allPrefixes.filter(p => {
             if (p === 'tt') return true;
             const cleanP = p.replace(':', '');
-            if (cleanP === 'avdb') {
-                return config.sources.some(s => s.startsWith('avdb'));
-            }
             return config.sources.includes(cleanP);
         });
     }

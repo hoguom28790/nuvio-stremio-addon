@@ -476,7 +476,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
             title: `[Full HD 1080p] ${title}\n⚡ Siêu Nét 1080p • Phát Mượt Mà • Tua Tức Thì`,
             url: `${hostBase}/javhd/stream/${slug}/1080.m3u8`,
             behaviorHints: {
-                notWebReady: true,
+                notWebReady: false,
                 bingeGroup: 'javhd-1080p',
                 proxyHeaders: proxyHeaders
             }
@@ -488,7 +488,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
             title: `[HD 720p] ${title}\n⚡ Tốc Độ Cao • Tua Nhanh Mượt Mà`,
             url: `${hostBase}/javhd/stream/${slug}/720.m3u8`,
             behaviorHints: {
-                notWebReady: true,
+                notWebReady: false,
                 bingeGroup: 'javhd-720p',
                 proxyHeaders: proxyHeaders
             }
@@ -500,7 +500,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
             title: `[Tự Động Auto] ${title}\n⚡ Đa Độ Phân Giải Thích Ứng (1080p/720p/480p)`,
             url: `${hostBase}/javhd/stream/${slug}/master.m3u8`,
             behaviorHints: {
-                notWebReady: true,
+                notWebReady: false,
                 bingeGroup: 'javhd-auto',
                 proxyHeaders: proxyHeaders
             }
@@ -512,10 +512,17 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
             title: `[Direct CDN] ${title}\n⚡ Luồng Trực Tiếp CDN`,
             url: direct1080,
             behaviorHints: {
-                notWebReady: true,
+                notWebReady: false,
                 bingeGroup: 'javhd-direct',
                 proxyHeaders: proxyHeaders
             }
+        });
+
+        // 5. Fallback Web Player
+        streams.push({
+            name: '🌐 [Xem Trực Tiếp] JavHD Web',
+            title: `${title}\n⚡ Mở trực tiếp trên web JavHD`,
+            externalUrl: `${BASE_URL}/${slug}.html`
         });
 
         if (streams.length > 0) {
@@ -531,7 +538,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
 /**
  * Proxy M3U8 content and unwrap segments
  */
-async function getM3u8(slug, quality = '1080', host = 'hophimaddon.vercel.app') {
+async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbubt.workers.dev') {
     await ensureStaticCatalog();
     const hostBase = host.includes('://') ? host : `https://${host}`;
     const cacheKey = `javhd:m3u8:${slug}:${quality}:${host}`;
@@ -572,14 +579,30 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.vercel.app') 
         targetM3u8Url = masterUrl.replace('-playlist.m3u8', '-1080.m3u8');
     }
 
-    const m3u8Res = await client.get(targetM3u8Url, {
-        headers: {
-            'Referer': `${BASE_URL}/`,
-            'User-Agent': USER_AGENT
+    let content = '';
+    if (typeof fetch !== 'undefined') {
+        const res = await fetch(targetM3u8Url, {
+            headers: {
+                'Referer': `${BASE_URL}/`,
+                'User-Agent': USER_AGENT
+            },
+            referrer: `${BASE_URL}/`,
+            referrerPolicy: 'unsafe-url'
+        });
+        if (!res.ok) {
+            throw new Error(`Failed to fetch m3u8 playlist: ${res.status}`);
         }
-    });
+        content = await res.text();
+    } else {
+        const m3u8Res = await client.get(targetM3u8Url, {
+            headers: {
+                'Referer': `${BASE_URL}/`,
+                'User-Agent': USER_AGENT
+            }
+        });
+        content = m3u8Res.data;
+    }
 
-    let content = m3u8Res.data;
     if (typeof content === 'string') {
         if (isMaster) {
             content = content.replace(/javhd-\d+-(\d+)\.m3u8/g, (match, p1) => {
