@@ -180,8 +180,40 @@ export default {
         const javhdMatch = pathname.match(/^\/javhd\/stream\/([^/]+)\/([^/]+)\.m3u8$/);
         if (javhdMatch) {
             const [, slug, quality] = javhdMatch;
+
+            // cfhost param: request arrived at Render.com from CF Worker
+            // Use cfhost as base for segment URLs so segments go back through CF Worker
+            const cfhost = url.searchParams.get('cfhost');
+            const resolveHost = cfhost ? cfhost : `https://${host}`;
+
+            // On Cloudflare Worker: if RENDER_HOST is set, proxy M3U8 request to Render.com
+            // Render.com fetches the ~5KB M3U8 text (not blocked), rewrites segments -> CF Worker
+            // All heavy video bandwidth stays on CF Worker
+            const renderHost = (env && env.RENDER_HOST) || (typeof process !== 'undefined' && process.env && process.env.RENDER_HOST);
+            if (renderHost && !cfhost) {
+                try {
+                    const renderUrl = `${renderHost.replace(/\/$/, '')}/javhd/stream/${slug}/${quality}.m3u8?cfhost=${encodeURIComponent(`https://${host}`)}`;
+                    const renderRes = await fetch(renderUrl, { signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined });
+                    if (renderRes.ok) {
+                        const text = await renderRes.text();
+                        if (text && text.includes('#EXTM3U')) {
+                            return new Response(text, {
+                                headers: {
+                                    ...CORS_HEADERS,
+                                    'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                                    'Cache-Control': 'max-age=600, stale-while-revalidate=1200, public'
+                                }
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[JAVHD] Render.com proxy failed, trying local:', e.message);
+                }
+            }
+
+            // Local resolve (works on Render.com, may fail on CF Worker due to 403)
             try {
-                const playlist = await javhd.getM3u8(slug, quality, host, env);
+                const playlist = await javhd.getM3u8(slug, quality, resolveHost, env);
                 return new Response(playlist, {
                     headers: {
                         ...CORS_HEADERS,
