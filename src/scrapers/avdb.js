@@ -199,13 +199,6 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
             }
         });
 
-        // Fallback: Web player direct link
-        streams.push({
-            name: `🌐 [Xem Trực Tiếp] AVDB Web`,
-            title: `${item.name || item.movie_code}\n⚡ Mở trực tiếp trên trình phát web`,
-            externalUrl: `https://upload18.com/play/index/${encodeURIComponent(slug)}`
-        });
-
         return streams;
     } catch (err) {
         console.error(`[AVDB Stream Error] ${id}:`, err.message);

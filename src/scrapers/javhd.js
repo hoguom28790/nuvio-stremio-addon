@@ -477,8 +477,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
             url: `${hostBase}/javhd/stream/${slug}/1080.m3u8`,
             behaviorHints: {
                 notWebReady: false,
-                bingeGroup: 'javhd-1080p',
-                proxyHeaders: proxyHeaders
+                bingeGroup: 'javhd-1080p'
             }
         });
 
@@ -489,8 +488,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
             url: `${hostBase}/javhd/stream/${slug}/720.m3u8`,
             behaviorHints: {
                 notWebReady: false,
-                bingeGroup: 'javhd-720p',
-                proxyHeaders: proxyHeaders
+                bingeGroup: 'javhd-720p'
             }
         });
 
@@ -501,8 +499,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
             url: `${hostBase}/javhd/stream/${slug}/master.m3u8`,
             behaviorHints: {
                 notWebReady: false,
-                bingeGroup: 'javhd-auto',
-                proxyHeaders: proxyHeaders
+                bingeGroup: 'javhd-auto'
             }
         });
 
@@ -516,13 +513,6 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
                 bingeGroup: 'javhd-direct',
                 proxyHeaders: proxyHeaders
             }
-        });
-
-        // 5. Fallback Web Player
-        streams.push({
-            name: '🌐 [Xem Trực Tiếp] JavHD Web',
-            title: `${title}\n⚡ Mở trực tiếp trên web JavHD`,
-            externalUrl: `${BASE_URL}/${slug}.html`
         });
 
         if (streams.length > 0) {

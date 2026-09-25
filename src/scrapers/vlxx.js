@@ -301,14 +301,6 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
     const hostBase = host.includes('://') ? host : `https://${host}`;
     const streams = [];
 
-    // Proxy headers required for smooth playback & seeking
-    const proxyHeaders = {
-        request: {
-            'User-Agent': USER_AGENT,
-            'Referer': `${BASE_URL}/`
-        }
-    };
-
     // Server 1 (Chính - Full HD)
     streams.push({
         name: '🔞 VLXX',
@@ -316,8 +308,7 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
         url: `${hostBase}/vlxx/stream/${vid}/1.m3u8`,
         behaviorHints: {
             notWebReady: false,
-            bingeGroup: 'vlxx-s1',
-            proxyHeaders: proxyHeaders
+            bingeGroup: 'vlxx-s1'
         }
     });
 
@@ -328,16 +319,8 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
         url: `${hostBase}/vlxx/stream/${vid}/2.m3u8`,
         behaviorHints: {
             notWebReady: false,
-            bingeGroup: 'vlxx-s2',
-            proxyHeaders: proxyHeaders
+            bingeGroup: 'vlxx-s2'
         }
-    });
-
-    // Fallback: Web player direct link
-    streams.push({
-        name: '🌐 [Xem Trực Tiếp] VLXX Web',
-        title: `Video #${vid}\n⚡ Mở trực tiếp trên web VLXX`,
-        externalUrl: `${BASE_URL}/video/phim/${vid}/`
     });
 
     return streams;
