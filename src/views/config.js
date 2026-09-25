@@ -1,5 +1,5 @@
 function renderConfigPage(host, initialConfig = {}) {
-    const defaultSources = ['kkphim', 'vsmov', 'hh3d', 'yan', 'stp', 'clbpx', 'nguonc', 'hentaiz', 'javhd', 'vlxx'];
+    const defaultSources = ['kkphim', 'vsmov', 'hh3d', 'yan', 'stp', 'clbpx', 'nguonc'];
     const activeSources = Array.isArray(initialConfig.sources) ? initialConfig.sources : defaultSources;
     const prefCdnChecked = initialConfig.prefCdn !== false ? 'checked' : '';
     const prefProxyChecked = initialConfig.prefProxy !== false ? 'checked' : '';
@@ -727,15 +727,32 @@ function renderConfigPage(host, initialConfig = {}) {
     </div>
   </div>
 
-  <!-- HentaiZ, JavHD & VLXX -->
+  <!-- Thế Giới Khác (18+) -->
   <div class="card" id="card-tgk" style="border-color: rgba(255, 42, 109, 0.3);">
     <div class="cat-header">
       <div class="section-title" style="margin: 0; color: #ff5e8a;">
-        <span>🔞 HentaiZ, JavHD & VLXX</span>
+        <span>🔞 Thế giới khác</span>
       </div>
     </div>
-    <div style="margin-top: 14px;">
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+
+    <!-- Khối khóa mặc định -->
+    <div id="tgk-locked" class="tgk-lock-box">
+      <div style="font-size: 0.9rem; color: #ff8fab; font-weight: 600;">
+        🔒 Mục này đã được khóa bảo vệ. Vui lòng nhập mật mã để mở khóa các nguồn:
+      </div>
+      <div class="tgk-input-group">
+        <input type="password" id="tgk-pass" class="tgk-input" placeholder="Nhập mật mã..." onkeydown="if(event.key==='Enter') unlockTheGioiKhac()">
+        <button type="button" class="tgk-btn-unlock" onclick="unlockTheGioiKhac()">Mở khóa</button>
+      </div>
+    </div>
+
+    <!-- Khối nguồn phim sau khi mở khóa -->
+    <div id="tgk-unlocked" style="display: none; margin-top: 14px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+        <span style="font-size: 0.85rem; color: var(--text-muted);">Đã xác thực thành công. Chọn các nguồn bạn muốn bật:</span>
+        <button type="button" class="btn-text-action" onclick="toggleAllAdultSources()">Chọn tất cả</button>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
         <label class="${sourceClass('hentaiz')}">
           <input type="checkbox" name="source" value="hentaiz" ${sourceChecked('hentaiz')} onchange="updateUI()">
           <span>⚡ HentaiZ (Anime)</span>
@@ -747,6 +764,34 @@ function renderConfigPage(host, initialConfig = {}) {
         <label class="${sourceClass('vlxx')}">
           <input type="checkbox" name="source" value="vlxx" ${sourceChecked('vlxx')} onchange="updateUI()">
           <span>⚡ VLXX (Phim Chọn Lọc)</span>
+        </label>
+        <label class="${sourceClass('avdb_censored')}">
+          <input type="checkbox" name="source" value="avdb_censored" ${sourceChecked('avdb_censored')} onchange="updateUI()">
+          <span>⚡ AVDB (Censored)</span>
+        </label>
+        <label class="${sourceClass('avdb_uncensored')}">
+          <input type="checkbox" name="source" value="avdb_uncensored" ${sourceChecked('avdb_uncensored')} onchange="updateUI()">
+          <span>⚡ AVDB (Uncensored)</span>
+        </label>
+        <label class="${sourceClass('avdb_leaked')}">
+          <input type="checkbox" name="source" value="avdb_leaked" ${sourceChecked('avdb_leaked')} onchange="updateUI()">
+          <span>⚡ AVDB (Uncensored Leaked)</span>
+        </label>
+        <label class="${sourceClass('avdb_amateur')}">
+          <input type="checkbox" name="source" value="avdb_amateur" ${sourceChecked('avdb_amateur')} onchange="updateUI()">
+          <span>⚡ AVDB (Amateur)</span>
+        </label>
+        <label class="${sourceClass('avdb_chinese')}">
+          <input type="checkbox" name="source" value="avdb_chinese" ${sourceChecked('avdb_chinese')} onchange="updateUI()">
+          <span>⚡ AVDB (Chinese AV)</span>
+        </label>
+        <label class="${sourceClass('avdb_hentai')}">
+          <input type="checkbox" name="source" value="avdb_hentai" ${sourceChecked('avdb_hentai')} onchange="updateUI()">
+          <span>⚡ AVDB (Hentai)</span>
+        </label>
+        <label class="${sourceClass('avdb_engsub')}">
+          <input type="checkbox" name="source" value="avdb_engsub" ${sourceChecked('avdb_engsub')} onchange="updateUI()">
+          <span>⚡ AVDB (English Subtitle)</span>
         </label>
       </div>
     </div>
@@ -853,8 +898,6 @@ function renderConfigPage(host, initialConfig = {}) {
       if (lockedDiv) lockedDiv.style.display = 'none';
       if (unlockedDiv) {
         unlockedDiv.style.display = 'block';
-        const cbs = unlockedDiv.querySelectorAll('input[name="source"]');
-        cbs.forEach(cb => cb.checked = true);
       }
       showToast('Đã mở khóa mục Thế Giới Khác!');
       updateUI();
@@ -865,6 +908,13 @@ function renderConfigPage(host, initialConfig = {}) {
         passInput.focus();
       }
     }
+  }
+
+  function toggleAllAdultSources() {
+    const checkboxes = document.querySelectorAll('#tgk-unlocked input[name="source"]');
+    const anyUnchecked = Array.from(checkboxes).some(cb => !cb.checked);
+    checkboxes.forEach(cb => cb.checked = anyUnchecked);
+    updateUI();
   }
 
   function copyManifestUrl() {

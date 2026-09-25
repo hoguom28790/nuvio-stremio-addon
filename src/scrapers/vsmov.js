@@ -125,7 +125,7 @@ async function getMeta(type, id) {
     }
 }
 
-async function getStream(id, type, host = 'hophimaddon.vercel.app') {
+async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.dev') {
     try {
         const parts = id.replace('vsmov:', '').split(':');
         const slug = parts[0];
@@ -168,33 +168,15 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
                     if (embedMatch) {
                         const originHost = embedMatch[1];
                         const videoHash = embedMatch[2];
-                        const masterM3u8Url = `https://${originHost}/stream/${videoHash}/master.m3u8`;
 
                         // Primary stream: Unwrapped through Worker (Stremio Web & Desktop 100% compatible)
                         streams.push({
-                            name: `⚡ [Full HD 1080p] VSMOV • ${serverName}`,
+                            name: `⚡ [CDN Full HD] VSMOV • ${serverName}`,
                             title: `${movieName} - Tập ${epTitle}\n⚡ Định tuyến: VSMOV CDN Tốc Độ Cao (1080p/4K)\n🎞️ Phát mượt mà • Không quảng cáo`,
                             url: `${hostBase}/vsmov/stream/${videoHash}/master.m3u8?origin=${encodeURIComponent(originHost)}`,
                             behaviorHints: {
                                 notWebReady: false,
                                 bingeGroup: `vsmov-${videoHash}`,
-                                proxyHeaders: {
-                                    request: {
-                                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                                        'Referer': 'https://vsmov.com/'
-                                    }
-                                }
-                            }
-                        });
-
-                        // Secondary stream: Direct CDN stream
-                        streams.push({
-                            name: `⚡ [Direct CDN] VSMOV • ${serverName}`,
-                            title: `${movieName} - Tập ${epTitle}\n⚡ Luồng trực tiếp CDN gốc`,
-                            url: masterM3u8Url,
-                            behaviorHints: {
-                                notWebReady: false,
-                                bingeGroup: `vsmov-direct-${videoHash}`,
                                 proxyHeaders: {
                                     request: {
                                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -218,7 +200,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
 /**
  * Proxy M3U8 playlist and unwrap PNG-wrapped segments for VSMOV
  */
-async function getM3u8(originHost, videoHash, host = 'hophimaddon.vercel.app') {
+async function getM3u8(originHost, videoHash, host = 'hophimaddon.hophim-4g6qbubt.workers.dev') {
     const hostBase = host.includes('://') ? host : `https://${host}`;
     const cacheKey = `vsmov:m3u8:${videoHash}:${host}`;
     const cached = cache.get(cacheKey);

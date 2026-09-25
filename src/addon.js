@@ -8,6 +8,7 @@ const clbpx = require('./scrapers/clbpx');
 const hentaiz = require('./scrapers/hentaiz');
 const javhd = require('./scrapers/javhd');
 const vlxx = require('./scrapers/vlxx');
+const avdb = require('./scrapers/avdb');
 const imdb = require('./scrapers/imdb');
 const cache = require('./utils/cache');
 
@@ -45,6 +46,9 @@ const builder = new CustomAddonBuilder(manifest);
 function isSourceEnabled(sourcePrefix, config) {
     if (!config || !config.sources || !Array.isArray(config.sources)) {
         return true; // default enabled for all sources
+    }
+    if (sourcePrefix.startsWith('avdb')) {
+        return config.sources.includes(sourcePrefix) || config.sources.includes('avdb');
     }
     return config.sources.includes(sourcePrefix);
 }
@@ -84,6 +88,10 @@ builder.defineCatalogHandler(async ({ type, id, extra = {}, config = {} }) => {
 
         if (id.startsWith('vlxx-') && isSourceEnabled('vlxx', config)) {
             return { metas: await vlxx.getCatalog(id, type, extra) };
+        }
+
+        if (id.startsWith('avdb-') && isSourceEnabled(id.replace('-', '_'), config)) {
+            return { metas: await avdb.getCatalog(id, type, extra) };
         }
     } catch (e) {
         console.error(`[Catalog Error] ID: ${id}:`, e.message);
@@ -138,6 +146,10 @@ builder.defineMetaHandler(async ({ type, id, config = {} }) => {
             const meta = await vlxx.getMeta(type, id);
             if (meta) return { meta };
         }
+        if (id.startsWith('avdb:')) {
+            const meta = await avdb.getMeta(type, id);
+            if (meta) return { meta };
+        }
     } catch (e) {
         console.error(`[Meta Error] ID: ${id}:`, e.message);
     }
@@ -165,7 +177,7 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
         if (id.startsWith('kkphim:') && isSourceEnabled('kkphim', config)) {
             streams = await kkphim.getStream(id, type);
         } else if (id.startsWith('nguonc:') && isSourceEnabled('nguonc', config)) {
-            streams = await nguonc.getStream(id, type);
+            streams = await nguonc.getStream(id, type, config.host);
         } else if (id.startsWith('vsmov:') && isSourceEnabled('vsmov', config)) {
             streams = await vsmov.getStream(id, type, config.host);
         } else if (id.startsWith('hh3d:') && isSourceEnabled('hh3d', config)) {
@@ -182,6 +194,8 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
             streams = await javhd.getStream(id, type, config.host);
         } else if (id.startsWith('vlxx:')) {
             streams = await vlxx.getStream(id, type, config.host);
+        } else if (id.startsWith('avdb:')) {
+            streams = await avdb.getStream(id, type, config.host);
         } else if (id.startsWith('tt')) {
             if (config.prefImdb !== false) {
                 streams = await imdb.getStream(id, type, config);

@@ -58,6 +58,7 @@ const hentaiz = require('../src/scrapers/hentaiz');
 const javhd = require('../src/scrapers/javhd');
 const vlxx = require('../src/scrapers/vlxx');
 const vsmov = require('../src/scrapers/vsmov');
+const avdb = require('../src/scrapers/avdb');
 
 async function handleResource(req, res, config) {
     const extra = req.params.extra ? qs.parse(req.params.extra) : {};
@@ -66,7 +67,7 @@ async function handleResource(req, res, config) {
     }
     
     // Inject current host into config for dynamic stream URLs
-    config.host = req.headers.host || 'hophimaddon.vercel.app';
+    config.host = req.headers.host || 'hophimaddon.hophim-4g6qbubt.workers.dev';
 
     try {
         const resp = await addonInterface.get(resource, type, id, extra, config);
@@ -379,6 +380,72 @@ app.get('/vsmov/segment.ts', async (req, res) => {
         });
     } catch (err) {
         console.error('[VSMOV Segment Proxy Error]:', err.message);
+        if (!res.headersSent) res.status(502).send('Upstream error');
+    }
+});
+
+// AVDB HLS M3U8 Stream Delivery Route
+app.get('/avdb/stream/:slug.m3u8', async (req, res) => {
+    const { slug } = req.params;
+    const host = req.headers.host || 'hophimaddon.hophim-4g6qbubt.workers.dev';
+    try {
+        const playlist = await avdb.getM3u8(slug, host);
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', '*');
+        res.setHeader('Cache-Control', 'max-age=600, stale-while-revalidate=1200, public');
+        res.send(playlist);
+    } catch (err) {
+        console.error('[AVDB M3U8 Error]:', err.message);
+        res.status(500).send('Error generating playlist');
+    }
+});
+
+// AVDB Segment Proxy Route
+app.get('/avdb/segment.ts', async (req, res) => {
+    const rawUrl = req.query.url;
+    if (!rawUrl) return res.status(400).send('Missing url');
+
+    if (process.env.SEGMENT_PROXY_URL) {
+        const base = process.env.SEGMENT_PROXY_URL.replace(/\/+$/, '');
+        const sep = base.includes('?') ? '&' : '?';
+        return res.redirect(302, `${base}${sep}url=${encodeURIComponent(rawUrl)}`);
+    }
+
+    try {
+        const upstream = await axios.get(rawUrl, {
+            responseType: 'stream',
+            timeout: 15000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Referer': 'https://upload18.org/'
+            }
+        });
+
+        res.setHeader('Content-Type', 'video/mp2t');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', '*');
+        res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400, immutable');
+        res.setHeader('CDN-Cache-Control', 'public, max-age=86400');
+        res.setHeader('Vercel-CDN-Cache-Control', 'public, max-age=86400');
+
+        upstream.data.pipe(res);
+
+        upstream.data.on('error', (err) => {
+            console.error('[AVDB Segment Stream Error]:', err.message);
+            if (!res.headersSent) res.status(502).send('Stream error');
+            else res.end();
+        });
+
+        req.on('close', () => {
+            if (upstream.data && typeof upstream.data.destroy === 'function') {
+                upstream.data.destroy();
+            }
+        });
+    } catch (err) {
+        console.error('[AVDB Segment Proxy Error]:', err.message);
         if (!res.headersSent) res.status(502).send('Upstream error');
     }
 });

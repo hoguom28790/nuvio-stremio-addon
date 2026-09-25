@@ -123,11 +123,11 @@ async function getStream(id, type, config = {}) {
                     const vsId = (type === 'series' && episode)
                         ? `vsmov:${bestMatch.slug}:${season}:${episode}`
                         : `vsmov:${bestMatch.slug}`;
-                    const vsStreams = await vsmov.getStream(vsId, type);
+                    const vsStreams = await vsmov.getStream(vsId, type, config.host);
                     vsStreams.forEach(s => {
-                        if (s.name.includes('[CDN]') && prefCdn) {
+                        if ((s.name.includes('[CDN]') || s.name.includes('[CDN Full HD]')) && prefCdn) {
                             cdnStreams.push(s);
-                        } else if (!s.name.includes('[CDN]') && prefProxy) {
+                        } else if (prefProxy) {
                             proxyStreams.push(s);
                         }
                     });
@@ -156,7 +156,7 @@ async function getStream(id, type, config = {}) {
                     const ncId = (type === 'series' && episode)
                         ? `nguonc:${bestMatch.slug}:${season}:${episode}`
                         : `nguonc:${bestMatch.slug}`;
-                    const ncStreams = await nguonc.getStream(ncId, type);
+                    const ncStreams = await nguonc.getStream(ncId, type, config.host);
                     ncStreams.forEach(s => {
                         if (s.name.includes('[CDN]') && prefCdn) {
                             cdnStreams.push(s);

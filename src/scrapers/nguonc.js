@@ -138,7 +138,7 @@ async function getMeta(type, id) {
 
 }
 
-async function getStream(id, type) {
+async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.dev') {
     try {
         const parts = id.replace('nguonc:', '').split(':');
         const slug = parts[0];
@@ -195,7 +195,7 @@ async function getStream(id, type) {
             } else if (match && matchSource === 'vsmov') {
                 const vsSlug = match.id.replace('vsmov:', '').split(':')[0];
                 const vsId = targetEp ? `vsmov:${vsSlug}:1:${targetEp}` : `vsmov:${vsSlug}`;
-                const directStreams = await vsmov.getStream(vsId, type);
+                const directStreams = await vsmov.getStream(vsId, type, host);
                 directStreams.forEach(s => {
                     streams.push({
                         name: s.name.replace('VSMOV', 'NguonC (CDN HLS)'),

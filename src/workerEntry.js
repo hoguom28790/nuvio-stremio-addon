@@ -5,6 +5,7 @@ const hentaiz = require('./scrapers/hentaiz');
 const javhd = require('./scrapers/javhd');
 const vlxx = require('./scrapers/vlxx');
 const vsmov = require('./scrapers/vsmov');
+const avdb = require('./scrapers/avdb');
 
 function parseConfig(configParam) {
     if (!configParam) return {};
@@ -174,6 +175,11 @@ export default {
             return handleSegmentProxy(url.searchParams.get('url'), 'https://vsmov.com/');
         }
 
+        // 5c. AVDB Segment Proxy
+        if (pathname === '/avdb/segment.ts') {
+            return handleSegmentProxy(url.searchParams.get('url'), 'https://upload18.org/');
+        }
+
         // 6. JavHD M3U8 Stream
         const javhdMatch = pathname.match(/^\/javhd\/stream\/([^/]+)\/([^/]+)\.m3u8$/);
         if (javhdMatch) {
@@ -235,6 +241,24 @@ export default {
             const originHost = url.searchParams.get('origin') || 'v8.streamvsmov.com';
             try {
                 const playlist = await vsmov.getM3u8(originHost, videoHash, host);
+                return new Response(playlist, {
+                    headers: {
+                        ...CORS_HEADERS,
+                        'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                        'Cache-Control': 'max-age=600, stale-while-revalidate=1200, public'
+                    }
+                });
+            } catch (err) {
+                return new Response('Error generating playlist: ' + err.message, { status: 500, headers: CORS_HEADERS });
+            }
+        }
+
+        // 8c. AVDB M3U8 Stream
+        const avdbMatch = pathname.match(/^\/avdb\/stream\/([^/]+)\.m3u8$/);
+        if (avdbMatch) {
+            const slug = decodeURIComponent(avdbMatch[1]);
+            try {
+                const playlist = await avdb.getM3u8(slug, host);
                 return new Response(playlist, {
                     headers: {
                         ...CORS_HEADERS,

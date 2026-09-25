@@ -283,15 +283,81 @@ const vlxxCatalogs = [
     }
 ];
 
-const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs];
+const avdbCatalogs = [
+    {
+        type: "movie",
+        id: "avdb-censored",
+        name: "AVDB Có Che (Censored)",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false }
+        ]
+    },
+    {
+        type: "movie",
+        id: "avdb-uncensored",
+        name: "AVDB Không Che (Uncensored)",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false }
+        ]
+    },
+    {
+        type: "movie",
+        id: "avdb-leaked",
+        name: "AVDB Rò Rỉ (Uncensored Leaked)",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false }
+        ]
+    },
+    {
+        type: "movie",
+        id: "avdb-amateur",
+        name: "AVDB Nghiệp Dư (Amateur)",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false }
+        ]
+    },
+    {
+        type: "movie",
+        id: "avdb-chinese",
+        name: "AVDB Trung Quốc (Chinese AV)",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false }
+        ]
+    },
+    {
+        type: "movie",
+        id: "avdb-hentai",
+        name: "AVDB Hentai",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false }
+        ]
+    },
+    {
+        type: "movie",
+        id: "avdb-engsub",
+        name: "AVDB Phụ Đề Tiếng Anh (English Sub)",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false }
+        ]
+    }
+];
+
+const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs];
 const allCatalogs = [...filteredCatalogs, ...adultCatalogs];
-const allPrefixes = ["tt", "nguonc:", "stp:", "hh3d:", "clbpx:", "vsmov:", "yan:", "kkphim:", "hentaiz:", "javhd:", "vlxx:"];
+const allPrefixes = ["tt", "nguonc:", "stp:", "hh3d:", "clbpx:", "vsmov:", "yan:", "kkphim:", "hentaiz:", "javhd:", "vlxx:", "avdb:"];
 
 const baseManifest = {
     id: "org.hophim.stremio",
     version: "1.4.4",
     name: "Hồ Phim",
-    description: "Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ NguonC, Siêu Tầm Phim, Hoạt Hình 3D, CLB Phim Xưa, VSMOV, YanHH3D, KKPhim, HentaiZ, JavHD, VLXX",
+    description: "Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ NguonC, Siêu Tầm Phim, Hoạt Hình 3D, CLB Phim Xưa, VSMOV, YanHH3D, KKPhim, HentaiZ, JavHD, VLXX, AVDB",
     logo: "https://raw.githubusercontent.com/hoguom28790/nuvio-stremio-addon/master/logo.png",
     resources: [
         "catalog",
@@ -318,12 +384,20 @@ function getManifest(config = {}) {
 
     if (config && Array.isArray(config.sources) && config.sources.length > 0) {
         catalogs = allCatalogs.filter(cat => {
+            if (cat.id.startsWith('avdb-')) {
+                const subKey = cat.id.replace('-', '_');
+                return config.sources.includes(subKey) || config.sources.includes('avdb');
+            }
             const prefix = cat.id.split('-')[0];
             return config.sources.includes(prefix);
         });
         idPrefixes = allPrefixes.filter(p => {
             if (p === 'tt') return true;
-            return config.sources.includes(p.replace(':', ''));
+            const cleanP = p.replace(':', '');
+            if (cleanP === 'avdb') {
+                return config.sources.some(s => s.startsWith('avdb'));
+            }
+            return config.sources.includes(cleanP);
         });
     }
 
