@@ -190,13 +190,13 @@ const avdbCatalogs = [
 
 const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs];
 const allCatalogs = [...filteredCatalogs, ...adultCatalogs];
-const allPrefixes = ["tt", "nguonc:", "stp:", "hh3d:", "clbpx:", "vsmov:", "yan:", "kkphim:", "hentaiz:", "javhd:", "vlxx:", "avdb:"];
+const allPrefixes = ["tt", "nguonc:", "stp:", "hh3d:", "clbpx:", "yan:", "kkphim:", "hentaiz:", "javhd:", "vlxx:", "avdb:"];
 
 const baseManifest = {
     id: "org.hophim.stremio",
     version: "1.4.5",
     name: "Hồ Phim",
-    description: "Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ NguonC, Siêu Tầm Phim, Hoạt Hình 3D, CLB Phim Xưa, VSMOV, YanHH3D, KKPhim",
+    description: "Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ NguonC, Siêu Tầm Phim, Hoạt Hình 3D, CLB Phim Xưa, YanHH3D, KKPhim",
     logo: "https://raw.githubusercontent.com/hoguom28790/nuvio-stremio-addon/master/logo.png",
     resources: [
         "catalog",

@@ -200,13 +200,6 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
             }
         });
 
-        // Fallback: Web player direct link (Required for Cloudflare Worker deployment)
-        streams.push({
-            name: `🌐 [Xem Trực Tiếp] AVDB Web`,
-            title: `${item.name || item.movie_code}\n⚡ Bắt buộc dùng trên Cloudflare Worker`,
-            externalUrl: `https://upload18.com/play/index/${encodeURIComponent(slug)}`
-        });
-
         return streams;
     } catch (err) {
         console.error(`[AVDB Stream Error] ${id}:`, err.message);

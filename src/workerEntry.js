@@ -4,7 +4,6 @@ const { renderConfigPage } = require('./views/config');
 const hentaiz = require('./scrapers/hentaiz');
 const javhd = require('./scrapers/javhd');
 const vlxx = require('./scrapers/vlxx');
-const vsmov = require('./scrapers/vsmov');
 const avdb = require('./scrapers/avdb');
 
 function parseConfig(configParam) {
@@ -172,11 +171,6 @@ export default {
             return handleSegmentProxy(url.searchParams.get('url'), 'https://vlxx.phd/');
         }
 
-        // 5b. VSMOV Segment Unwrapper
-        if (pathname === '/vsmov/segment.ts') {
-            return handleSegmentProxy(url.searchParams.get('url'), 'https://vsmov.com/');
-        }
-
         // 5c. AVDB Segment Proxy
         if (pathname === '/avdb/segment.ts') {
             return handleSegmentProxy(url.searchParams.get('url'), 'https://upload18.org/');
@@ -229,25 +223,6 @@ export default {
                         ...CORS_HEADERS,
                         'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
                         'Cache-Control': 'max-age=1800, public'
-                    }
-                });
-            } catch (err) {
-                return new Response('Error generating playlist: ' + err.message, { status: 500, headers: CORS_HEADERS });
-            }
-        }
-
-        // 8b. VSMOV M3U8 Stream
-        const vsmovMatch = pathname.match(/^\/vsmov\/stream\/([^/]+)\/master\.m3u8$/);
-        if (vsmovMatch) {
-            const videoHash = vsmovMatch[1];
-            const originHost = url.searchParams.get('origin') || 'v8.streamvsmov.com';
-            try {
-                const playlist = await vsmov.getM3u8(originHost, videoHash, host);
-                return new Response(playlist, {
-                    headers: {
-                        ...CORS_HEADERS,
-                        'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
-                        'Cache-Control': 'max-age=600, stale-while-revalidate=1200, public'
                     }
                 });
             } catch (err) {

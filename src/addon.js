@@ -2,7 +2,7 @@ const manifest = require('./manifest');
 
 const kkphim = require('./scrapers/kkphim');
 const nguonc = require('./scrapers/nguonc');
-const vsmov = require('./scrapers/vsmov');
+
 const animation = require('./scrapers/animation');
 const clbpx = require('./scrapers/clbpx');
 const hentaiz = require('./scrapers/hentaiz');
