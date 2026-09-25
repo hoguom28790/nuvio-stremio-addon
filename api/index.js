@@ -59,8 +59,10 @@ const javhd = require('../src/scrapers/javhd');
 const vlxx = require('../src/scrapers/vlxx');
 
 async function handleResource(req, res, config) {
-    const { resource, type, id } = req.params;
     const extra = req.params.extra ? qs.parse(req.params.extra) : {};
+    if (extra && extra.genre && typeof extra.genre === 'string' && /phim\s+18(?:\s+|$)/i.test(extra.genre)) {
+        extra.genre = extra.genre.replace(/phim\s+18(?:\s+|$)/i, 'Phim 18+');
+    }
     
     // Inject current host into config for dynamic stream URLs
     config.host = req.headers.host || 'hophimaddon.vercel.app';

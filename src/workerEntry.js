@@ -253,18 +253,21 @@ export default {
 
             let extra = {};
             if (extraStr) {
+                let searchParams = null;
                 try {
-                    const searchParams = new URLSearchParams(decodeURIComponent(extraStr));
-                    for (const [k, v] of searchParams.entries()) {
-                        extra[k] = v;
-                    }
+                    searchParams = new URLSearchParams(extraStr);
                 } catch (e) {
-                    try {
-                        const searchParams = new URLSearchParams(extraStr);
-                        for (const [k, v] of searchParams.entries()) {
-                            extra[k] = v;
+                    try { searchParams = new URLSearchParams(decodeURIComponent(extraStr)); } catch (err) {}
+                }
+
+                if (searchParams) {
+                    for (const [k, v] of searchParams.entries()) {
+                        let val = v;
+                        if (typeof val === 'string' && /phim\s+18(?:\s+|$)/i.test(val)) {
+                            val = val.replace(/phim\s+18(?:\s+|$)/i, 'Phim 18+');
                         }
-                    } catch (err) {}
+                        extra[k] = val;
+                    }
                 }
             }
 

@@ -15,6 +15,9 @@ const OFFICIAL_GENRES = {
     'Lịch Sử': 'lich-su',
     'Miền Tây': 'mien-tay',
     'Phim 18+': 'phim-18',
+    'Phim 18': 'phim-18',
+    '18+': 'phim-18',
+    '18': 'phim-18',
     'Phim Ngắn': 'phim-ngan',
     'Phiêu Lưu': 'phieu-luu',
     'Thần Thoại': 'than-thoai',
@@ -71,7 +74,7 @@ const OFFICIAL_LISTS = {
 function parseFilter(genreString) {
     if (!genreString || typeof genreString !== 'string') return null;
 
-    const trimmed = genreString.trim();
+    let trimmed = genreString.trim();
 
     // 1. Check "Danh mục: "
     if (trimmed.startsWith('Danh mục:')) {
@@ -86,6 +89,11 @@ function parseFilter(genreString) {
     if (trimmed.startsWith('Thể loại:')) {
         const val = trimmed.replace(/^Thể loại:\s*/, '').trim();
 
+        // 18+ specific check (handles trailing space or missing plus from URL encoding)
+        if (/^phim\s*18(?:\s*|\+|$)/i.test(val) || /^18(?:\s*|\+|$)/.test(val)) {
+            return { filterType: 'genre', slug: 'phim-18', value: 'Phim 18+' };
+        }
+
         // Decade filter (e.g. Thập Niên 80 -> 1980)
         const decadeMatch = val.match(/Thập Niên (\d+)/i);
         if (decadeMatch) {
@@ -99,6 +107,11 @@ function parseFilter(genreString) {
 
         // Subgenres not having official API slugs (e.g. Kiếm Hiệp, Huyền Huyễn, Xuyên Không, Tiên Hiệp)
         return { filterType: 'search', slug: val, value: val };
+    }
+
+    // Direct 18+ check
+    if (/^phim\s*18(?:\s*|\+|$)/i.test(trimmed) || /^18(?:\s*|\+|$)/.test(trimmed)) {
+        return { filterType: 'genre', slug: 'phim-18', value: 'Phim 18+' };
     }
 
     // 3. Check "Quốc gia: "
