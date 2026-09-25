@@ -10,9 +10,11 @@ RUN npm ci --silent
 
 COPY . .
 
+# Build as CommonJS so require('./dist/worker.js') works in Node.js
 RUN npx esbuild src/workerEntry.js \
     --bundle \
     --platform=node \
+    --format=cjs \
     --outfile=dist/worker.js \
     --minify \
     --target=es2022
@@ -34,7 +36,14 @@ RUN npm ci --production --silent
 # Create the HTTP wrapper server
 RUN cat > server.js << 'EOF'
 const http = require('http');
-const worker = require('./dist/worker.js');
+
+// workerEntry.js uses `export default { fetch }` -> esbuild --format=cjs exports it as module.exports.default
+const workerModule = require('./dist/worker.js');
+const worker = workerModule.default || workerModule;
+
+if (typeof worker.fetch !== 'function') {
+  throw new Error('[Fatal] worker.fetch is not a function. Check esbuild output format.');
+}
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -42,14 +51,14 @@ const server = http.createServer(async (req, res) => {
     const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost';
     const url = new URL(req.url, `${protocol}://${host}`);
 
-    const headers = {};
+    const reqHeaders = {};
     for (const [k, v] of Object.entries(req.headers)) {
-      headers[k] = v;
+      reqHeaders[k] = v;
     }
 
     const request = new Request(url.toString(), {
       method: req.method,
-      headers: headers,
+      headers: reqHeaders,
       body: req.method !== 'GET' && req.method !== 'HEAD' ? req : null,
       redirect: 'manual'
     });
