@@ -4,6 +4,7 @@ const { renderConfigPage } = require('./views/config');
 const hentaiz = require('./scrapers/hentaiz');
 const javhd = require('./scrapers/javhd');
 const vlxx = require('./scrapers/vlxx');
+const vsmov = require('./scrapers/vsmov');
 
 function parseConfig(configParam) {
     if (!configParam) return {};
@@ -68,9 +69,16 @@ async function handleSegmentProxy(targetUrl, referer) {
                         combined.set(leftover);
                         combined.set(value, leftover.length);
 
-                        if (combined.length >= 95) {
+                        if (combined.length >= 1024) {
                             if (combined[0] === 0x89 && combined[1] === 0x50 && combined[2] === 0x4E && combined[3] === 0x47) {
-                                controller.enqueue(combined.subarray(95));
+                                let offset = 95;
+                                for (let i = 4; i <= Math.min(combined.length - 376, 2048); i++) {
+                                    if (combined[i] === 0x47 && combined[i + 188] === 0x47 && combined[i + 376] === 0x47) {
+                                        offset = i;
+                                        break;
+                                    }
+                                }
+                                controller.enqueue(combined.subarray(offset));
                             } else {
                                 controller.enqueue(combined);
                             }
@@ -161,6 +169,11 @@ export default {
             return handleSegmentProxy(url.searchParams.get('url'), 'https://vlxx.phd/');
         }
 
+        // 5b. VSMOV Segment Unwrapper
+        if (pathname === '/vsmov/segment.ts') {
+            return handleSegmentProxy(url.searchParams.get('url'), 'https://vsmov.com/');
+        }
+
         // 6. JavHD M3U8 Stream
         const javhdMatch = pathname.match(/^\/javhd\/stream\/([^/]+)\/([^/]+)\.m3u8$/);
         if (javhdMatch) {
@@ -208,6 +221,25 @@ export default {
                         ...CORS_HEADERS,
                         'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
                         'Cache-Control': 'max-age=1800, public'
+                    }
+                });
+            } catch (err) {
+                return new Response('Error generating playlist: ' + err.message, { status: 500, headers: CORS_HEADERS });
+            }
+        }
+
+        // 8b. VSMOV M3U8 Stream
+        const vsmovMatch = pathname.match(/^\/vsmov\/stream\/([^/]+)\/master\.m3u8$/);
+        if (vsmovMatch) {
+            const videoHash = vsmovMatch[1];
+            const originHost = url.searchParams.get('origin') || 'v8.streamvsmov.com';
+            try {
+                const playlist = await vsmov.getM3u8(originHost, videoHash, host);
+                return new Response(playlist, {
+                    headers: {
+                        ...CORS_HEADERS,
+                        'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                        'Cache-Control': 'max-age=600, stale-while-revalidate=1200, public'
                     }
                 });
             } catch (err) {

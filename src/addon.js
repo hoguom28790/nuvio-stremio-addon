@@ -167,7 +167,7 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
         } else if (id.startsWith('nguonc:') && isSourceEnabled('nguonc', config)) {
             streams = await nguonc.getStream(id, type);
         } else if (id.startsWith('vsmov:') && isSourceEnabled('vsmov', config)) {
-            streams = await vsmov.getStream(id, type);
+            streams = await vsmov.getStream(id, type, config.host);
         } else if (id.startsWith('hh3d:') && isSourceEnabled('hh3d', config)) {
             streams = await animation.getStream('hh3d', id, type);
         } else if (id.startsWith('yan:') && isSourceEnabled('yan', config)) {

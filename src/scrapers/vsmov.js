@@ -125,7 +125,7 @@ async function getMeta(type, id) {
     }
 }
 
-async function getStream(id, type) {
+async function getStream(id, type, host = 'hophimaddon.vercel.app') {
     try {
         const parts = id.replace('vsmov:', '').split(':');
         const slug = parts[0];
@@ -138,39 +138,121 @@ async function getStream(id, type) {
         const episodes = res.data?.episodes || [];
         if (episodes.length === 0) return [];
 
-        const cdnStreams = [];
-        const proxyStreams = [];
+        const movieName = res.data?.movie?.name || 'Phim';
+        const hostBase = host.includes('://') ? host : `https://${host}`;
+
+        const streams = [];
 
         episodes.forEach(server => {
-            const serverName = server.server_name || 'VSMOV VIP';
+            const serverName = (server.server_name || 'VSMOV VIP').replace(/[\r\n\t]+/g, ' ').trim();
             const serverData = server.server_data || [];
 
             const targetItem = findEpisode(serverData, targetEp);
 
             if (targetItem) {
+                const epTitle = targetItem.name || 'Full';
+
+                // 1. Direct m3u8 if available
                 if (targetItem.link_m3u8) {
-                    cdnStreams.push({
+                    streams.push({
                         name: `⚡ [CDN] VSMOV • ${serverName}`,
-                        title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n⚡ Định tuyến: CDN Tốc Độ Cao (Direct HLS 4K)\n🎞️ Chất lượng: 4K / Full HD`,
+                        title: `${movieName} - Tập ${epTitle}\n⚡ Định tuyến: CDN Tốc Độ Cao (Direct HLS 4K)\n🎞️ Chất lượng: 4K / Full HD`,
                         url: targetItem.link_m3u8,
                         behaviorHints: { notWebReady: false }
                     });
-                } else if (targetItem.link_embed) {
-                    proxyStreams.push({
-                        name: `🛡️ [Proxy] VSMOV • ${serverName}`,
-                        title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n🛡️ Định tuyến: Máy chủ trung gian (Embed/Proxy)\n📌 Dùng khi các link CDN khác bị nghẽn`,
-                        url: targetItem.link_embed,
-                        behaviorHints: { notWebReady: true }
-                    });
+                }
+
+                // 2. Parse link_embed (format: https://{host}/video/{hash})
+                if (targetItem.link_embed) {
+                    const embedMatch = targetItem.link_embed.match(/https?:\/\/([^\/]+)\/video\/([a-f0-9-]+)/i);
+                    if (embedMatch) {
+                        const originHost = embedMatch[1];
+                        const videoHash = embedMatch[2];
+                        const masterM3u8Url = `https://${originHost}/stream/${videoHash}/master.m3u8`;
+
+                        // Primary stream: Unwrapped through Worker (Stremio Web & Desktop 100% compatible)
+                        streams.push({
+                            name: `⚡ [Full HD 1080p] VSMOV • ${serverName}`,
+                            title: `${movieName} - Tập ${epTitle}\n⚡ Định tuyến: VSMOV CDN Tốc Độ Cao (1080p/4K)\n🎞️ Phát mượt mà • Không quảng cáo`,
+                            url: `${hostBase}/vsmov/stream/${videoHash}/master.m3u8?origin=${encodeURIComponent(originHost)}`,
+                            behaviorHints: {
+                                notWebReady: false,
+                                bingeGroup: `vsmov-${videoHash}`,
+                                proxyHeaders: {
+                                    request: {
+                                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                                        'Referer': 'https://vsmov.com/'
+                                    }
+                                }
+                            }
+                        });
+
+                        // Secondary stream: Direct CDN stream
+                        streams.push({
+                            name: `⚡ [Direct CDN] VSMOV • ${serverName}`,
+                            title: `${movieName} - Tập ${epTitle}\n⚡ Luồng trực tiếp CDN gốc`,
+                            url: masterM3u8Url,
+                            behaviorHints: {
+                                notWebReady: false,
+                                bingeGroup: `vsmov-direct-${videoHash}`,
+                                proxyHeaders: {
+                                    request: {
+                                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                                        'Referer': 'https://vsmov.com/'
+                                    }
+                                }
+                            }
+                        });
+                    }
                 }
             }
         });
 
-        return [...cdnStreams, ...proxyStreams];
+        return streams;
     } catch (err) {
         console.error('[VSMOV Stream Error]:', err.message);
         return [];
     }
 }
 
-module.exports = { getCatalog, getMeta, getStream };
+/**
+ * Proxy M3U8 playlist and unwrap PNG-wrapped segments for VSMOV
+ */
+async function getM3u8(originHost, videoHash, host = 'hophimaddon.vercel.app') {
+    const hostBase = host.includes('://') ? host : `https://${host}`;
+    const cacheKey = `vsmov:m3u8:${videoHash}:${host}`;
+    const cached = cache.get(cacheKey);
+    if (cached) return cached;
+
+    const masterUrl = `https://${originHost}/stream/${videoHash}/master.m3u8`;
+    const res = await axios.get(masterUrl, {
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': 'https://vsmov.com/'
+        },
+        timeout: 10000
+    });
+
+    let content = res.data;
+    if (typeof content === 'string') {
+        const rawProxy = process.env.SEGMENT_PROXY_URL;
+        const segmentBase = rawProxy ? rawProxy.replace(/\/+$/, '') : `${hostBase}/vsmov/segment.ts`;
+        const separator = segmentBase.includes('?') ? '&' : '?';
+        const lines = content.split('\n');
+        const rewritten = lines.map(line => {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+                return `${segmentBase}${separator}url=${encodeURIComponent(trimmed)}`;
+            }
+            return line;
+        });
+        content = rewritten.join('\n');
+    }
+
+    if (content) {
+        cache.set(cacheKey, content, 900); // 15 mins cache
+    }
+    return content;
+}
+
+module.exports = { getCatalog, getMeta, getStream, getM3u8 };
