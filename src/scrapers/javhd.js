@@ -530,7 +530,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
 /**
  * Proxy M3U8 content and unwrap segments
  */
-async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbubt.workers.dev') {
+async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbubt.workers.dev', env = {}) {
     await ensureStaticCatalog();
     const hostBase = host.includes('://') ? host : `https://${host}`;
     const cacheKey = `javhd:m3u8:${slug}:${quality}:${host}`;
@@ -572,27 +572,60 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
     }
 
     let content = '';
+    const fetchHeaders = {
+        'Referer': `${BASE_URL}/`,
+        'User-Agent': USER_AGENT
+    };
+
+    // 1. Thử tải trực tiếp
     if (typeof fetch !== 'undefined') {
-        const res = await fetch(targetM3u8Url, {
-            headers: {
-                'Referer': `${BASE_URL}/`,
-                'User-Agent': USER_AGENT
-            },
-            referrer: `${BASE_URL}/`,
-            referrerPolicy: 'unsafe-url'
-        });
-        if (!res.ok) {
-            throw new Error(`Failed to fetch m3u8 playlist: ${res.status}`);
-        }
-        content = await res.text();
-    } else {
-        const m3u8Res = await client.get(targetM3u8Url, {
-            headers: {
-                'Referer': `${BASE_URL}/`,
-                'User-Agent': USER_AGENT
+        try {
+            const res = await fetch(targetM3u8Url, {
+                headers: fetchHeaders,
+                referrer: `${BASE_URL}/`,
+                referrerPolicy: 'unsafe-url'
+            });
+            if (res.ok) {
+                const text = await res.text();
+                if (text && text.includes('#EXTM3U')) {
+                    content = text;
+                }
             }
-        });
-        content = m3u8Res.data;
+        } catch (e) {
+            console.warn('[JavHD] Direct fetch failed, fallback to GAS resolver...');
+        }
+    } else {
+        try {
+            const m3u8Res = await client.get(targetM3u8Url, {
+                headers: fetchHeaders
+            });
+            if (m3u8Res && m3u8Res.data && String(m3u8Res.data).includes('#EXTM3U')) {
+                content = m3u8Res.data;
+            }
+        } catch (e) {}
+    }
+
+    // 2. Nếu fetch trực tiếp bị 403 (do Cloudflare Worker IP bị CDN chặn) -> Dùng Google Apps Script Resolver
+    if (!content || !content.includes('#EXTM3U')) {
+        const gasUrl = (env && env.GAS_PROXY_URL) || (typeof process !== 'undefined' && process.env && process.env.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.GAS_PROXY_URL);
+        if (gasUrl) {
+            try {
+                const proxyTarget = `${gasUrl}?url=${encodeURIComponent(targetM3u8Url)}&referer=${encodeURIComponent(BASE_URL + '/')}`;
+                const gasRes = await fetch(proxyTarget);
+                if (gasRes.ok) {
+                    const text = await gasRes.text();
+                    if (text && text.includes('#EXTM3U')) {
+                        content = text;
+                    }
+                }
+            } catch (err) {
+                console.error('[JavHD] GAS Resolver error:', err.message);
+            }
+        }
+    }
+
+    if (!content || !content.includes('#EXTM3U')) {
+        throw new Error('Chưa thể tải M3U8 từ JavHD (403 Forbidden). Hãy cài đặt biến môi trường GAS_PROXY_URL trên Cloudflare Worker theo hướng dẫn trong scripts/gas_proxy.js');
     }
 
     if (typeof content === 'string') {

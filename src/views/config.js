@@ -1,5 +1,5 @@
 function renderConfigPage(host, initialConfig = {}) {
-    const defaultSources = ['kkphim', 'vsmov', 'hh3d', 'yan', 'stp', 'clbpx', 'nguonc'];
+    const defaultSources = ['kkphim', 'hh3d', 'yan', 'stp', 'clbpx', 'nguonc'];
     const activeSources = Array.isArray(initialConfig.sources) ? initialConfig.sources : defaultSources;
     const prefCdnChecked = initialConfig.prefCdn !== false ? 'checked' : '';
     const prefProxyChecked = initialConfig.prefProxy !== false ? 'checked' : '';
@@ -629,7 +629,7 @@ function renderConfigPage(host, initialConfig = {}) {
   <div class="hero">
     <h1>Hồ Phim - Stremio & Nuvio</h1>
     <p class="subtitle">
-      Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ NguonC, Siêu Tầm Phim, Hoạt Hình 3D, CLB Phim Xưa, VSMOV, YanHH3D, KKPhim.
+      Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ NguonC, Siêu Tầm Phim, Hoạt Hình 3D, CLB Phim Xưa, YanHH3D, KKPhim.
     </p>
     <div class="badge-bar">
       <span class="pill-tag">⚡ CDN Tốc Độ Cao</span>
@@ -704,10 +704,6 @@ function renderConfigPage(host, initialConfig = {}) {
       <label class="${sourceClass('kkphim')}">
         <input type="checkbox" name="source" value="kkphim" ${sourceChecked('kkphim')} onchange="updateUI()">
         <span>⚡ KKPhim (Phim Lẻ & Bộ)</span>
-      </label>
-      <label class="${sourceClass('vsmov')}">
-        <input type="checkbox" name="source" value="vsmov" ${sourceChecked('vsmov')} onchange="updateUI()">
-        <span>⚡ VSMOV (Phim 4K VIP)</span>
       </label>
       <label class="${sourceClass('hh3d')}">
         <input type="checkbox" name="source" value="hh3d" ${sourceChecked('hh3d')} onchange="updateUI()">

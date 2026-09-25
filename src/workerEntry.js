@@ -181,7 +181,7 @@ export default {
         if (javhdMatch) {
             const [, slug, quality] = javhdMatch;
             try {
-                const playlist = await javhd.getM3u8(slug, quality, host);
+                const playlist = await javhd.getM3u8(slug, quality, host, env);
                 return new Response(playlist, {
                     headers: {
                         ...CORS_HEADERS,
