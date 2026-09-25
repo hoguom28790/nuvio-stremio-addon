@@ -470,16 +470,11 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
 
         const streams = [];
 
-        // Direct CDN Stream for Stremio Desktop & Nuvio
+        // Fallback: Web player direct link (Required for Cloudflare Worker deployment)
         streams.push({
-            name: '🔞 JavHD',
-            title: `[Full HD 1080p] ${title}\n⚡ Luồng Trực Tiếp CDN • Nhanh & Mượt (Nuvio/Desktop)`,
-            url: direct1080,
-            behaviorHints: {
-                notWebReady: false,
-                bingeGroup: 'javhd-direct',
-                proxyHeaders: proxyHeaders
-            }
+            name: `🌐 [Xem Trực Tiếp] JavHD Web`,
+            title: `${title}\n⚡ Bắt buộc dùng trên Cloudflare Worker`,
+            externalUrl: `https://javhdz.bz/phim/${slug}.html`
         });
 
         if (streams.length > 0) {
