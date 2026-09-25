@@ -189,14 +189,22 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
         const streams = [];
 
         // Primary stream: Unwrapped / proxied via worker (with CORS headers & Referer)
+        // Note: This proxy only works if the addon is deployed to Vercel/Render, NOT Cloudflare Worker.
         streams.push({
             name: `⚡ [Full HD] AVDB • ${typeName}`,
-            title: `${item.name || item.movie_code}\n⚡ Định tuyến: AVDB Tốc Độ Cao (1080p)\n🎞️ Phát mượt mà • Không giật lag`,
+            title: `${item.name || item.movie_code}\n⚡ Định tuyến proxy (Chỉ hoạt động trên Vercel)`,
             url: `${hostBase}/avdb/stream/${encodeURIComponent(slug)}.m3u8`,
             behaviorHints: {
                 notWebReady: false,
                 bingeGroup: `avdb-${slug}`
             }
+        });
+
+        // Fallback: Web player direct link (Required for Cloudflare Worker deployment)
+        streams.push({
+            name: `🌐 [Xem Trực Tiếp] AVDB Web`,
+            title: `${item.name || item.movie_code}\n⚡ Bắt buộc dùng trên Cloudflare Worker`,
+            externalUrl: `https://upload18.com/play/index/${encodeURIComponent(slug)}`
         });
 
         return streams;

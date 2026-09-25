@@ -470,43 +470,10 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
 
         const streams = [];
 
-        // 1. Full HD 1080p
+        // Direct CDN Stream for Stremio Desktop & Nuvio
         streams.push({
             name: '🔞 JavHD',
-            title: `[Full HD 1080p] ${title}\n⚡ Siêu Nét 1080p • Phát Mượt Mà • Tua Tức Thì`,
-            url: `${hostBase}/javhd/stream/${slug}/1080.m3u8`,
-            behaviorHints: {
-                notWebReady: false,
-                bingeGroup: 'javhd-1080p'
-            }
-        });
-
-        // 2. HD 720p
-        streams.push({
-            name: '🔞 JavHD',
-            title: `[HD 720p] ${title}\n⚡ Tốc Độ Cao • Tua Nhanh Mượt Mà`,
-            url: `${hostBase}/javhd/stream/${slug}/720.m3u8`,
-            behaviorHints: {
-                notWebReady: false,
-                bingeGroup: 'javhd-720p'
-            }
-        });
-
-        // 3. Tự Động Auto
-        streams.push({
-            name: '🔞 JavHD',
-            title: `[Tự Động Auto] ${title}\n⚡ Đa Độ Phân Giải Thích Ứng (1080p/720p/480p)`,
-            url: `${hostBase}/javhd/stream/${slug}/master.m3u8`,
-            behaviorHints: {
-                notWebReady: false,
-                bingeGroup: 'javhd-auto'
-            }
-        });
-
-        // 4. Direct CDN
-        streams.push({
-            name: '🔞 JavHD [Direct]',
-            title: `[Direct CDN] ${title}\n⚡ Luồng Trực Tiếp CDN`,
+            title: `[Full HD 1080p] ${title}\n⚡ Luồng Trực Tiếp CDN • Nhanh & Mượt (Nuvio/Desktop)`,
             url: direct1080,
             behaviorHints: {
                 notWebReady: false,
