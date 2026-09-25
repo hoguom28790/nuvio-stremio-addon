@@ -188,17 +188,36 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
         const typeName = item.type_name || '1080p';
         const streams = [];
 
-        // Primary stream: Unwrapped / proxied via worker (with CORS headers & Referer)
-        // Note: This proxy only works if the addon is deployed to Vercel/Render, NOT Cloudflare Worker.
-        streams.push({
-            name: `⚡ [Full HD] AVDB • ${typeName}`,
-            title: `${item.name || item.movie_code}\n⚡ Định tuyến proxy (Chỉ hoạt động trên Vercel)`,
-            url: `${hostBase}/avdb/stream/${encodeURIComponent(slug)}.m3u8`,
-            behaviorHints: {
-                notWebReady: false,
-                bingeGroup: `avdb-${slug}`
+        // Since Cloudflare Worker is blocked by upload18.com (Error 1020),
+        // we use the 18plusok Vercel addon as a backend extractor.
+        const extractorUrl = `https://18plusok.vercel.app/eyJoaWRlRnJvbUhvbWUiOnRydWV9/stream/movie/avdb:${encodeURIComponent(rawId)}.json`;
+        let directUrl = null;
+        try {
+            const extRes = await axios.get(extractorUrl, { timeout: 10000 });
+            if (extRes.data && extRes.data.streams && extRes.data.streams.length > 0) {
+                directUrl = extRes.data.streams[0].url;
             }
-        });
+        } catch (e) {
+            console.error('[AVDB] Extractor failed:', e.message);
+        }
+
+        if (directUrl) {
+            streams.push({
+                name: `⚡ [Full HD] AVDB • ${typeName}`,
+                title: `${item.name || item.movie_code}\n⚡ Luồng Trực Tiếp CDN • Nhanh & Mượt (Nuvio/Desktop)`,
+                url: directUrl,
+                behaviorHints: {
+                    notWebReady: false,
+                    bingeGroup: `avdb-${slug}`,
+                    proxyHeaders: {
+                        request: {
+                            'Referer': 'https://upload18.org/',
+                            'User-Agent': USER_AGENT
+                        }
+                    }
+                }
+            });
+        }
 
         return streams;
     } catch (err) {
