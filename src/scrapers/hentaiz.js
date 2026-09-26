@@ -806,19 +806,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
             });
         }
 
-        // 3. Direct CDN Master (Tự Động Đa Độ Phân Giải HLS)
-        streams.push({
-            name: '🔞 HentaiZ',
-            title: `[Tự Động Auto] ${cleanTitle}\n⚡ Đa độ phân giải thích ứng (1080p/720p/480p)`,
-            url: `${cdnDomain}/${videoId}/master.m3u8`,
-            behaviorHints: {
-                notWebReady: true,
-                bingeGroup: 'hentaiz-auto',
-                proxyHeaders: proxyHeaders
-            }
-        });
-
-        // 4. Server Reconstructed Stream (Backup route)
+        // 3. Server Reconstructed Stream (Backup route)
         streams.push({
             name: '🔞 HentaiZ [Dự phòng]',
             title: `[Server Proxy] ${cleanTitle}\n⚡ Tuyến dự phòng định tuyến máy chủ`,
