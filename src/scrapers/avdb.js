@@ -203,21 +203,10 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
         }
 
         if (directUrl) {
-            // 1. Proxy stream: plays smoothly on ALL platforms (Web, iOS, LG TV, Android TV, Desktop)
-            streams.push({
-                name: `⚡ [Full HD] AVDB • ${typeName}`,
-                title: `${item.name || item.movie_code}\n⚡ Máy Chủ Proxy • Mọi Nền Tảng (Web, TV, App)`,
-                url: `${hostBase}/avdb/stream/${encodeURIComponent(slug)}.m3u8?direct=${encodeURIComponent(directUrl)}`,
-                behaviorHints: {
-                    notWebReady: false,
-                    bingeGroup: `avdb-proxy-${slug}`
-                }
-            });
-
-            // 2. Direct CDN: plays on players that send proxyHeaders (Nuvio TV Box, Desktop)
+            // Duy nhất luồng [Direct CDN] AVDB hoạt động mượt mà
             streams.push({
                 name: `⚡ [Direct CDN] AVDB • ${typeName}`,
-                title: `${item.name || item.movie_code}\n⚡ Luồng Trực Tiếp CDN • Nhanh & Mượt (Nuvio TV/Desktop)`,
+                title: `${item.name || item.movie_code}\n⚡ Luồng Trực Tiếp CDN • Nhanh & Mượt`,
                 url: directUrl,
                 behaviorHints: {
                     notWebReady: false,
