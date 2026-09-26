@@ -121,7 +121,8 @@ export default {
         const url = new URL(request.url);
         const host = url.host;
         const pathname = url.pathname;
-        const isAlreadyOnRender = host.includes('onrender.com') || host.includes('render.com');
+        const isNodeServer = typeof process !== 'undefined' && process.release && process.release.name === 'node';
+        const isAlreadyOnRender = isNodeServer || host.includes('onrender.com') || host.includes('render.com') || host.includes('localhost') || host.includes('127.0.0.1');
         const RENDER_HOST = 'https://nuvio-stremio-addon-1.onrender.com';
 
         // 1. Static / Favicon / Logo
@@ -413,8 +414,8 @@ export default {
             // Delegate JavHD requests (catalog, meta, stream) to Render.com when running on Cloudflare Worker
             // This is required because javhdz.bz blocks Cloudflare Workers with anti-bot/WAF,
             // while Render.com has full access to the entire live catalog, search, metadata, and streams.
-            const isJavhdRequest = (resource === 'catalog' && id && (id.startsWith('javhd-') || id.startsWith('javhdmov-'))) ||
-                                   ((resource === 'meta' || resource === 'stream') && id && (id.startsWith('javhd:') || id.startsWith('javhdmov:')));
+            const isJavhdRequest = (resource === 'catalog' && id && id.startsWith('javhd-')) ||
+                                   ((resource === 'meta' || resource === 'stream') && id && id.startsWith('javhd:'));
 
             if (!isAlreadyOnRender && RENDER_HOST && isJavhdRequest) {
                 try {
