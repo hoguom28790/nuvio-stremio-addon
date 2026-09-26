@@ -122,6 +122,13 @@ export default {
         const pathname = url.pathname;
 
         // 1. Static / Favicon / Logo
+        // 0. Keepalive ping endpoint (used by GitHub Actions cron to prevent Render.com from sleeping)
+        if (pathname === '/ping') {
+            return new Response(JSON.stringify({ status: 'ok', ts: Date.now() }), {
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+            });
+        }
+
         if (pathname === '/logo.png') {
             return Response.redirect('https://raw.githubusercontent.com/hoguom28790/nuvio-stremio-addon/master/logo.png', 302);
         }
