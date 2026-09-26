@@ -132,6 +132,11 @@ export default {
             try { ctx.waitUntil(fetch(`${RENDER_HOST}/ping`).catch(() => {})); } catch (e) {}
         }
 
+        // Initialize GAS proxy URL from environment (Cloudflare Worker env vars)
+        if (env && env.KKPHIM_GAS_PROXY_URL) {
+            kkphim.setGasProxyUrl(env.KKPHIM_GAS_PROXY_URL);
+        }
+
         // 1. Static / Favicon / Logo
         // 0. Keepalive ping endpoint (used by GitHub Actions cron to prevent Render.com from sleeping)
         if (pathname === '/ping') {
@@ -374,9 +379,16 @@ export default {
             } catch (err) {
                 console.warn('[KKPhim Clean M3U8 Error]:', err.message);
             }
-            // Auto-fallback: If upstream CDN blocks datacenter worker IP with 404, redirect client directly to upstream CDN URL
-            // Client device has residential IP and will play directly without error
-            return Response.redirect(targetUrl, 302);
+            // Auto-fallback: If upstream CDN blocks datacenter worker IP, redirect client directly to upstream CDN URL
+            // Client device has residential IP and will play directly without error.
+            // MUST include CORS headers on 302 so Stremio Web (browser) can follow the cross-origin redirect.
+            return new Response(null, {
+                status: 302,
+                headers: {
+                    ...CORS_HEADERS,
+                    'Location': targetUrl
+                }
+            });
         }
 
         // 9. Debug routes

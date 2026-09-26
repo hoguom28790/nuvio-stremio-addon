@@ -5,9 +5,17 @@ const axios = require('axios');
 const addonInterface = require('../src/addon');
 const { getManifest } = require('../src/manifest');
 const { renderConfigPage } = require('../src/views/config');
+const kkphim = require('../src/scrapers/kkphim');
 
 const app = express();
 app.use(cors());
+
+// Initialize GAS proxy URL from environment on startup (for Render.com)
+if (process.env.KKPHIM_GAS_PROXY_URL) {
+    kkphim.setGasProxyUrl(process.env.KKPHIM_GAS_PROXY_URL);
+    console.log('[KKPhim] GAS Proxy URL configured:', process.env.KKPHIM_GAS_PROXY_URL.slice(0, 60) + '...');
+}
+
 
 // Parse Base64 config helper
 function parseConfig(configParam) {
@@ -376,6 +384,10 @@ app.get('/kkphim/clean.m3u8', async (req, res) => {
         console.error('[KKPhim Clean M3U8 Error]:', err.message);
     }
     // Auto-fallback: redirect directly to upstream targetUrl
+    // MUST include CORS headers so Stremio Web (browser) can follow the cross-origin redirect
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.set('Access-Control-Allow-Headers', '*');
     return res.redirect(302, targetUrl);
 });
 

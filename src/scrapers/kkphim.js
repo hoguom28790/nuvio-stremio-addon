@@ -6,6 +6,17 @@ const { findEpisode } = require('../utils/episodeHelper');
 const BASE_URL = 'https://phimapi.com';
 const CDN_URL = 'https://phimimg.com';
 
+// Google Apps Script URL for M3U8 proxy (fetches from CDN & filters ads).
+// Google IPs are not blocked by KKPhim CDN, so this enables actual ad filtering.
+// Set via environment variable: KKPHIM_GAS_PROXY_URL
+// Without this, [Lọc QC] stream falls back via 302 to original CDN (video plays with ads).
+let GAS_PROXY_URL = (typeof process !== 'undefined' && process.env && process.env.KKPHIM_GAS_PROXY_URL) || '';
+
+function setGasProxyUrl(url) {
+    GAS_PROXY_URL = url || '';
+}
+
+
 function formatPoster(path, cdnDomain = CDN_URL) {
     if (!path) return '';
     if (path.startsWith('http://') || path.startsWith('https://')) return path;
@@ -294,17 +305,30 @@ async function getStream(id, type, host = '') {
                     }
                 });
 
-                // Stream 2: Lọc Quảng Cáo (Khử sạch QC 15:00 & 3:00 - Có auto-fallback sang link gốc nếu CDN chặn)
-                if (hostBase) {
+                // Stream 2: Lọc Quảng Cáo
+                // - Nếu có KKPHIM_GAS_PROXY_URL: dùng Google Apps Script proxy → lọc thật sự (Google IPs không bị CDN chặn)
+                // - Nếu không có GAS: dùng server clean endpoint với 302 CORS fallback → phim phát được nhưng có QC
+                let cleanUrl;
+                if (GAS_PROXY_URL) {
+                    // GAS proxy: Google IPs → CDN không chặn → lọc thành công
+                    cleanUrl = `${GAS_PROXY_URL}?url=${encodeURIComponent(targetItem.link_m3u8)}`;
+                } else if (hostBase) {
+                    // Server clean endpoint (CF Worker hoặc Render.com) với 302+CORS fallback
+                    cleanUrl = `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(targetItem.link_m3u8)}`;
+                }
+
+                if (cleanUrl) {
+                    const gasLabel = GAS_PROXY_URL ? ' ✅' : '';
                     streams.push({
-                        name: `🛡️ [CDN] KKPhim • ${serverName} [Lọc QC]`,
-                        title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n🛡️ Định tuyến: Khử đoạn quảng cáo 15:00 & 3:00 (Auto-fallback nếu CDN chặn)\n🎞️ Độ phân giải: 1080p Full HD • Vietsub`,
-                        url: `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(targetItem.link_m3u8)}`,
+                        name: `🛡️ [CDN] KKPhim • ${serverName} [Lọc QC${gasLabel}]`,
+                        title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n🛡️ Khử QC 15:00 & 3:00${GAS_PROXY_URL ? ' (GAS — lọc thật sự)' : ' (Auto-fallback về gốc nếu CDN chặn)'}\n🎞️ 1080p Full HD • Vietsub`,
+                        url: cleanUrl,
                         behaviorHints: {
                             notWebReady: false
                         }
                     });
                 }
+
             }
         });
 
@@ -315,5 +339,6 @@ async function getStream(id, type, host = '') {
     }
 }
 
-module.exports = { getCatalog, getMeta, getStream, getCleanM3u8, formatPoster };
+module.exports = { getCatalog, getMeta, getStream, getCleanM3u8, setGasProxyUrl, formatPoster };
+
 
