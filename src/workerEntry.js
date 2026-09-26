@@ -377,10 +377,20 @@ export default {
         // 9. Debug routes
         if (pathname === '/debug/test-render') {
             const target = url.searchParams.get('url') || `${RENDER_HOST}/catalog/movie/javhd-latest/genre=${encodeURIComponent('Thịnh Hành')}.json`;
+            const customReferer = url.searchParams.get('referer');
+            const customUa = url.searchParams.get('ua');
+            const customOrigin = url.searchParams.get('origin');
+            const reqHeaders = {
+                'User-Agent': customUa || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': '*/*'
+            };
+            if (customReferer) reqHeaders['Referer'] = customReferer;
+            if (customOrigin) reqHeaders['Origin'] = customOrigin;
+
             try {
                 const t0 = Date.now();
                 const res = await fetch(target, {
-                    headers: { 'Accept': 'application/json', 'User-Agent': 'Stremio/4.4' },
+                    headers: reqHeaders,
                     signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined
                 });
                 const elapsed = Date.now() - t0;
@@ -391,7 +401,8 @@ export default {
                     ok: res.ok,
                     elapsedMs: elapsed,
                     bodyLength: text.length,
-                    sample: text.substring(0, 300)
+                    headers: Object.fromEntries(res.headers.entries()),
+                    body: text
                 }, null, 2), {
                     headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
                 });

@@ -419,6 +419,41 @@ app.get('/debug/hentaiz', async (req, res) => {
     });
 });
 
+app.get('/debug/fetch', async (req, res) => {
+    const target = req.query.url;
+    if (!target) return res.status(400).json({ error: 'Missing url query param' });
+    const customReferer = req.query.referer;
+    const customUa = req.query.ua;
+    const customOrigin = req.query.origin;
+    const reqHeaders = {
+        'User-Agent': customUa || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': '*/*'
+    };
+    if (customReferer) reqHeaders['Referer'] = customReferer;
+    if (customOrigin) reqHeaders['Origin'] = customOrigin;
+
+    try {
+        const t0 = Date.now();
+        const r = await fetch(target, {
+            headers: reqHeaders,
+            signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined
+        });
+        const elapsed = Date.now() - t0;
+        const text = await r.text();
+        res.json({
+            target,
+            status: r.status,
+            ok: r.ok,
+            elapsedMs: elapsed,
+            bodyLength: text.length,
+            headers: Object.fromEntries(r.headers.entries()),
+            body: text
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Configured Resource routes
 app.get('/:config/:resource(catalog|stream|meta|subtitles)/:type/:id/:extra?.json', (req, res) => {
     const config = parseConfig(req.params.config);
