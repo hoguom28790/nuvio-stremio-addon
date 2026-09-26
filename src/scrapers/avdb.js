@@ -3,6 +3,7 @@ const cache = require('../utils/cache');
 
 const BASE_URL = 'https://avdbapi.com/api.php/provide/vod';
 const EMBED_BASE = 'https://upload18.org/play/index';
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const TYPE_MAPPING = {
     'avdb-censored': 1,
@@ -202,13 +203,25 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
         }
 
         if (directUrl) {
+            // 1. Proxy stream: plays smoothly on ALL platforms (Web, iOS, LG TV, Android TV, Desktop)
             streams.push({
                 name: `⚡ [Full HD] AVDB • ${typeName}`,
-                title: `${item.name || item.movie_code}\n⚡ Luồng Trực Tiếp CDN • Nhanh & Mượt (Nuvio/Desktop)`,
+                title: `${item.name || item.movie_code}\n⚡ Máy Chủ Proxy • Mọi Nền Tảng (Web, TV, App)`,
+                url: `${hostBase}/avdb/stream/${encodeURIComponent(slug)}.m3u8?direct=${encodeURIComponent(directUrl)}`,
+                behaviorHints: {
+                    notWebReady: false,
+                    bingeGroup: `avdb-proxy-${slug}`
+                }
+            });
+
+            // 2. Direct CDN: plays on players that send proxyHeaders (Nuvio TV Box, Desktop)
+            streams.push({
+                name: `⚡ [Direct CDN] AVDB • ${typeName}`,
+                title: `${item.name || item.movie_code}\n⚡ Luồng Trực Tiếp CDN • Nhanh & Mượt (Nuvio TV/Desktop)`,
                 url: directUrl,
                 behaviorHints: {
                     notWebReady: false,
-                    bingeGroup: `avdb-${slug}`,
+                    bingeGroup: `avdb-direct-${slug}`,
                     proxyHeaders: {
                         request: {
                             'Referer': 'https://upload18.org/',
@@ -226,39 +239,57 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
     }
 }
 
-async function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev') {
+async function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', directUrl = null) {
     const hostBase = host.includes('://') ? host : `https://${host}`;
     const cacheKey = `avdb:m3u8:${slug}:${host}`;
     const cached = cache.get(cacheKey);
     if (cached) return cached;
 
-    const embedUrls = [
-        `https://upload18.com/play/index/${slug}`,
-        `https://upload18.org/play/index/${slug}`
-    ];
+    let content = null;
 
-    let html = null;
-    let lastErr = null;
-    for (const url of embedUrls) {
+    // 1. If directUrl was provided
+    if (directUrl) {
         try {
-            html = await fetchText(url);
-            if (html && html.includes('"m3u8"')) break;
+            content = await fetchText(directUrl, 'https://upload18.org/');
         } catch (e) {
-            lastErr = e;
+            console.warn('[AVDB] Direct fetch failed:', e.message);
         }
     }
 
-    if (!html || !html.includes('"m3u8"')) {
-        throw new Error(`m3u8 link not found in embed player HTML (${lastErr?.message || 'unknown error'})`);
+    // 2. Fallback: extract from 18plusok
+    if (!content) {
+        try {
+            const extRes = await axios.get(`https://18plusok.vercel.app/eyJoaWRlRnJvbUhvbWUiOnRydWV9/stream/movie/avdb:${encodeURIComponent(slug)}.json`, { timeout: 10000 });
+            if (extRes.data?.streams?.[0]?.url) {
+                content = await fetchText(extRes.data.streams[0].url, 'https://upload18.org/');
+            }
+        } catch (e) {}
     }
 
-    const match = html.match(/"m3u8":\s*"([^"]+)"/);
-    if (!match) {
+    // 3. Fallback: embed HTML scraping
+    if (!content) {
+        const embedUrls = [
+            `https://upload18.com/play/index/${slug}`,
+            `https://upload18.org/play/index/${slug}`
+        ];
+        for (const url of embedUrls) {
+            try {
+                const html = await fetchText(url);
+                if (html && html.includes('"m3u8"')) {
+                    const match = html.match(/"m3u8":\s*"([^"]+)"/);
+                    if (match) {
+                        const m3u8Url = JSON.parse(`"${match[1]}"`);
+                        content = await fetchText(m3u8Url, 'https://upload18.org/');
+                        if (content) break;
+                    }
+                }
+            } catch (e) {}
+        }
+    }
+
+    if (!content) {
         throw new Error('m3u8 link not found in embed player HTML');
     }
-
-    const m3u8Url = JSON.parse(`"${match[1]}"`);
-    const content = await fetchText(m3u8Url, 'https://upload18.org/');
 
     let rewrittenContent = content;
     if (typeof content === 'string') {

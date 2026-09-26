@@ -70,7 +70,7 @@ async function getStream(id, type, config = {}) {
         console.log(`[IMDb Resolver] Searching streams for: "${title}" (${imdbId}) Season: ${season}, Episode: ${episode}`);
 
         // Check enabled sources from config
-        const enabledSources = config.sources || ['kkphim', 'vsmov', 'nguonc'];
+        const enabledSources = config.sources || ['kkphim', 'nguonc'];
         const prefCdn = config.prefCdn !== false;
         const prefProxy = config.prefProxy !== false;
 
@@ -98,39 +98,6 @@ async function getStream(id, type, config = {}) {
                         : `kkphim:${bestMatch.slug}`;
                     const kkStreams = await kkphim.getStream(kkId, type);
                     cdnStreams.push(...kkStreams);
-                }
-            } catch (e) {
-                // ignore
-            }
-        }
-
-        // 2. Search VSMOV (if enabled)
-        if (enabledSources.includes('vsmov')) {
-            try {
-                let bestMatch = null;
-                if (type === 'series' && season) {
-                    bestMatch = await searchWithSeason(async (q) => {
-                        const r = await axios.get(`https://vsmov.com/api/tim-kiem?keyword=${encodeURIComponent(q)}&limit=5`, { timeout: 5000 });
-                        return r.data?.items || [];
-                    }, title, season);
-                } else {
-                    const vsRes = await axios.get(`https://vsmov.com/api/tim-kiem?keyword=${encodeURIComponent(title)}&limit=5`, { timeout: 5000 });
-                    const items = vsRes.data?.items || [];
-                    if (items.length > 0) bestMatch = items[0];
-                }
-
-                if (bestMatch) {
-                    const vsId = (type === 'series' && episode)
-                        ? `vsmov:${bestMatch.slug}:${season}:${episode}`
-                        : `vsmov:${bestMatch.slug}`;
-                    const vsStreams = await vsmov.getStream(vsId, type, config.host);
-                    vsStreams.forEach(s => {
-                        if ((s.name.includes('[CDN]') || s.name.includes('[CDN Full HD]')) && prefCdn) {
-                            cdnStreams.push(s);
-                        } else if (prefProxy) {
-                            proxyStreams.push(s);
-                        }
-                    });
                 }
             } catch (e) {
                 // ignore

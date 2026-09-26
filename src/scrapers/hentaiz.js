@@ -785,7 +785,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
                 title: `[Full HD 1080p] ${cleanTitle}\n⚡ CDN Trực tiếp • Hình ảnh siêu nét Full HD`,
                 url: `${cdnDomain}/${videoId}/${variant1080}/playlist.m3u8`,
                 behaviorHints: {
-                    notWebReady: true,
+                    notWebReady: false,
                     bingeGroup: 'hentaiz-1080p',
                     proxyHeaders: proxyHeaders
                 }
@@ -799,7 +799,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
                 title: `[HD 720p] ${cleanTitle}\n⚡ Tốc độ cao • Tua mượt mà`,
                 url: `${cdnDomain}/${videoId}/${variant720}/playlist.m3u8`,
                 behaviorHints: {
-                    notWebReady: true,
+                    notWebReady: false,
                     bingeGroup: 'hentaiz-720p',
                     proxyHeaders: proxyHeaders
                 }
@@ -812,7 +812,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
             title: `[Server Proxy] ${cleanTitle}\n⚡ Tuyến dự phòng định tuyến máy chủ`,
             url: `${hostBase}/hentaiz/stream/${videoId}/master.m3u8`,
             behaviorHints: {
-                notWebReady: true,
+                notWebReady: false,
                 bingeGroup: 'hentaiz-proxy',
                 proxyHeaders: proxyHeaders
             }

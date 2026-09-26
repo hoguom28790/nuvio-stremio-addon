@@ -1,7 +1,12 @@
 const reference = require('../Reference.json');
 
-// Filter out tv/sports catalogs (streamfree-live, sports-live)
-const filteredCatalogs = reference.catalogs.filter(c => c.type !== 'tv' && c.id !== 'streamfree-live' && c.id !== 'sports-live');
+// Filter out tv/sports catalogs and legacy vsmov
+const filteredCatalogs = reference.catalogs.filter(c => 
+    c.type !== 'tv' && 
+    c.id !== 'streamfree-live' && 
+    c.id !== 'sports-live' && 
+    !c.id.startsWith('vsmov')
+);
 
 const hentaizGenres = [
     "Tất Cả",

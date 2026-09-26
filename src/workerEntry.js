@@ -273,8 +273,9 @@ export default {
         const avdbMatch = pathname.match(/^\/avdb\/stream\/([^/]+)\.m3u8$/);
         if (avdbMatch) {
             const slug = decodeURIComponent(avdbMatch[1]);
+            const direct = url.searchParams.get('direct');
             try {
-                const playlist = await avdb.getM3u8(slug, host);
+                const playlist = await avdb.getM3u8(slug, host, direct);
                 return new Response(playlist, {
                     headers: {
                         ...CORS_HEADERS,

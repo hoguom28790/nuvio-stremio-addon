@@ -166,18 +166,6 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
                 }
             }
 
-            // Check VSMOV if not found in KKPhim
-            if (!match) {
-                for (const q of searchQueries) {
-                    const results = await vsmov.getCatalog(type, { search: q });
-                    if (results && results.length > 0) {
-                        match = results[0];
-                        matchSource = 'vsmov';
-                        break;
-                    }
-                }
-            }
-
             if (match && matchSource === 'kkphim') {
                 const kkSlug = match.id.replace('kkphim:', '').split(':')[0];
                 const kkId = targetEp ? `kkphim:${kkSlug}:1:${targetEp}` : `kkphim:${kkSlug}`;
@@ -185,20 +173,6 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
                 directStreams.forEach(s => {
                     streams.push({
                         name: s.name.replace('KKPhim', 'NguonC (CDN HLS)'),
-                        title: s.title,
-                        url: s.url,
-                        behaviorHints: {
-                            notWebReady: false
-                        }
-                    });
-                });
-            } else if (match && matchSource === 'vsmov') {
-                const vsSlug = match.id.replace('vsmov:', '').split(':')[0];
-                const vsId = targetEp ? `vsmov:${vsSlug}:1:${targetEp}` : `vsmov:${vsSlug}`;
-                const directStreams = await vsmov.getStream(vsId, type, host);
-                directStreams.forEach(s => {
-                    streams.push({
-                        name: s.name.replace('VSMOV', 'NguonC (CDN HLS)'),
                         title: s.title,
                         url: s.url,
                         behaviorHints: {

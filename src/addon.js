@@ -66,9 +66,6 @@ builder.defineCatalogHandler(async ({ type, id, extra = {}, config = {} }) => {
         if (id === 'nguonc-movie' && isSourceEnabled('nguonc', config)) return { metas: await nguonc.getCatalog('movie', extra) };
         if (id === 'nguonc-series' && isSourceEnabled('nguonc', config)) return { metas: await nguonc.getCatalog('series', extra) };
 
-        if (id === 'vsmov-movie' && isSourceEnabled('vsmov', config)) return { metas: await vsmov.getCatalog('movie', extra) };
-        if (id === 'vsmov-series' && isSourceEnabled('vsmov', config)) return { metas: await vsmov.getCatalog('series', extra) };
-
         if (id === 'hh3d-movie' && isSourceEnabled('hh3d', config)) return { metas: await animation.getCatalog('hh3d-movie', 'movie', extra) };
         if (id === 'hh3d-series' && isSourceEnabled('hh3d', config)) return { metas: await animation.getCatalog('hh3d-series', 'series', extra) };
 
@@ -112,10 +109,6 @@ builder.defineMetaHandler(async ({ type, id, config = {} }) => {
         }
         if (id.startsWith('nguonc:') && isSourceEnabled('nguonc', config)) {
             const meta = await nguonc.getMeta(type, id);
-            if (meta) return { meta };
-        }
-        if (id.startsWith('vsmov:') && isSourceEnabled('vsmov', config)) {
-            const meta = await vsmov.getMeta(type, id);
             if (meta) return { meta };
         }
         if (id.startsWith('hh3d:') && isSourceEnabled('hh3d', config)) {
@@ -178,8 +171,6 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
             streams = await kkphim.getStream(id, type);
         } else if (id.startsWith('nguonc:') && isSourceEnabled('nguonc', config)) {
             streams = await nguonc.getStream(id, type, config.host);
-        } else if (id.startsWith('vsmov:') && isSourceEnabled('vsmov', config)) {
-            streams = await vsmov.getStream(id, type, config.host);
         } else if (id.startsWith('hh3d:') && isSourceEnabled('hh3d', config)) {
             streams = await animation.getStream('hh3d', id, type);
         } else if (id.startsWith('yan:') && isSourceEnabled('yan', config)) {
