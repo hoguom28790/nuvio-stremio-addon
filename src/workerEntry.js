@@ -388,20 +388,23 @@ export default {
 
             let extra = {};
             if (extraStr) {
-                let searchParams = null;
-                try {
-                    searchParams = new URLSearchParams(extraStr);
-                } catch (e) {
-                    try { searchParams = new URLSearchParams(decodeURIComponent(extraStr)); } catch (err) {}
-                }
-
-                if (searchParams) {
-                    for (const [k, v] of searchParams.entries()) {
-                        let val = v;
-                        if (typeof val === 'string' && /phim\s+18(?:\s+|$)/i.test(val)) {
-                            val = val.replace(/phim\s+18(?:\s+|$)/i, 'Phim 18+');
+                // Support both /genre=X/skip=Y and /genre=X&skip=Y formats across various Stremio/Nuvio clients
+                const parts = extraStr.split('/');
+                for (const part of parts) {
+                    let searchParams = null;
+                    try {
+                        searchParams = new URLSearchParams(part);
+                    } catch (e) {
+                        try { searchParams = new URLSearchParams(decodeURIComponent(part)); } catch (err) {}
+                    }
+                    if (searchParams) {
+                        for (const [k, v] of searchParams.entries()) {
+                            let val = v;
+                            if (typeof val === 'string' && /phim\s+18(?:\s+|$)/i.test(val)) {
+                                val = val.replace(/phim\s+18(?:\s+|$)/i, 'Phim 18+');
+                            }
+                            extra[k] = val;
                         }
-                        extra[k] = val;
                     }
                 }
             }

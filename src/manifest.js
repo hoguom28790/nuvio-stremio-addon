@@ -130,8 +130,58 @@ const javhdGenres = [
 const javhdCatalogs = [
     {
         type: "movie",
+        id: "javhd-latest",
+        name: "JavHD • Mới Cập Nhật",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: javhdGenres }
+        ]
+    },
+    {
+        type: "movie",
+        id: "javhd-trending",
+        name: "JavHD • Thịnh Hành",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: javhdGenres }
+        ]
+    },
+    {
+        type: "movie",
+        id: "javhd-uncensored",
+        name: "JavHD • Không Che",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: javhdGenres }
+        ]
+    },
+    {
+        type: "movie",
+        id: "javhd-censored",
+        name: "JavHD • Có Che",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: javhdGenres }
+        ]
+    },
+    {
+        type: "movie",
+        id: "javhd-beauty",
+        name: "JavHD • Người Đẹp",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: javhdGenres }
+        ]
+    },
+    {
+        type: "movie",
         id: "javhd-movie",
-        name: "JavHD",
+        name: "JavHD • Tất Cả",
         extra: [
             { name: "search", isRequired: false },
             { name: "skip", isRequired: false },
