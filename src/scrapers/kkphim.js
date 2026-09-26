@@ -221,6 +221,18 @@ async function getCleanM3u8(targetUrl, host = 'localhost') {
     const cached = cache.get(cacheKey);
     if (cached) return cached;
 
+    // Fast-path for Master Playlists:
+    // KKPhim master playlists (.../index.m3u8 without 3500kb/hls/) only contain a pointer to 3500kb/hls/index.m3u8.
+    // Return the rewritten master playlist immediately in 0ms with HTTP 200 without calling CDN!
+    // This prevents any cross-origin 302 redirects, fixing HTTP 403 on Nuvio Web and Stremio errors.
+    if (targetUrl.endsWith('/index.m3u8') && !targetUrl.includes('3500kb/hls/')) {
+        const subUrl = targetUrl.replace('/index.m3u8', '/3500kb/hls/index.m3u8');
+        const cleanSubUrl = `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(subUrl)}`;
+        const masterPlaylist = `#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=3500000,RESOLUTION=1920x1080\n${cleanSubUrl}\n`;
+        cache.set(cacheKey, masterPlaylist, 7200);
+        return masterPlaylist;
+    }
+
     try {
         const fetchHeaders = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -230,22 +242,46 @@ async function getCleanM3u8(targetUrl, host = 'localhost') {
 
         let content = '';
         if (typeof fetch === 'function') {
-            const res = await fetch(targetUrl, {
-                headers: fetchHeaders,
-                signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined
-            });
-            if (!res.ok) throw new Error(`Upstream returned ${res.status}`);
-            content = await res.text();
+            try {
+                const res = await fetch(targetUrl, {
+                    headers: fetchHeaders,
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined
+                });
+                if (res.ok) {
+                    const txt = await res.text();
+                    if (typeof txt === 'string' && txt.includes('#EXTM3U')) {
+                        content = txt;
+                    }
+                }
+            } catch (e) {}
         } else {
-            const res = await axios.get(targetUrl, {
-                headers: fetchHeaders,
-                timeout: 8000
-            });
-            content = res.data;
+            try {
+                const res = await axios.get(targetUrl, {
+                    headers: fetchHeaders,
+                    timeout: 4000
+                });
+                if (res.data && typeof res.data === 'string' && res.data.includes('#EXTM3U')) {
+                    content = res.data;
+                }
+            } catch (e) {}
+        }
+
+        // If direct fetch failed (e.g. 404 geo-block on cloud servers), try Vietnam proxy pool
+        if (!content || !content.includes('#EXTM3U')) {
+            const isNode = typeof process !== 'undefined' && process.versions && !!process.versions.node;
+            if (isNode) {
+                try {
+                    const fetcherModule = '../utils/vnProxyFetcher';
+                    const { fetchM3u8ViaVnProxy } = require(fetcherModule);
+                    content = await fetchM3u8ViaVnProxy(targetUrl);
+                } catch (proxyErr) {
+                    console.warn('[KKPhim VN Proxy Error]:', proxyErr.message);
+                }
+            }
         }
 
         if (typeof content !== 'string' || !content.includes('#EXTM3U')) {
-            throw new Error('Invalid M3U8 content');
+            throw new Error('Invalid M3U8 content after all fetch attempts');
         }
 
         // 1. If this is a Master Playlist (#EXT-X-STREAM-INF), rewrite sub-playlist URLs to also be cleaned
@@ -260,13 +296,13 @@ async function getCleanM3u8(targetUrl, host = 'localhost') {
                 return line;
             });
             const result = rewritten.join('\n');
-            cache.set(cacheKey, result, 3600);
+            cache.set(cacheKey, result, 7200);
             return result;
         }
 
         // 2. If this is a Media Playlist (#EXTINF:), clean ad segments and make .ts URLs absolute
         const cleaned = cleanM3u8(content, targetUrl);
-        cache.set(cacheKey, cleaned, 3600);
+        cache.set(cacheKey, cleaned, 7200);
         return cleaned;
     } catch (err) {
         console.warn(`[KKPhim Clean M3U8 Error for ${targetUrl}]:`, err.message);
@@ -288,6 +324,14 @@ async function getStream(id, type, host = '') {
         const streams = [];
         const hostBase = host ? (host.includes('://') ? host : `https://${host}`) : '';
 
+        const proxyHeaders = {
+            request: {
+                'Referer': 'https://player.phimapi.com/',
+                'Origin': 'https://player.phimapi.com',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+        };
+
         episodes.forEach(server => {
             const serverName = server.server_name || 'VIP';
             const serverData = server.server_data || [];
@@ -295,25 +339,22 @@ async function getStream(id, type, host = '') {
             const targetItem = findEpisode(serverData, targetEp);
 
             if (targetItem && targetItem.link_m3u8) {
-                // Stream 1 (Mặc định): Luồng trực tiếp CDN gốc - tốc độ tối đa, không phụ thuộc server
+                // Stream 1 (Mặc định): Luồng trực tiếp CDN gốc - tốc độ tối đa, kèm proxyHeaders tránh 403
                 streams.push({
                     name: `⚡ [CDN] KKPhim • ${serverName} [Gốc]`,
                     title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n⚡ Định tuyến: CDN Tốc Độ Cao (Direct HLS Mặc Định)\n🎞️ Độ phân giải: 1080p Full HD • Vietsub`,
                     url: targetItem.link_m3u8,
                     behaviorHints: {
-                        notWebReady: false
+                        notWebReady: false,
+                        proxyHeaders
                     }
                 });
 
-                // Stream 2: Lọc Quảng Cáo
-                // - Nếu có KKPHIM_GAS_PROXY_URL: dùng Google Apps Script proxy → lọc thật sự (Google IPs không bị CDN chặn)
-                // - Nếu không có GAS: dùng server clean endpoint với 302 CORS fallback → phim phát được nhưng có QC
+                // Stream 2: Lọc Quảng Cáo (Khử sạch QC 15:00 & 3:00)
                 let cleanUrl;
                 if (GAS_PROXY_URL) {
-                    // GAS proxy: Google IPs → CDN không chặn → lọc thành công
                     cleanUrl = `${GAS_PROXY_URL}?url=${encodeURIComponent(targetItem.link_m3u8)}`;
                 } else if (hostBase) {
-                    // Server clean endpoint (CF Worker hoặc Render.com) với 302+CORS fallback
                     cleanUrl = `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(targetItem.link_m3u8)}`;
                 }
 
@@ -321,10 +362,11 @@ async function getStream(id, type, host = '') {
                     const gasLabel = GAS_PROXY_URL ? ' ✅' : '';
                     streams.push({
                         name: `🛡️ [CDN] KKPhim • ${serverName} [Lọc QC${gasLabel}]`,
-                        title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n🛡️ Khử QC 15:00 & 3:00${GAS_PROXY_URL ? ' (GAS — lọc thật sự)' : ' (Auto-fallback về gốc nếu CDN chặn)'}\n🎞️ 1080p Full HD • Vietsub`,
+                        title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n🛡️ Khử QC 15:00 & 3:00 (1080p Full HD)\n🎞️ 1080p Full HD • Vietsub`,
                         url: cleanUrl,
                         behaviorHints: {
-                            notWebReady: false
+                            notWebReady: false,
+                            proxyHeaders
                         }
                     });
                 }
@@ -340,5 +382,6 @@ async function getStream(id, type, host = '') {
 }
 
 module.exports = { getCatalog, getMeta, getStream, getCleanM3u8, setGasProxyUrl, formatPoster };
+
 
 

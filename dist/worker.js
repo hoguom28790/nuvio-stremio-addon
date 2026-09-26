@@ -1,5 +1,11 @@
 var __getOwnPropNames = Object.getOwnPropertyNames;
-var __commonJS = (cb, mod) => function __require() {
+var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
+  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
+}) : x)(function(x) {
+  if (typeof require !== "undefined") return require.apply(this, arguments);
+  throw Error('Dynamic require of "' + x + '" is not supported');
+});
+var __commonJS = (cb, mod) => function __require2() {
   try {
     return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
   } catch (e) {
@@ -698,6 +704,10 @@ var require_kkphim = __commonJS({
     var { findEpisode } = require_episodeHelper();
     var BASE_URL = "https://phimapi.com";
     var CDN_URL = "https://phimimg.com";
+    var GAS_PROXY_URL = typeof process !== "undefined" && process.env && process.env.KKPHIM_GAS_PROXY_URL || "";
+    function setGasProxyUrl(url) {
+      GAS_PROXY_URL = url || "";
+    }
     function formatPoster(path, cdnDomain = CDN_URL) {
       if (!path) return "";
       if (path.startsWith("http://") || path.startsWith("https://")) return path;
@@ -874,6 +884,16 @@ var require_kkphim = __commonJS({
       const cacheKey = `kkphim:clean:${targetUrl}`;
       const cached = cache.get(cacheKey);
       if (cached) return cached;
+      if (targetUrl.endsWith("/index.m3u8") && !targetUrl.includes("3500kb/hls/")) {
+        const subUrl = targetUrl.replace("/index.m3u8", "/3500kb/hls/index.m3u8");
+        const cleanSubUrl = `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(subUrl)}`;
+        const masterPlaylist = `#EXTM3U
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=3500000,RESOLUTION=1920x1080
+${cleanSubUrl}
+`;
+        cache.set(cacheKey, masterPlaylist, 7200);
+        return masterPlaylist;
+      }
       try {
         const fetchHeaders = {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -882,21 +902,45 @@ var require_kkphim = __commonJS({
         };
         let content = "";
         if (typeof fetch === "function") {
-          const res = await fetch(targetUrl, {
-            headers: fetchHeaders,
-            signal: AbortSignal.timeout ? AbortSignal.timeout(8e3) : void 0
-          });
-          if (!res.ok) throw new Error(`Upstream returned ${res.status}`);
-          content = await res.text();
+          try {
+            const res = await fetch(targetUrl, {
+              headers: fetchHeaders,
+              signal: AbortSignal.timeout ? AbortSignal.timeout(4e3) : void 0
+            });
+            if (res.ok) {
+              const txt = await res.text();
+              if (typeof txt === "string" && txt.includes("#EXTM3U")) {
+                content = txt;
+              }
+            }
+          } catch (e) {
+          }
         } else {
-          const res = await axios.get(targetUrl, {
-            headers: fetchHeaders,
-            timeout: 8e3
-          });
-          content = res.data;
+          try {
+            const res = await axios.get(targetUrl, {
+              headers: fetchHeaders,
+              timeout: 4e3
+            });
+            if (res.data && typeof res.data === "string" && res.data.includes("#EXTM3U")) {
+              content = res.data;
+            }
+          } catch (e) {
+          }
+        }
+        if (!content || !content.includes("#EXTM3U")) {
+          const isNode = typeof process !== "undefined" && process.versions && !!process.versions.node;
+          if (isNode) {
+            try {
+              const fetcherModule = "../utils/vnProxyFetcher";
+              const { fetchM3u8ViaVnProxy } = __require(fetcherModule);
+              content = await fetchM3u8ViaVnProxy(targetUrl);
+            } catch (proxyErr) {
+              console.warn("[KKPhim VN Proxy Error]:", proxyErr.message);
+            }
+          }
         }
         if (typeof content !== "string" || !content.includes("#EXTM3U")) {
-          throw new Error("Invalid M3U8 content");
+          throw new Error("Invalid M3U8 content after all fetch attempts");
         }
         if (content.includes("#EXT-X-STREAM-INF")) {
           const lines = content.split("\n");
@@ -909,11 +953,11 @@ var require_kkphim = __commonJS({
             return line;
           });
           const result = rewritten.join("\n");
-          cache.set(cacheKey, result, 3600);
+          cache.set(cacheKey, result, 7200);
           return result;
         }
         const cleaned = cleanM3u8(content, targetUrl);
-        cache.set(cacheKey, cleaned, 3600);
+        cache.set(cacheKey, cleaned, 7200);
         return cleaned;
       } catch (err) {
         console.warn(`[KKPhim Clean M3U8 Error for ${targetUrl}]:`, err.message);
@@ -930,6 +974,13 @@ var require_kkphim = __commonJS({
         if (episodes.length === 0) return [];
         const streams = [];
         const hostBase = host ? host.includes("://") ? host : `https://${host}` : "";
+        const proxyHeaders = {
+          request: {
+            "Referer": "https://player.phimapi.com/",
+            "Origin": "https://player.phimapi.com",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          }
+        };
         episodes.forEach((server) => {
           const serverName = server.server_name || "VIP";
           const serverData = server.server_data || [];
@@ -942,18 +993,27 @@ var require_kkphim = __commonJS({
 \u{1F39E}\uFE0F \u0110\u1ED9 ph\xE2n gi\u1EA3i: 1080p Full HD \u2022 Vietsub`,
               url: targetItem.link_m3u8,
               behaviorHints: {
-                notWebReady: false
+                notWebReady: false,
+                proxyHeaders
               }
             });
-            if (hostBase) {
+            let cleanUrl;
+            if (GAS_PROXY_URL) {
+              cleanUrl = `${GAS_PROXY_URL}?url=${encodeURIComponent(targetItem.link_m3u8)}`;
+            } else if (hostBase) {
+              cleanUrl = `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(targetItem.link_m3u8)}`;
+            }
+            if (cleanUrl) {
+              const gasLabel = GAS_PROXY_URL ? " \u2705" : "";
               streams.push({
-                name: `\u{1F6E1}\uFE0F [CDN] KKPhim \u2022 ${serverName} [L\u1ECDc QC]`,
+                name: `\u{1F6E1}\uFE0F [CDN] KKPhim \u2022 ${serverName} [L\u1ECDc QC${gasLabel}]`,
                 title: `${res.data?.movie?.name || ""} - T\u1EADp ${targetItem.name}
-\u{1F6E1}\uFE0F \u0110\u1ECBnh tuy\u1EBFn: Kh\u1EED \u0111o\u1EA1n qu\u1EA3ng c\xE1o 15:00 & 3:00 (Auto-fallback n\u1EBFu CDN ch\u1EB7n)
-\u{1F39E}\uFE0F \u0110\u1ED9 ph\xE2n gi\u1EA3i: 1080p Full HD \u2022 Vietsub`,
-                url: `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(targetItem.link_m3u8)}`,
+\u{1F6E1}\uFE0F Kh\u1EED QC 15:00 & 3:00 (1080p Full HD)
+\u{1F39E}\uFE0F 1080p Full HD \u2022 Vietsub`,
+                url: cleanUrl,
                 behaviorHints: {
-                  notWebReady: false
+                  notWebReady: false,
+                  proxyHeaders
                 }
               });
             }
@@ -965,7 +1025,7 @@ var require_kkphim = __commonJS({
         return [];
       }
     }
-    module.exports = { getCatalog, getMeta, getStream, getCleanM3u8, formatPoster };
+    module.exports = { getCatalog, getMeta, getStream, getCleanM3u8, setGasProxyUrl, formatPoster };
   }
 });
 
@@ -4634,6 +4694,9 @@ var workerEntry_default = {
       } catch (e) {
       }
     }
+    if (env && env.KKPHIM_GAS_PROXY_URL) {
+      kkphim.setGasProxyUrl(env.KKPHIM_GAS_PROXY_URL);
+    }
     if (pathname === "/ping") {
       return new Response(JSON.stringify({ status: "ok", ts: Date.now() }), {
         headers: { ...CORS_HEADERS, "Content-Type": "application/json" }
@@ -4829,19 +4892,47 @@ var workerEntry_default = {
       if (!targetUrl) return new Response("Missing url query parameter", { status: 400, headers: CORS_HEADERS });
       try {
         const playlist = await kkphim.getCleanM3u8(targetUrl, host);
-        if (playlist) {
+        if (playlist && playlist.includes("#EXTM3U")) {
           return new Response(playlist, {
             headers: {
               ...CORS_HEADERS,
               "Content-Type": "application/vnd.apple.mpegurl; charset=utf-8",
-              "Cache-Control": "public, max-age=3600, s-maxage=7200"
+              "Cache-Control": "public, max-age=7200, s-maxage=14400"
             }
           });
         }
       } catch (err) {
-        console.warn("[KKPhim Clean M3U8 Error]:", err.message);
+        console.warn("[KKPhim Clean M3U8 Local Error]:", err.message);
       }
-      return Response.redirect(targetUrl, 302);
+      if (!isAlreadyOnRender) {
+        try {
+          const renderRes = await fetch(`${RENDER_HOST}/kkphim/clean.m3u8?url=${encodeURIComponent(targetUrl)}`, {
+            headers: { "Accept": "*/*" },
+            signal: AbortSignal.timeout ? AbortSignal.timeout(4e3) : void 0
+          });
+          if (renderRes.ok) {
+            const cleanPlaylist = await renderRes.text();
+            if (cleanPlaylist && cleanPlaylist.includes("#EXTM3U")) {
+              return new Response(cleanPlaylist, {
+                headers: {
+                  ...CORS_HEADERS,
+                  "Content-Type": "application/vnd.apple.mpegurl; charset=utf-8",
+                  "Cache-Control": "public, max-age=7200, s-maxage=14400"
+                }
+              });
+            }
+          }
+        } catch (renderErr) {
+          console.warn("[KKPhim Clean M3U8 Render Delegation Error]:", renderErr.message);
+        }
+      }
+      return new Response(null, {
+        status: 302,
+        headers: {
+          ...CORS_HEADERS,
+          "Location": targetUrl
+        }
+      });
     }
     if (pathname === "/debug/test-render") {
       const target = url.searchParams.get("url") || `${RENDER_HOST}/catalog/movie/javhd-latest/genre=${encodeURIComponent("Th\u1ECBnh H\xE0nh")}.json`;
