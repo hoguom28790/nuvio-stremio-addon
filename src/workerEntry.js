@@ -132,11 +132,6 @@ export default {
             try { ctx.waitUntil(fetch(`${RENDER_HOST}/ping`).catch(() => {})); } catch (e) {}
         }
 
-        // Initialize GAS proxy URL from environment (Cloudflare Worker env vars)
-        if (env && env.KKPHIM_GAS_PROXY_URL) {
-            kkphim.setGasProxyUrl(env.KKPHIM_GAS_PROXY_URL);
-        }
-
         // 1. Static / Favicon / Logo
         // 0. Keepalive ping endpoint (used by GitHub Actions cron to prevent Render.com from sleeping)
         if (pathname === '/ping') {
@@ -387,7 +382,7 @@ export default {
                 try {
                     const renderRes = await fetch(`${RENDER_HOST}/kkphim/clean.m3u8?url=${encodeURIComponent(targetUrl)}`, {
                         headers: { 'Accept': '*/*' },
-                        signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined
+                        signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined
                     });
                     if (renderRes.ok) {
                         const cleanPlaylist = await renderRes.text();

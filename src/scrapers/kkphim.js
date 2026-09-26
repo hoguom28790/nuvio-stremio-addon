@@ -6,16 +6,34 @@ const { findEpisode } = require('../utils/episodeHelper');
 const BASE_URL = 'https://phimapi.com';
 const CDN_URL = 'https://phimimg.com';
 
-// Google Apps Script URL for M3U8 proxy (fetches from CDN & filters ads).
-// Google IPs are not blocked by KKPhim CDN, so this enables actual ad filtering.
-// Set via environment variable: KKPHIM_GAS_PROXY_URL
-// Without this, [Lọc QC] stream falls back via 302 to original CDN (video plays with ads).
-let GAS_PROXY_URL = (typeof process !== 'undefined' && process.env && process.env.KKPHIM_GAS_PROXY_URL) || '';
-
-function setGasProxyUrl(url) {
-    GAS_PROXY_URL = url || '';
+function getVnProxyFetcher() {
+    const isNode = typeof process !== 'undefined' && process.versions && !!process.versions.node;
+    if (!isNode) return null;
+    try {
+        return require('../utils/vnProxyFetcher');
+    } catch (e1) {
+        try {
+            const path = require('path');
+            const fs = require('fs');
+            const candidates = [
+                path.join(process.cwd(), 'src', 'utils', 'vnProxyFetcher.js'),
+                path.join(process.cwd(), 'utils', 'vnProxyFetcher.js'),
+                path.join(__dirname, '..', 'src', 'utils', 'vnProxyFetcher.js'),
+                path.join(__dirname, '..', 'utils', 'vnProxyFetcher.js'),
+                path.join(__dirname, 'src', 'utils', 'vnProxyFetcher.js'),
+                path.join(__dirname, 'utils', 'vnProxyFetcher.js'),
+                '/app/src/utils/vnProxyFetcher.js',
+                '/app/utils/vnProxyFetcher.js'
+            ];
+            for (const cand of candidates) {
+                if (fs.existsSync(cand)) {
+                    return require(cand);
+                }
+            }
+        } catch (e2) {}
+    }
+    return null;
 }
-
 
 function formatPoster(path, cdnDomain = CDN_URL) {
     if (!path) return '';
@@ -268,12 +286,10 @@ async function getCleanM3u8(targetUrl, host = 'localhost') {
 
         // If direct fetch failed (e.g. 404 geo-block on cloud servers), try Vietnam proxy pool
         if (!content || !content.includes('#EXTM3U')) {
-            const isNode = typeof process !== 'undefined' && process.versions && !!process.versions.node;
-            if (isNode) {
+            const fetcher = getVnProxyFetcher();
+            if (fetcher && typeof fetcher.fetchM3u8ViaVnProxy === 'function') {
                 try {
-                    const fetcherModule = '../utils/vnProxyFetcher';
-                    const { fetchM3u8ViaVnProxy } = require(fetcherModule);
-                    content = await fetchM3u8ViaVnProxy(targetUrl);
+                    content = await fetcher.fetchM3u8ViaVnProxy(targetUrl);
                 } catch (proxyErr) {
                     console.warn('[KKPhim VN Proxy Error]:', proxyErr.message);
                 }
@@ -324,14 +340,6 @@ async function getStream(id, type, host = '') {
         const streams = [];
         const hostBase = host ? (host.includes('://') ? host : `https://${host}`) : '';
 
-        const proxyHeaders = {
-            request: {
-                'Referer': 'https://player.phimapi.com/',
-                'Origin': 'https://player.phimapi.com',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
-        };
-
         episodes.forEach(server => {
             const serverName = server.server_name || 'VIP';
             const serverData = server.server_data || [];
@@ -339,38 +347,27 @@ async function getStream(id, type, host = '') {
             const targetItem = findEpisode(serverData, targetEp);
 
             if (targetItem && targetItem.link_m3u8) {
-                // Stream 1 (Mặc định): Luồng trực tiếp CDN gốc - tốc độ tối đa, kèm proxyHeaders tránh 403
+                // Stream 1 (Mặc định): Luồng trực tiếp CDN gốc - tốc độ tối đa
                 streams.push({
                     name: `⚡ [CDN] KKPhim • ${serverName} [Gốc]`,
                     title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n⚡ Định tuyến: CDN Tốc Độ Cao (Direct HLS Mặc Định)\n🎞️ Độ phân giải: 1080p Full HD • Vietsub`,
                     url: targetItem.link_m3u8,
                     behaviorHints: {
-                        notWebReady: false,
-                        proxyHeaders
+                        notWebReady: false
                     }
                 });
 
                 // Stream 2: Lọc Quảng Cáo (Khử sạch QC 15:00 & 3:00)
-                let cleanUrl;
-                if (GAS_PROXY_URL) {
-                    cleanUrl = `${GAS_PROXY_URL}?url=${encodeURIComponent(targetItem.link_m3u8)}`;
-                } else if (hostBase) {
-                    cleanUrl = `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(targetItem.link_m3u8)}`;
-                }
-
-                if (cleanUrl) {
-                    const gasLabel = GAS_PROXY_URL ? ' ✅' : '';
+                if (hostBase) {
                     streams.push({
-                        name: `🛡️ [CDN] KKPhim • ${serverName} [Lọc QC${gasLabel}]`,
+                        name: `🛡️ [CDN] KKPhim • ${serverName} [Lọc QC]`,
                         title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n🛡️ Khử QC 15:00 & 3:00 (1080p Full HD)\n🎞️ 1080p Full HD • Vietsub`,
-                        url: cleanUrl,
+                        url: `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(targetItem.link_m3u8)}`,
                         behaviorHints: {
-                            notWebReady: false,
-                            proxyHeaders
+                            notWebReady: false
                         }
                     });
                 }
-
             }
         });
 
@@ -381,7 +378,7 @@ async function getStream(id, type, host = '') {
     }
 }
 
-module.exports = { getCatalog, getMeta, getStream, getCleanM3u8, setGasProxyUrl, formatPoster };
+module.exports = { getCatalog, getMeta, getStream, getCleanM3u8, formatPoster };
 
 
 

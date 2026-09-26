@@ -1,14 +1,14 @@
 const http = require('http');
 const https = require('https');
 
-// Pool of Vietnam HTTP proxies
+// Pool of Vietnam HTTP proxies (verified fast & reliable)
 const DEFAULT_VN_PROXIES = [
     { host: '14.251.13.17', port: 8080 },
-    { host: '14.232.228.49', port: 8080 },
-    { host: '113.161.66.196', port: 8080 },
-    { host: '203.205.49.2', port: 10005 },
+    { host: '210.211.113.34', port: 80 },
     { host: '210.211.113.35', port: 80 },
-    { host: '116.108.82.164', port: 8080 }
+    { host: '210.211.113.37', port: 80 },
+    { host: '113.161.59.136', port: 8080 },
+    { host: '113.22.113.75', port: 8080 }
 ];
 
 let dynamicProxies = [];
@@ -24,16 +24,26 @@ async function refreshVnProxies() {
     try {
         const fetchFn = globalThis.fetch;
         if (typeof fetchFn === 'function') {
-            const res = await fetchFn('https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&country=vn&timeout=5000', {
-                signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined
-            });
-            if (res.ok) {
+            const res = await Promise.any([
+                fetchFn('https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/countries/VN/data.txt', {
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(3000) : undefined
+                }),
+                fetchFn('https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&country=vn&timeout=4000', {
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined
+                })
+            ]);
+            if (res && res.ok) {
                 const text = await res.text();
                 const lines = text.split('\r\n').flatMap(l => l.split('\n')).map(l => l.trim()).filter(Boolean);
-                const parsed = lines.map(line => {
-                    const [host, port] = line.split(':');
-                    return { host, port: parseInt(port, 10) };
-                }).filter(p => p.host && p.port);
+                const parsed = [];
+                for (const line of lines) {
+                    const clean = line.replace(/^(http|https|socks4|socks5):\/\//, '');
+                    const [host, port] = clean.split(':');
+                    const pNum = parseInt(port, 10);
+                    if (host && pNum > 0 && pNum <= 65535) {
+                        parsed.push({ host, port: pNum });
+                    }
+                }
                 if (parsed.length > 0) {
                     dynamicProxies = parsed;
                     lastProxyFetch = Date.now();
@@ -140,12 +150,12 @@ async function fetchM3u8ViaVnProxy(targetUrl) {
         return true;
     });
 
-    const batchSize = 3;
-    for (let i = 0; i < Math.min(uniqueProxies.length, 9); i += batchSize) {
+    const batchSize = 4;
+    for (let i = 0; i < Math.min(uniqueProxies.length, 12); i += batchSize) {
         const batch = uniqueProxies.slice(i, i + batchSize);
         try {
             const result = await Promise.any(
-                batch.map(p => fetchWithProxy(targetUrl, p.host, p.port, 7000))
+                batch.map(p => fetchWithProxy(targetUrl, p.host, p.port, 4500))
             );
             if (result && result.includes('#EXTM3U')) {
                 return result;
