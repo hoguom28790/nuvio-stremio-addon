@@ -5,7 +5,6 @@ const hentaiz = require('./scrapers/hentaiz');
 const javhd = require('./scrapers/javhd');
 const vlxx = require('./scrapers/vlxx');
 const avdb = require('./scrapers/avdb');
-const javhdmov = require('./scrapers/javhdmov');
 
 function parseConfig(configParam) {
     if (!configParam) return {};

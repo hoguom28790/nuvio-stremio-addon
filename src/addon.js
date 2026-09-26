@@ -9,7 +9,6 @@ const hentaiz = require('./scrapers/hentaiz');
 const javhd = require('./scrapers/javhd');
 const vlxx = require('./scrapers/vlxx');
 const avdb = require('./scrapers/avdb');
-const javhdmov = require('./scrapers/javhdmov');
 const imdb = require('./scrapers/imdb');
 const cache = require('./utils/cache');
 
@@ -92,9 +91,6 @@ builder.defineCatalogHandler(async ({ type, id, extra = {}, config = {} }) => {
             return { metas: await avdb.getCatalog(id, type, extra) };
         }
 
-        if (id.startsWith('javhdmov-') && (isSourceEnabled('javhdmov', config) || isSourceEnabled('javhd', config))) {
-            return { metas: await javhdmov.getCatalog(id, type, extra) };
-        }
     } catch (e) {
         console.error(`[Catalog Error] ID: ${id}:`, e.message);
     }
@@ -148,10 +144,6 @@ builder.defineMetaHandler(async ({ type, id, config = {} }) => {
             const meta = await avdb.getMeta(type, id);
             if (meta) return { meta };
         }
-        if (id.startsWith('javhdmov:')) {
-            const meta = await javhdmov.getMeta(type, id);
-            if (meta) return { meta };
-        }
     } catch (e) {
         console.error(`[Meta Error] ID: ${id}:`, e.message);
     }
@@ -196,8 +188,6 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
             streams = await vlxx.getStream(id, type, config.host);
         } else if (id.startsWith('avdb:')) {
             streams = await avdb.getStream(id, type, config.host);
-        } else if (id.startsWith('javhdmov:')) {
-            streams = await javhdmov.getStream(id, type, config.host);
         } else if (id.startsWith('tt')) {
             if (config.prefImdb !== false) {
                 streams = await imdb.getStream(id, type, config);

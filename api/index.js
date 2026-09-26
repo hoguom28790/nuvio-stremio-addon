@@ -58,7 +58,6 @@ const hentaiz = require('../src/scrapers/hentaiz');
 const javhd = require('../src/scrapers/javhd');
 const vlxx = require('../src/scrapers/vlxx');
 const avdb = require('../src/scrapers/avdb');
-const javhdmov = require('../src/scrapers/javhdmov');
 
 async function handleResource(req, res, config) {
     const { resource, type } = req.params;
@@ -374,30 +373,6 @@ app.get('/debug/javhd', async (req, res) => {
     }
     res.json({
         catalogCount,
-        sampleStreams
-    });
-});
-
-// Debug JavHD MOV
-app.get('/debug/javhdmov', async (req, res) => {
-    let catalogCount = 0;
-    let sampleItems = [];
-    let sampleStreams = null;
-    try {
-        const cat = await javhdmov.getCatalog('javhdmov-latest', 'movie', {});
-        catalogCount = cat ? cat.length : 0;
-        sampleItems = cat ? cat.slice(0, 3) : [];
-    } catch (e) {
-        catalogCount = e.message;
-    }
-    try {
-        sampleStreams = await javhdmov.getStream('javhdmov:113895', 'movie', req.headers.host);
-    } catch (e) {
-        sampleStreams = e.message;
-    }
-    res.json({
-        catalogCount,
-        sampleItems,
         sampleStreams
     });
 });

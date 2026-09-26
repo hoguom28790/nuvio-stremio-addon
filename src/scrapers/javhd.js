@@ -86,6 +86,8 @@ async function ensureStaticCatalog() {
 // Genre to URL mapping on javhdz.bz
 const GENRE_MAP = {
     'Tất Cả': '/video/',
+    'Mới Cập Nhật': '/video/',
+    'Thịnh Hành': '/trending/',
     'Vietsub': '/tag/vietsub/',
     'Có Che (Censored)': '/category/censored-2/',
     'Không Che (Uncensored)': '/category/uncensored-3/',
