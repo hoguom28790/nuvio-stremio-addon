@@ -211,43 +211,129 @@ async function fetchPage(targetUrl) {
 /**
  * Get catalog movies for JavHD
  */
+/**
+ * Get catalog movies for JavHD with live search and infinite pagination
+ */
 async function getCatalog(catalogId, type, extra = {}) {
     try {
         await ensureStaticCatalog();
-        const catalog = cachedCatalog || [];
+        const skip = parseInt(extra.skip, 10) || 0;
+        const page = Math.floor(skip / 18) + 1;
 
-        if (catalog.length > 0) {
-            let results = [...catalog];
+        // 1. LIVE SEARCH: Searches entire JavHD library + static catalog
+        if (extra.search) {
+            const query = extra.search.trim();
+            const cacheKey = `javhd:search:${encodeURIComponent(query)}:${page}`;
+            const cached = cache.get(cacheKey);
+            if (cached) return cached;
 
-            if (extra.search) {
-                const q = extra.search.toLowerCase();
-                results = results.filter(m => 
-                    (m.name && m.name.toLowerCase().includes(q)) || 
-                    (m.slug && m.slug.toLowerCase().includes(q)) ||
-                    (m.genres && m.genres.some(g => g.toLowerCase().includes(q)))
+            const searchMetas = [];
+            const seenSlugs = new Set();
+
+            // Live search on javhdz.bz
+            try {
+                const searchUrl = page > 1 
+                    ? `${BASE_URL}/search/${encodeURIComponent(query)}/page/${page}/`
+                    : `${BASE_URL}/search/${encodeURIComponent(query)}/`;
+                const html = await fetchPage(searchUrl);
+                if (html) {
+                    const liveItems = parseMovieCards(html);
+                    for (const item of liveItems) {
+                        if (!seenSlugs.has(item.id)) {
+                            seenSlugs.add(item.id);
+                            searchMetas.push(item);
+                        }
+                    }
+                }
+            } catch (errSearch) {
+                console.warn('[JavHD] Live search error:', errSearch.message);
+            }
+
+            // Also search cached catalog to ensure no misses
+            if (cachedCatalog && Array.isArray(cachedCatalog)) {
+                const qLower = query.toLowerCase();
+                const matchedStatic = cachedCatalog.filter(m =>
+                    (m.name && m.name.toLowerCase().includes(qLower)) ||
+                    (m.slug && m.slug.toLowerCase().includes(qLower)) ||
+                    (m.genres && m.genres.some(g => g.toLowerCase().includes(qLower)))
                 );
-            } else if (extra.genre) {
+                for (const m of matchedStatic) {
+                    if (!seenSlugs.has(m.id)) {
+                        seenSlugs.add(m.id);
+                        searchMetas.push({
+                            id: m.id,
+                            type: 'movie',
+                            name: m.name,
+                            poster: m.poster,
+                            posterShape: 'poster',
+                            description: m.description
+                        });
+                    }
+                }
+            }
+
+            if (searchMetas.length > 0) {
+                cache.set(cacheKey, searchMetas, 600);
+                return searchMetas;
+            }
+            return [];
+        }
+
+        // 2. CATEGORY / GENRE BROWSING
+        let targetUrl = '';
+        if (extra.genre && GENRE_MAP[extra.genre]) {
+            const mappedPath = GENRE_MAP[extra.genre].replace(/\/$/, '');
+            targetUrl = page > 1 ? `${BASE_URL}${mappedPath}/page/${page}/` : `${BASE_URL}${mappedPath}/`;
+        } else {
+            switch (catalogId) {
+                case 'javhd-trending':
+                    targetUrl = page > 1 ? `${BASE_URL}/trending/page/${page}/` : `${BASE_URL}/trending/`;
+                    break;
+                case 'javhd-censored':
+                    targetUrl = page > 1 ? `${BASE_URL}/category/censored-2/page/${page}/` : `${BASE_URL}/category/censored-2/`;
+                    break;
+                case 'javhd-uncensored':
+                    targetUrl = page > 1 ? `${BASE_URL}/category/uncensored-3/page/${page}/` : `${BASE_URL}/category/uncensored-3/`;
+                    break;
+                case 'javhd-beauty':
+                    targetUrl = page > 1 ? `${BASE_URL}/category/beauty-4/page/${page}/` : `${BASE_URL}/category/beauty-4/`;
+                    break;
+                case 'javhd-latest':
+                default:
+                    targetUrl = page > 1 ? `${BASE_URL}/video/page/${page}/` : `${BASE_URL}/video/`;
+                    break;
+            }
+        }
+
+        const cacheKey = `javhd:catalog:${targetUrl}`;
+        const cached = cache.get(cacheKey);
+        if (cached && cached.length > 0) return cached;
+
+        // Try live fetch from javhdz.bz
+        try {
+            const html = await fetchPage(targetUrl);
+            if (html) {
+                const liveItems = parseMovieCards(html);
+                if (liveItems && liveItems.length > 0) {
+                    cache.set(cacheKey, liveItems, 600);
+                    return liveItems;
+                }
+            }
+        } catch (e) {
+            console.warn(`[JavHD] Live fetch failed for ${targetUrl}:`, e.message);
+        }
+
+        // Fallback to static catalog if live fetch failed (e.g. offline)
+        if (cachedCatalog && Array.isArray(cachedCatalog) && cachedCatalog.length > 0) {
+            let results = [...cachedCatalog];
+            if (extra.genre) {
                 const g = extra.genre.toLowerCase();
                 if (g !== 'tất cả') {
-                    results = results.filter(m => 
+                    results = results.filter(m =>
                         m.genres && m.genres.some(genre => genre.toLowerCase().includes(g) || g.includes(genre.toLowerCase()))
                     );
                 }
-            } else if (catalogId === 'javhd-uncensored') {
-                results = results.filter(m => 
-                    m.genres && m.genres.some(g => g.toLowerCase().includes('không che') || g.toLowerCase().includes('uncensored') || g.toLowerCase().includes('tokyo hot'))
-                );
-            } else if (catalogId === 'javhd-beauty') {
-                results = results.filter(m => 
-                    m.genres && m.genres.some(g => g.toLowerCase().includes('beauty') || g.toLowerCase().includes('gái xinh') || g.toLowerCase().includes('s-cute'))
-                );
-            } else if (catalogId === 'javhd-censored') {
-                results = results.filter(m => 
-                    m.genres && m.genres.some(g => g.toLowerCase().includes('có che') || g.toLowerCase().includes('censored'))
-                );
             }
-
-            const skip = parseInt(extra.skip, 10) || 0;
             const pageItems = results.slice(skip, skip + 18);
             if (pageItems.length > 0) {
                 return pageItems.map(m => ({
@@ -259,51 +345,9 @@ async function getCatalog(catalogId, type, extra = {}) {
                     description: m.description
                 }));
             }
-            return [];
         }
 
-        // Live fallback
-        const page = extra.skip ? Math.floor(extra.skip / 18) + 1 : 1;
-        let urlPath = '';
-
-        if (extra.search) {
-            urlPath = `/search/${encodeURIComponent(extra.search)}/page/${page}/`;
-        } else if (extra.genre && GENRE_MAP[extra.genre]) {
-            const mappedPath = GENRE_MAP[extra.genre];
-            urlPath = `${mappedPath.replace(/\/$/, '')}/page/${page}/`;
-        } else {
-            switch (catalogId) {
-                case 'javhd-trending':
-                    urlPath = `/trending/page/${page}/`;
-                    break;
-                case 'javhd-censored':
-                    urlPath = `/category/censored-2/page/${page}/`;
-                    break;
-                case 'javhd-uncensored':
-                    urlPath = `/category/uncensored-3/page/${page}/`;
-                    break;
-                case 'javhd-beauty':
-                    urlPath = `/category/beauty-4/page/${page}/`;
-                    break;
-                case 'javhd-latest':
-                default:
-                    urlPath = `/video/page/${page}/`;
-                    break;
-            }
-        }
-
-        const targetUrl = `${BASE_URL}${urlPath}`;
-        const cacheKey = `javhd:catalog:${catalogId}:${targetUrl}`;
-        const cached = cache.get(cacheKey);
-        if (cached) return cached;
-
-        const html = await fetchPage(targetUrl);
-        const metas = parseMovieCards(html);
-
-        if (metas.length > 0) {
-            cache.set(cacheKey, metas, 600);
-        }
-        return metas;
+        return [];
     } catch (err) {
         console.error('[JavHD Catalog Error]:', err.message);
         return [];
