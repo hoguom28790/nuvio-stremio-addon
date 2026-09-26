@@ -244,10 +244,12 @@ export default {
             if (!isAlreadyOnRender && RENDER_HOST) {
                 try {
                     const renderUrl = `${RENDER_HOST.replace(/\/$/, '')}/javhd/stream/${slug}/${quality}.m3u8`;
-                    const renderRes = await fetch(renderUrl, { signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined });
+                    const renderRes = await fetch(renderUrl, { signal: AbortSignal.timeout ? AbortSignal.timeout(25000) : undefined });
                     if (renderRes.ok) {
-                        const text = await renderRes.text();
+                        let text = await renderRes.text();
                         if (text && text.includes('#EXTM3U')) {
+                            // Rewrite segments to point to CURRENT host (e.g. Cloudflare Worker edge) so segments are served via fast global CDN!
+                            text = text.replace(/https?:\/\/[^/]+\/javhd\/segment\.ts/g, `${resolveHost}/javhd/segment.ts`);
                             return new Response(text, {
                                 headers: {
                                     ...CORS_HEADERS,

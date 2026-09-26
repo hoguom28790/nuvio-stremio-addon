@@ -518,6 +518,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
         // CF Worker IPs are blocked by tiktokcdn.top (403), Render.com IPs are not.
         // All M3U8 + segment proxying is handled by Render.com.
         const RENDER_BASE = 'https://nuvio-stremio-addon-1.onrender.com';
+        const currentHost = host.includes('://') ? host : `https://${host}`;
 
         const proxyHeaders = {
             request: {
@@ -526,27 +527,33 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
             }
         };
 
-        let direct1080 = masterUrl;
-        if (masterUrl.includes('-playlist.m3u8')) {
-            direct1080 = masterUrl.replace('-playlist.m3u8', '-1080.m3u8');
-        } else if (masterUrl.includes('.m3u8')) {
-            direct1080 = masterUrl.replace(/\.m3u8$/, '-1080.m3u8');
-        }
-
         const streams = [];
 
-        // Duy nhất 1 mục JavHD [Direct] hoạt động trên TẤT CẢ nền tảng (Nuvio TV, Windows, Web, Stremio iOS, Web)
-        // Xử lý bóc tách mã PNG chuẩn MPEG-TS qua Render, tự động cấp Referer, không phụ thuộc vào player
+        // Stream 1: VIP CDN tốc độ cao (phát qua Cloudflare Edge / Addon Server hiện tại)
         streams.push({
-            name: '🔞 JavHD [Direct]',
-            title: `[Full HD 1080p] ${title}\n⚡ Siêu Nét 1080p • Mọi Nền Tảng (TV, App, Web)`,
-            url: `${RENDER_BASE}/javhd/stream/${slug}/1080.m3u8`,
+            name: '🔞 JavHD [VIP CDN]',
+            title: `[Full HD 1080p] ${title}\n⚡ Siêu Tốc Độ • Mọi Thiết Bị (TV, Phone, Web)`,
+            url: `${currentHost}/javhd/stream/${slug}/1080.m3u8`,
             behaviorHints: {
                 notWebReady: false,
-                bingeGroup: 'javhd-direct',
+                bingeGroup: 'javhd-vip',
                 proxyHeaders: proxyHeaders
             }
         });
+
+        // Stream 2: Dự phòng Render Server nếu client không chạy trên Render
+        if (!currentHost.includes('onrender.com')) {
+            streams.push({
+                name: '🔞 JavHD [Dự Phòng Render]',
+                title: `[Full HD 1080p] ${title}\n🛡️ Máy Chủ Dự Phòng (Render Proxy)`,
+                url: `${RENDER_BASE}/javhd/stream/${slug}/1080.m3u8`,
+                behaviorHints: {
+                    notWebReady: false,
+                    bingeGroup: 'javhd-backup',
+                    proxyHeaders: proxyHeaders
+                }
+            });
+        }
 
         if (streams.length > 0) {
             cache.set(cacheKey, streams, 1800);
@@ -588,18 +595,25 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
     }
 
     const qStr = String(quality).toLowerCase();
-    let targetM3u8Url = masterUrl;
+    const candidateUrls = [];
     let isMaster = false;
 
     if (qStr.includes('720')) {
-        targetM3u8Url = masterUrl.replace('-playlist.m3u8', '-720.m3u8');
+        candidateUrls.push(masterUrl.replace('-playlist.m3u8', '-720.m3u8'));
+        candidateUrls.push(masterUrl.replace('-playlist.m3u8', '-1080.m3u8'));
+        candidateUrls.push(masterUrl);
     } else if (qStr.includes('480')) {
-        targetM3u8Url = masterUrl.replace('-playlist.m3u8', '-480.m3u8');
+        candidateUrls.push(masterUrl.replace('-playlist.m3u8', '-480.m3u8'));
+        candidateUrls.push(masterUrl.replace('-playlist.m3u8', '-720.m3u8'));
+        candidateUrls.push(masterUrl);
     } else if (qStr.includes('master') || qStr.includes('auto') || qStr.includes('playlist')) {
-        targetM3u8Url = masterUrl;
+        candidateUrls.push(masterUrl);
         isMaster = true;
     } else {
-        targetM3u8Url = masterUrl.replace('-playlist.m3u8', '-1080.m3u8');
+        candidateUrls.push(masterUrl.replace('-playlist.m3u8', '-1080.m3u8'));
+        candidateUrls.push(masterUrl.replace('-playlist.m3u8', '-720.m3u8'));
+        candidateUrls.push(masterUrl.replace('-playlist.m3u8', '-480.m3u8'));
+        candidateUrls.push(masterUrl);
     }
 
     let content = '';
@@ -608,49 +622,51 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
         'User-Agent': USER_AGENT
     };
 
-    // 1. Thử tải trực tiếp
-    if (typeof fetch !== 'undefined') {
-        try {
-            const res = await fetch(targetM3u8Url, {
-                headers: fetchHeaders,
-                referrer: `${BASE_URL}/`,
-                referrerPolicy: 'unsafe-url'
-            });
-            if (res.ok) {
-                const text = await res.text();
-                if (text && text.includes('#EXTM3U')) {
-                    content = text;
+    // 1. Thử tải trực tiếp theo danh sách candidate qualities
+    for (const targetM3u8Url of candidateUrls) {
+        if (targetM3u8Url === masterUrl) isMaster = true;
+        if (typeof fetch !== 'undefined') {
+            try {
+                const res = await fetch(targetM3u8Url, {
+                    headers: fetchHeaders,
+                    referrer: `${BASE_URL}/`,
+                    referrerPolicy: 'unsafe-url'
+                });
+                if (res.ok) {
+                    const text = await res.text();
+                    if (text && text.includes('#EXTM3U')) {
+                        content = text;
+                        break;
+                    }
                 }
-            }
-        } catch (e) {
-            console.warn('[JavHD] Direct fetch failed, fallback to GAS resolver...');
+            } catch (e) {}
+        } else {
+            try {
+                const m3u8Res = await client.get(targetM3u8Url, { headers: fetchHeaders });
+                if (m3u8Res && m3u8Res.data && String(m3u8Res.data).includes('#EXTM3U')) {
+                    content = m3u8Res.data;
+                    break;
+                }
+            } catch (e) {}
         }
-    } else {
-        try {
-            const m3u8Res = await client.get(targetM3u8Url, {
-                headers: fetchHeaders
-            });
-            if (m3u8Res && m3u8Res.data && String(m3u8Res.data).includes('#EXTM3U')) {
-                content = m3u8Res.data;
-            }
-        } catch (e) {}
     }
 
     // 2. Nếu fetch trực tiếp bị 403 (do Cloudflare Worker IP bị CDN chặn) -> Dùng Google Apps Script Resolver
     if (!content || !content.includes('#EXTM3U')) {
         const gasUrl = (env && env.GAS_PROXY_URL) || (typeof process !== 'undefined' && process.env && process.env.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.GAS_PROXY_URL);
         if (gasUrl) {
-            try {
-                const proxyTarget = `${gasUrl}?url=${encodeURIComponent(targetM3u8Url)}&referer=${encodeURIComponent(BASE_URL + '/')}`;
-                const gasRes = await fetch(proxyTarget);
-                if (gasRes.ok) {
-                    const text = await gasRes.text();
-                    if (text && text.includes('#EXTM3U')) {
-                        content = text;
+            for (const targetM3u8Url of candidateUrls) {
+                try {
+                    const proxyTarget = `${gasUrl}?url=${encodeURIComponent(targetM3u8Url)}&referer=${encodeURIComponent(BASE_URL + '/')}`;
+                    const gasRes = await fetch(proxyTarget);
+                    if (gasRes.ok) {
+                        const text = await gasRes.text();
+                        if (text && text.includes('#EXTM3U')) {
+                            content = text;
+                            break;
+                        }
                     }
-                }
-            } catch (err) {
-                console.error('[JavHD] GAS Resolver error:', err.message);
+                } catch (err) {}
             }
         }
     }
