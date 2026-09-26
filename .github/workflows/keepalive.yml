@@ -1,0 +1,16 @@
+name: Keepalive Render.com
+
+on:
+  schedule:
+    - cron: '*/14 * * * *'
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render.com
+        run: |
+          echo "Pinging at $(date)"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 https://nuvio-stremio-addon-1.onrender.com/ping)
+          echo "Status: $STATUS"
