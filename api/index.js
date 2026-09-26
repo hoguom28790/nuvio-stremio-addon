@@ -58,6 +58,7 @@ const hentaiz = require('../src/scrapers/hentaiz');
 const javhd = require('../src/scrapers/javhd');
 const vlxx = require('../src/scrapers/vlxx');
 const avdb = require('../src/scrapers/avdb');
+const kkphim = require('../src/scrapers/kkphim');
 
 async function handleResource(req, res, config) {
     const { resource, type } = req.params;
@@ -353,6 +354,25 @@ app.get('/avdb/segment.ts', async (req, res) => {
     } catch (err) {
         console.error('[AVDB Segment Proxy Error]:', err.message);
         if (!res.headersSent) res.status(502).send('Upstream error');
+    }
+});
+
+// KKPhim Clean M3U8 Stream Delivery Route (Filter out 15:00 and 3:00 SSAI ads)
+app.get('/kkphim/clean.m3u8', async (req, res) => {
+    const targetUrl = req.query.url;
+    const host = req.headers.host || 'localhost';
+    if (!targetUrl) return res.status(400).send('Missing url');
+    try {
+        const playlist = await kkphim.getCleanM3u8(targetUrl, host);
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', '*');
+        res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=7200');
+        res.send(playlist);
+    } catch (err) {
+        console.error('[KKPhim Clean M3U8 Error]:', err.message);
+        res.status(500).send('Error cleaning playlist: ' + err.message);
     }
 });
 

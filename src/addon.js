@@ -169,7 +169,7 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
 
     try {
         if (id.startsWith('kkphim:') && isSourceEnabled('kkphim', config)) {
-            streams = await kkphim.getStream(id, type);
+            streams = await kkphim.getStream(id, type, config.host);
         } else if (id.startsWith('nguonc:') && isSourceEnabled('nguonc', config)) {
             streams = await nguonc.getStream(id, type, config.host);
         } else if (id.startsWith('hh3d:') && isSourceEnabled('hh3d', config)) {

@@ -5,6 +5,7 @@ const hentaiz = require('./scrapers/hentaiz');
 const javhd = require('./scrapers/javhd');
 const vlxx = require('./scrapers/vlxx');
 const avdb = require('./scrapers/avdb');
+const kkphim = require('./scrapers/kkphim');
 
 function parseConfig(configParam) {
     if (!configParam) return {};
@@ -352,6 +353,24 @@ export default {
                 });
             } catch (err) {
                 return new Response('Error generating playlist: ' + err.message, { status: 500, headers: CORS_HEADERS });
+            }
+        }
+
+        // 8d. KKPhim Clean M3U8 Stream (Filter out 15:00 and 3:00 SSAI ads)
+        if (pathname === '/kkphim/clean.m3u8') {
+            const targetUrl = url.searchParams.get('url');
+            if (!targetUrl) return new Response('Missing url query parameter', { status: 400, headers: CORS_HEADERS });
+            try {
+                const playlist = await kkphim.getCleanM3u8(targetUrl, host);
+                return new Response(playlist, {
+                    headers: {
+                        ...CORS_HEADERS,
+                        'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                        'Cache-Control': 'public, max-age=3600, s-maxage=7200'
+                    }
+                });
+            } catch (err) {
+                return new Response('Error cleaning playlist: ' + err.message, { status: 500, headers: CORS_HEADERS });
             }
         }
 
