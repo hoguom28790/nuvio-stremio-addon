@@ -193,12 +193,12 @@ export default {
             // When running on CF Worker without RENDER_HOST: segments point to CF Worker (may fail, fallback to Direct)
             const resolveHost = `https://${host}`;
 
-            // Delegate ENTIRE JAVHD flow to Render.com (hardcoded - no env var needed)
-            // Render.com fetches M3U8 + proxies segments from tiktokcdn (IP not blocked)
+            // Delegate to Render.com ONLY if running on Cloudflare Worker (not already on Render.com)
+            // This prevents infinite self-calling loop on Render.com!
+            const isAlreadyOnRender = host.includes('onrender.com') || host.includes('render.com');
             const RENDER_HOST = 'https://nuvio-stremio-addon-1.onrender.com';
-            if (RENDER_HOST) {
+            if (!isAlreadyOnRender && RENDER_HOST) {
                 try {
-                    // No cfhost param: Render.com uses its own host for segment URLs
                     const renderUrl = `${RENDER_HOST.replace(/\/$/, '')}/javhd/stream/${slug}/${quality}.m3u8`;
                     const renderRes = await fetch(renderUrl, { signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined });
                     if (renderRes.ok) {

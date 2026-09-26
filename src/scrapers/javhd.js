@@ -474,52 +474,18 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
 
         const streams = [];
 
-        // 1. Full HD 1080p — via Render.com proxy
+        // Duy nhất 1 mục JavHD [Direct] hoạt động trên TẤT CẢ nền tảng (Nuvio TV, Windows, Web, Stremio iOS, Web)
+        // Xử lý bóc tách mã PNG chuẩn MPEG-TS qua Render, tự động cấp Referer, không phụ thuộc vào player
         streams.push({
-            name: '🔞 JavHD',
-            title: `[Full HD 1080p] ${title}\n⚡ Siêu Nét 1080p • Phát Mượt Mà • Tua Tức Thì`,
+            name: '🔞 JavHD [Direct]',
+            title: `[Full HD 1080p] ${title}\n⚡ Siêu Nét 1080p • Mọi Nền Tảng (TV, App, Web)`,
             url: `${RENDER_BASE}/javhd/stream/${slug}/1080.m3u8`,
             behaviorHints: {
                 notWebReady: false,
-                bingeGroup: 'javhd-1080p'
+                bingeGroup: 'javhd-direct',
+                proxyHeaders: proxyHeaders
             }
         });
-
-        // 2. HD 720p — via Render.com proxy
-        streams.push({
-            name: '🔞 JavHD',
-            title: `[HD 720p] ${title}\n⚡ Tốc Độ Cao • Tua Nhanh Mượt Mà`,
-            url: `${RENDER_BASE}/javhd/stream/${slug}/720.m3u8`,
-            behaviorHints: {
-                notWebReady: false,
-                bingeGroup: 'javhd-720p'
-            }
-        });
-
-        // 3. Auto — via Render.com proxy (adaptive bitrate)
-        streams.push({
-            name: '🔞 JavHD',
-            title: `[Tự Động Auto] ${title}\n⚡ Đa Độ Phân Giải Thích Ứng (1080p/720p/480p)`,
-            url: `${RENDER_BASE}/javhd/stream/${slug}/master.m3u8`,
-            behaviorHints: {
-                notWebReady: false,
-                bingeGroup: 'javhd-auto'
-            }
-        });
-
-        // Direct CDN — client sends Referer directly to tiktokcdn (works on TV/desktop players)
-        if (direct1080) {
-            streams.push({
-                name: '🔞 JavHD [Direct]',
-                title: `[Direct CDN] ${title}\n⚡ Luồng Trực Tiếp CDN`,
-                url: direct1080,
-                behaviorHints: {
-                    notWebReady: false,
-                    bingeGroup: 'javhd-direct',
-                    proxyHeaders: proxyHeaders
-                }
-            });
-        }
 
         if (streams.length > 0) {
             cache.set(cacheKey, streams, 1800);
