@@ -4,6 +4,19 @@ const cache = require('../utils/cache');
 const BASE_URL = 'https://javhd.mov';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
+const avdb = require('./avdb');
+
+function getSafePoster(title, originalPoster) {
+    if (title) {
+        const match = title.match(/([A-Z0-9]{2,8}[-_]?\d{2,6})/i);
+        if (match) {
+            const code = match[1].toUpperCase().replace('_', '-');
+            return `https://upload18.cc/v/${code}/poster.jpg`;
+        }
+    }
+    return originalPoster || '';
+}
+
 const client = axios.create({
     baseURL: BASE_URL,
     timeout: 12000,
@@ -120,7 +133,7 @@ async function getCatalog(catalogId, type, extra = {}) {
                 id: `javhdmov:${item.id}`,
                 type: 'movie',
                 name: item.title,
-                poster: item.image_url,
+                poster: getSafePoster(item.title, item.image_url),
                 posterShape: 'poster',
                 description: `JavHD MOV • [${item.quality_text || 'HD'}] ${item.title}\n⚡ Định tuyến: Fast Stream CDN (Direct MP4)\nThời lượng: ${item.duration || 'N/A'} • Lượt xem: ${item.views_text || '0'}`
             }));
@@ -150,7 +163,7 @@ async function getCatalog(catalogId, type, extra = {}) {
         id: `javhdmov:${item.id}`,
         type: 'movie',
         name: item.title,
-        poster: item.poster,
+        poster: getSafePoster(item.title, item.poster),
         posterShape: 'poster',
         description: `JavHD MOV • [${item.quality_text || 'HD'}] ${item.title}\n⚡ Định tuyến: Fast Stream CDN (Direct MP4)\nThời lượng: ${item.duration || 'N/A'} • Lượt xem: ${item.views_text || '0'}`
     }));
@@ -191,8 +204,8 @@ async function getMeta(type, id) {
             id: `javhdmov:${cleanId}`,
             type: 'movie',
             name: d.title,
-            poster: d.poster_url,
-            background: d.poster_url,
+            poster: getSafePoster(d.title, d.poster_url),
+            background: getSafePoster(d.title, d.poster_url),
             posterShape: 'poster',
             description: desc,
             genres: Array.from(genres),
@@ -215,8 +228,8 @@ async function getMeta(type, id) {
             id: `javhdmov:${cleanId}`,
             type: 'movie',
             name: foundMeta.title,
-            poster: foundMeta.poster,
-            background: foundMeta.poster,
+            poster: getSafePoster(foundMeta.title, foundMeta.poster),
+            background: getSafePoster(foundMeta.title, foundMeta.poster),
             posterShape: 'poster',
             description: `JavHD MOV • ${foundMeta.title}\n⚡ Định tuyến: Fast Stream CDN (Direct MP4)`,
             genres: foundMeta.genres || ['JavHD MOV', '18+'],
@@ -279,6 +292,30 @@ async function getStream(id, type, host) {
                 bingeGroup: `javhdmov-${cleanId}`
             }
         }];
+    }
+
+    // Cross-source fallback via JAV code
+    let titleToSearch = foundItem?.title || '';
+    const codeMatch = (titleToSearch || cleanId).match(/([A-Z0-9]{2,8}[-_]?\d{2,6})/i);
+    if (codeMatch) {
+        const code = codeMatch[1].toUpperCase().replace('_', '-');
+        try {
+            const avdbItems = await avdb.getCatalog('avdb-movie', 'movie', { search: code });
+            if (avdbItems && avdbItems.length > 0) {
+                const avdbStreams = await avdb.getStream(avdbItems[0].id, 'movie', host);
+                if (avdbStreams && avdbStreams.length > 0) {
+                    const mapped = avdbStreams.map(s => ({
+                        ...s,
+                        name: '🔞 [Direct CDN] JavHD MOV',
+                        title: s.title.replace(/AVDB/g, 'JavHD MOV')
+                    }));
+                    cache.set(cacheKey, mapped, 1800);
+                    return mapped;
+                }
+            }
+        } catch (e) {
+            console.warn('[JavHD MOV Cross-source Error]:', e.message);
+        }
     }
     return [];
 }
