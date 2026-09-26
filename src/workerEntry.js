@@ -365,49 +365,23 @@ export default {
         if (pathname === '/kkphim/clean.m3u8') {
             const targetUrl = url.searchParams.get('url');
             if (!targetUrl) return new Response('Missing url query parameter', { status: 400, headers: CORS_HEADERS });
-
-            // 1. Try local cleaning
             try {
                 const playlist = await kkphim.getCleanM3u8(targetUrl, host);
-                if (playlist && playlist.includes('#EXTM3U')) {
+                if (playlist) {
                     return new Response(playlist, {
                         headers: {
                             ...CORS_HEADERS,
                             'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
-                            'Cache-Control': 'public, max-age=7200, s-maxage=14400'
+                            'Cache-Control': 'public, max-age=3600, s-maxage=7200'
                         }
                     });
                 }
             } catch (err) {
-                console.warn('[KKPhim Clean M3U8 Local Error]:', err.message);
+                console.warn('[KKPhim Clean M3U8 Error]:', err.message);
             }
-
-            // 2. If on Cloudflare Worker, delegate to Render.com (Node.js backend has Vietnam proxy pool)
-            if (!isAlreadyOnRender) {
-                try {
-                    const renderRes = await fetch(`${RENDER_HOST}/kkphim/clean.m3u8?url=${encodeURIComponent(targetUrl)}`, {
-                        headers: { 'Accept': '*/*' },
-                        signal: AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined
-                    });
-                    if (renderRes.ok) {
-                        const cleanPlaylist = await renderRes.text();
-                        if (cleanPlaylist && cleanPlaylist.includes('#EXTM3U')) {
-                            return new Response(cleanPlaylist, {
-                                headers: {
-                                    ...CORS_HEADERS,
-                                    'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
-                                    'Cache-Control': 'public, max-age=7200, s-maxage=14400'
-                                }
-                            });
-                        }
-                    }
-                } catch (renderErr) {
-                    console.warn('[KKPhim Clean M3U8 Render Delegation Error]:', renderErr.message);
-                }
-            }
-
-            // 3. Fallback: If upstream CDN blocks datacenter worker IP, redirect client directly to upstream CDN URL
-            // Client device in Vietnam has residential IP and will play directly without error.
+            // Auto-fallback: If upstream CDN blocks datacenter worker IP, redirect client directly to upstream CDN URL
+            // Client device has residential IP and will play directly without error.
+            // MUST include CORS headers on 302 so Stremio Web (browser) can follow the cross-origin redirect.
             return new Response(null, {
                 status: 302,
                 headers: {

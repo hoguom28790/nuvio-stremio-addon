@@ -230,50 +230,22 @@ async function getCleanM3u8(targetUrl, host = 'localhost') {
 
         let content = '';
         if (typeof fetch === 'function') {
-            try {
-                const res = await fetch(targetUrl, {
-                    headers: fetchHeaders,
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined
-                });
-                if (res.ok) {
-                    const txt = await res.text();
-                    if (typeof txt === 'string' && txt.includes('#EXTM3U')) {
-                        content = txt;
-                    }
-                }
-            } catch (e) {
-                // Ignore direct fetch failure
-            }
+            const res = await fetch(targetUrl, {
+                headers: fetchHeaders,
+                signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined
+            });
+            if (!res.ok) throw new Error(`Upstream returned ${res.status}`);
+            content = await res.text();
         } else {
-            try {
-                const res = await axios.get(targetUrl, {
-                    headers: fetchHeaders,
-                    timeout: 4000
-                });
-                if (res.data && typeof res.data === 'string' && res.data.includes('#EXTM3U')) {
-                    content = res.data;
-                }
-            } catch (e) {
-                // Ignore axios failure
-            }
-        }
-
-        // If direct fetch failed (e.g. 404 geo-block on cloud servers), use Vietnam proxy pool
-        if (!content || !content.includes('#EXTM3U')) {
-            const isNode = typeof process !== 'undefined' && process.versions && !!process.versions.node;
-            if (isNode) {
-                try {
-                    const fetcherModule = '../utils/vnProxyFetcher';
-                    const { fetchM3u8ViaVnProxy } = require(fetcherModule);
-                    content = await fetchM3u8ViaVnProxy(targetUrl);
-                } catch (proxyErr) {
-                    console.warn('[KKPhim VN Proxy Error]:', proxyErr.message);
-                }
-            }
+            const res = await axios.get(targetUrl, {
+                headers: fetchHeaders,
+                timeout: 8000
+            });
+            content = res.data;
         }
 
         if (typeof content !== 'string' || !content.includes('#EXTM3U')) {
-            throw new Error('Invalid M3U8 content after all fetch attempts');
+            throw new Error('Invalid M3U8 content');
         }
 
         // 1. If this is a Master Playlist (#EXT-X-STREAM-INF), rewrite sub-playlist URLs to also be cleaned
@@ -288,13 +260,13 @@ async function getCleanM3u8(targetUrl, host = 'localhost') {
                 return line;
             });
             const result = rewritten.join('\n');
-            cache.set(cacheKey, result, 7200);
+            cache.set(cacheKey, result, 3600);
             return result;
         }
 
         // 2. If this is a Media Playlist (#EXTINF:), clean ad segments and make .ts URLs absolute
         const cleaned = cleanM3u8(content, targetUrl);
-        cache.set(cacheKey, cleaned, 7200);
+        cache.set(cacheKey, cleaned, 3600);
         return cleaned;
     } catch (err) {
         console.warn(`[KKPhim Clean M3U8 Error for ${targetUrl}]:`, err.message);
