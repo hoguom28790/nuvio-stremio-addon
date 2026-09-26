@@ -356,22 +356,27 @@ export default {
             }
         }
 
-        // 8d. KKPhim Clean M3U8 Stream (Filter out 15:00 and 3:00 SSAI ads)
+        // 8d. KKPhim Clean M3U8 Stream (Filter out 15:00 and 3:00 SSAI ads with auto-fallback)
         if (pathname === '/kkphim/clean.m3u8') {
             const targetUrl = url.searchParams.get('url');
             if (!targetUrl) return new Response('Missing url query parameter', { status: 400, headers: CORS_HEADERS });
             try {
                 const playlist = await kkphim.getCleanM3u8(targetUrl, host);
-                return new Response(playlist, {
-                    headers: {
-                        ...CORS_HEADERS,
-                        'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
-                        'Cache-Control': 'public, max-age=3600, s-maxage=7200'
-                    }
-                });
+                if (playlist) {
+                    return new Response(playlist, {
+                        headers: {
+                            ...CORS_HEADERS,
+                            'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                            'Cache-Control': 'public, max-age=3600, s-maxage=7200'
+                        }
+                    });
+                }
             } catch (err) {
-                return new Response('Error cleaning playlist: ' + err.message, { status: 500, headers: CORS_HEADERS });
+                console.warn('[KKPhim Clean M3U8 Error]:', err.message);
             }
+            // Auto-fallback: If upstream CDN blocks datacenter worker IP with 404, redirect client directly to upstream CDN URL
+            // Client device has residential IP and will play directly without error
+            return Response.redirect(targetUrl, 302);
         }
 
         // 9. Debug routes

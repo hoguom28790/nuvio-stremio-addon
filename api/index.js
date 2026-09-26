@@ -364,16 +364,19 @@ app.get('/kkphim/clean.m3u8', async (req, res) => {
     if (!targetUrl) return res.status(400).send('Missing url');
     try {
         const playlist = await kkphim.getCleanM3u8(targetUrl, host);
-        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', '*');
-        res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=7200');
-        res.send(playlist);
+        if (playlist) {
+            res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', '*');
+            res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=7200');
+            return res.send(playlist);
+        }
     } catch (err) {
         console.error('[KKPhim Clean M3U8 Error]:', err.message);
-        res.status(500).send('Error cleaning playlist: ' + err.message);
     }
+    // Auto-fallback: redirect directly to upstream targetUrl
+    return res.redirect(302, targetUrl);
 });
 
 // Debug JavHD

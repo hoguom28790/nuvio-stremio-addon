@@ -874,32 +874,51 @@ var require_kkphim = __commonJS({
       const cacheKey = `kkphim:clean:${targetUrl}`;
       const cached = cache.get(cacheKey);
       if (cached) return cached;
-      const res = await axios.get(targetUrl, {
-        headers: {
+      try {
+        const fetchHeaders = {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Referer": "https://phimapi.com/"
-        },
-        timeout: 1e4
-      });
-      const content = res.data;
-      if (typeof content !== "string") throw new Error("Invalid M3U8 content");
-      if (content.includes("#EXT-X-STREAM-INF")) {
-        const lines = content.split("\n");
-        const rewritten = lines.map((line) => {
-          const trimmed = line.trim();
-          if (trimmed && !trimmed.startsWith("#")) {
-            const absoluteSubUrl = new URL(trimmed, targetUrl).toString();
-            return `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(absoluteSubUrl)}`;
-          }
-          return line;
-        });
-        const result = rewritten.join("\n");
-        cache.set(cacheKey, result, 3600);
-        return result;
+          "Referer": "https://player.phimapi.com/",
+          "Origin": "https://player.phimapi.com"
+        };
+        let content = "";
+        if (typeof fetch === "function") {
+          const res = await fetch(targetUrl, {
+            headers: fetchHeaders,
+            signal: AbortSignal.timeout ? AbortSignal.timeout(8e3) : void 0
+          });
+          if (!res.ok) throw new Error(`Upstream returned ${res.status}`);
+          content = await res.text();
+        } else {
+          const res = await axios.get(targetUrl, {
+            headers: fetchHeaders,
+            timeout: 8e3
+          });
+          content = res.data;
+        }
+        if (typeof content !== "string" || !content.includes("#EXTM3U")) {
+          throw new Error("Invalid M3U8 content");
+        }
+        if (content.includes("#EXT-X-STREAM-INF")) {
+          const lines = content.split("\n");
+          const rewritten = lines.map((line) => {
+            const trimmed = line.trim();
+            if (trimmed && !trimmed.startsWith("#")) {
+              const absoluteSubUrl = new URL(trimmed, targetUrl).toString();
+              return `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(absoluteSubUrl)}`;
+            }
+            return line;
+          });
+          const result = rewritten.join("\n");
+          cache.set(cacheKey, result, 3600);
+          return result;
+        }
+        const cleaned = cleanM3u8(content, targetUrl);
+        cache.set(cacheKey, cleaned, 3600);
+        return cleaned;
+      } catch (err) {
+        console.warn(`[KKPhim Clean M3U8 Error for ${targetUrl}]:`, err.message);
+        return null;
       }
-      const cleaned = cleanM3u8(content, targetUrl);
-      cache.set(cacheKey, cleaned, 3600);
-      return cleaned;
     }
     async function getStream(id, type, host = "") {
       try {
@@ -916,11 +935,21 @@ var require_kkphim = __commonJS({
           const serverData = server.server_data || [];
           const targetItem = findEpisode(serverData, targetEp);
           if (targetItem && targetItem.link_m3u8) {
+            streams.push({
+              name: `\u26A1 [CDN] KKPhim \u2022 ${serverName} [G\u1ED1c]`,
+              title: `${res.data?.movie?.name || ""} - T\u1EADp ${targetItem.name}
+\u26A1 \u0110\u1ECBnh tuy\u1EBFn: CDN T\u1ED1c \u0110\u1ED9 Cao (Direct HLS M\u1EB7c \u0110\u1ECBnh)
+\u{1F39E}\uFE0F \u0110\u1ED9 ph\xE2n gi\u1EA3i: 1080p Full HD \u2022 Vietsub`,
+              url: targetItem.link_m3u8,
+              behaviorHints: {
+                notWebReady: false
+              }
+            });
             if (hostBase) {
               streams.push({
-                name: `\u26A1 [CDN] KKPhim \u2022 ${serverName} [L\u1ECDc QC]`,
+                name: `\u{1F6E1}\uFE0F [CDN] KKPhim \u2022 ${serverName} [L\u1ECDc QC]`,
                 title: `${res.data?.movie?.name || ""} - T\u1EADp ${targetItem.name}
-\u26A1 \u0110\u1ECBnh tuy\u1EBFn: CDN T\u1ED1c \u0110\u1ED9 Cao (\u0110\xE3 L\u1ECDc S\u1EA1ch QC 15:00)
+\u{1F6E1}\uFE0F \u0110\u1ECBnh tuy\u1EBFn: Kh\u1EED \u0111o\u1EA1n qu\u1EA3ng c\xE1o 15:00 & 3:00 (Auto-fallback n\u1EBFu CDN ch\u1EB7n)
 \u{1F39E}\uFE0F \u0110\u1ED9 ph\xE2n gi\u1EA3i: 1080p Full HD \u2022 Vietsub`,
                 url: `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(targetItem.link_m3u8)}`,
                 behaviorHints: {
@@ -928,16 +957,6 @@ var require_kkphim = __commonJS({
                 }
               });
             }
-            streams.push({
-              name: `\u26A1 [CDN] KKPhim \u2022 ${serverName} [G\u1ED1c]`,
-              title: `${res.data?.movie?.name || ""} - T\u1EADp ${targetItem.name}
-\u26A1 \u0110\u1ECBnh tuy\u1EBFn: CDN T\u1ED1c \u0110\u1ED9 Cao (Direct HLS G\u1ED1c)
-\u{1F39E}\uFE0F \u0110\u1ED9 ph\xE2n gi\u1EA3i: 1080p Full HD \u2022 Vietsub`,
-              url: targetItem.link_m3u8,
-              behaviorHints: {
-                notWebReady: false
-              }
-            });
           }
         });
         return streams;
@@ -4810,16 +4829,19 @@ var workerEntry_default = {
       if (!targetUrl) return new Response("Missing url query parameter", { status: 400, headers: CORS_HEADERS });
       try {
         const playlist = await kkphim.getCleanM3u8(targetUrl, host);
-        return new Response(playlist, {
-          headers: {
-            ...CORS_HEADERS,
-            "Content-Type": "application/vnd.apple.mpegurl; charset=utf-8",
-            "Cache-Control": "public, max-age=3600, s-maxage=7200"
-          }
-        });
+        if (playlist) {
+          return new Response(playlist, {
+            headers: {
+              ...CORS_HEADERS,
+              "Content-Type": "application/vnd.apple.mpegurl; charset=utf-8",
+              "Cache-Control": "public, max-age=3600, s-maxage=7200"
+            }
+          });
+        }
       } catch (err) {
-        return new Response("Error cleaning playlist: " + err.message, { status: 500, headers: CORS_HEADERS });
+        console.warn("[KKPhim Clean M3U8 Error]:", err.message);
       }
+      return Response.redirect(targetUrl, 302);
     }
     if (pathname === "/debug/test-render") {
       const target = url.searchParams.get("url") || `${RENDER_HOST}/catalog/movie/javhd-latest/genre=${encodeURIComponent("Th\u1ECBnh H\xE0nh")}.json`;
