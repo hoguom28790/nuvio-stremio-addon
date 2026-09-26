@@ -120,6 +120,8 @@ export default {
         const url = new URL(request.url);
         const host = url.host;
         const pathname = url.pathname;
+        const isAlreadyOnRender = host.includes('onrender.com') || host.includes('render.com');
+        const RENDER_HOST = 'https://nuvio-stremio-addon-1.onrender.com';
 
         // 1. Static / Favicon / Logo
         // 0. Keepalive ping endpoint (used by GitHub Actions cron to prevent Render.com from sleeping)
@@ -170,6 +172,24 @@ export default {
 
         // 4. JavHD Segment Unwrapper
         if (pathname === '/javhd/segment.ts') {
+            if (!isAlreadyOnRender && RENDER_HOST) {
+                try {
+                    const renderUrl = `${RENDER_HOST.replace(/\/$/, '')}${pathname}${url.search || ''}`;
+                    const res = await fetch(renderUrl, { signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined });
+                    if (res.ok) {
+                        return new Response(res.body, {
+                            status: res.status,
+                            headers: {
+                                ...CORS_HEADERS,
+                                'Content-Type': res.headers.get('Content-Type') || 'video/mp2t',
+                                'Cache-Control': 'public, max-age=86400, s-maxage=86400, immutable'
+                            }
+                        });
+                    }
+                } catch (e) {
+                    console.warn('[JAVHD Segment] Delegation to Render failed, fallback to local:', e.message);
+                }
+            }
             return handleSegmentProxy(url.searchParams.get('url'), 'https://javhdz.bz/');
         }
 
@@ -180,6 +200,24 @@ export default {
 
         // 5c. AVDB Segment Proxy
         if (pathname === '/avdb/segment.ts') {
+            if (!isAlreadyOnRender && RENDER_HOST) {
+                try {
+                    const renderUrl = `${RENDER_HOST.replace(/\/$/, '')}${pathname}${url.search || ''}`;
+                    const res = await fetch(renderUrl, { signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined });
+                    if (res.ok) {
+                        return new Response(res.body, {
+                            status: res.status,
+                            headers: {
+                                ...CORS_HEADERS,
+                                'Content-Type': res.headers.get('Content-Type') || 'video/mp2t',
+                                'Cache-Control': 'public, max-age=86400, s-maxage=86400, immutable'
+                            }
+                        });
+                    }
+                } catch (e) {
+                    console.warn('[AVDB Segment] Delegation to Render failed, fallback to local:', e.message);
+                }
+            }
             return handleSegmentProxy(url.searchParams.get('url'), 'https://upload18.org/');
         }
 
@@ -365,6 +403,37 @@ export default {
                         }
                         extra[k] = val;
                     }
+                }
+            }
+
+            // Delegate JavHD requests (catalog, meta, stream) to Render.com when running on Cloudflare Worker
+            // This is required because javhdz.bz blocks Cloudflare Workers with anti-bot/WAF,
+            // while Render.com has full access to the entire live catalog, search, metadata, and streams.
+            const isJavhdRequest = (resource === 'catalog' && id && id.startsWith('javhd-')) ||
+                                   ((resource === 'meta' || resource === 'stream') && id && id.startsWith('javhd:'));
+
+            if (!isAlreadyOnRender && RENDER_HOST && isJavhdRequest) {
+                try {
+                    const renderUrl = `${RENDER_HOST.replace(/\/$/, '')}${pathname}${url.search || ''}`;
+                    const renderRes = await fetch(renderUrl, {
+                        headers: {
+                            'Accept': 'application/json, text/plain, */*',
+                            'User-Agent': request.headers.get('User-Agent') || 'Stremio/4.4'
+                        },
+                        signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined
+                    });
+                    if (renderRes.ok) {
+                        const data = await renderRes.text();
+                        return new Response(data, {
+                            headers: {
+                                ...CORS_HEADERS,
+                                'Content-Type': 'application/json; charset=utf-8',
+                                'Cache-Control': 'max-age=120, stale-while-revalidate=600, public'
+                            }
+                        });
+                    }
+                } catch (e) {
+                    console.warn('[JAVHD] Render.com delegation failed, falling back to local handler:', e.message);
                 }
             }
 

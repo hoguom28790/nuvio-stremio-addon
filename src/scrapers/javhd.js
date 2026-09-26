@@ -185,7 +185,7 @@ async function fetchPage(targetUrl) {
                 timeout: 8000
             });
             const html = typeof res.data === 'string' ? res.data : '';
-            if (html && !html.includes('Attention Required') && !html.includes('Cloudflare</title>') && html.includes('movie-item')) {
+            if (html && !html.includes('Attention Required') && !html.includes('Cloudflare</title>') && (html.includes('movie-item') || html.includes('window.atob') || html.includes('<h1'))) {
                 return html;
             }
         } catch (e) {
@@ -200,7 +200,7 @@ async function fetchPage(targetUrl) {
             timeout: 15000
         });
         const html = typeof resProxy.data === 'string' ? resProxy.data : '';
-        if (html && html.includes('movie-item')) {
+        if (html && (html.includes('movie-item') || html.includes('window.atob') || html.includes('<h1'))) {
             return html;
         }
     } catch (errProxy) {}
@@ -249,8 +249,8 @@ async function getCatalog(catalogId, type, extra = {}) {
                 console.warn('[JavHD] Live search error:', errSearch.message);
             }
 
-            // Also search cached catalog to ensure no misses
-            if (cachedCatalog && Array.isArray(cachedCatalog)) {
+            // Also search cached catalog on page 1 to ensure no misses
+            if (page === 1 && cachedCatalog && Array.isArray(cachedCatalog)) {
                 const qLower = query.toLowerCase();
                 const matchedStatic = cachedCatalog.filter(m =>
                     (m.name && m.name.toLowerCase().includes(qLower)) ||
