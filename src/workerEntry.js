@@ -181,19 +181,20 @@ export default {
         if (javhdMatch) {
             const [, slug, quality] = javhdMatch;
 
-            // cfhost param: request arrived at Render.com from CF Worker
-            // Use cfhost as base for segment URLs so segments go back through CF Worker
-            const cfhost = url.searchParams.get('cfhost');
-            const resolveHost = cfhost ? cfhost : `https://${host}`;
+            // resolveHost = current server (used for segment URL rewriting inside getM3u8)
+            // When running on Render.com: segments point to Render.com → Render.com fetches tiktokcdn (no IP block)
+            // When running on CF Worker without RENDER_HOST: segments point to CF Worker (may fail, fallback to Direct)
+            const resolveHost = `https://${host}`;
 
-            // On Cloudflare Worker: if RENDER_HOST is set, proxy M3U8 request to Render.com
-            // Render.com fetches the ~5KB M3U8 text (not blocked), rewrites segments -> CF Worker
-            // All heavy video bandwidth stays on CF Worker
+            // On Cloudflare Worker: if RENDER_HOST is configured, delegate the ENTIRE flow to Render.com
+            // Render.com will: fetch M3U8 from tiktokcdn, rewrite segments to itself, return playlist
+            // Client will then fetch segments from Render.com (which proxies tiktokcdn without IP block)
             const renderHost = (env && env.RENDER_HOST) || (typeof process !== 'undefined' && process.env && process.env.RENDER_HOST);
-            if (renderHost && !cfhost) {
+            if (renderHost) {
                 try {
-                    const renderUrl = `${renderHost.replace(/\/$/, '')}/javhd/stream/${slug}/${quality}.m3u8?cfhost=${encodeURIComponent(`https://${host}`)}`;
-                    const renderRes = await fetch(renderUrl, { signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined });
+                    // No cfhost param: Render.com uses its own host for segment URLs
+                    const renderUrl = `${renderHost.replace(/\/$/, '')}/javhd/stream/${slug}/${quality}.m3u8`;
+                    const renderRes = await fetch(renderUrl, { signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined });
                     if (renderRes.ok) {
                         const text = await renderRes.text();
                         if (text && text.includes('#EXTM3U')) {
@@ -211,7 +212,7 @@ export default {
                 }
             }
 
-            // Local resolve (works on Render.com, may fail on CF Worker due to 403)
+            // Local resolve (works on Render.com or any unblocked IP; may fail on CF Worker due to tiktokcdn IP block)
             try {
                 const playlist = await javhd.getM3u8(slug, quality, resolveHost, env);
                 return new Response(playlist, {
