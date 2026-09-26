@@ -66,6 +66,13 @@ const CATEGORY_MAP = {
     'housekeeper': '/vn/category/housekeeper'
 };
 
+let localCatalog = [];
+try {
+    localCatalog = require('../data/javhdmov_catalog.json');
+} catch (e) {
+    localCatalog = [];
+}
+
 async function getCatalog(catalogId, type, extra = {}) {
     const page = extra.skip ? Math.floor(parseInt(extra.skip, 10) / 23) + 1 : 1;
     let path = '';
@@ -108,23 +115,45 @@ async function getCatalog(catalogId, type, extra = {}) {
     try {
         const res = await client.get(`/api/page?path=${encodeURIComponent(path)}`);
         const list = res.data?.videos || res.data?.items || [];
-        const metas = list.map(item => ({
-            id: `javhdmov:${item.id}`,
-            type: 'movie',
-            name: item.title,
-            poster: item.image_url,
-            posterShape: 'poster',
-            description: `JavHD MOV • [${item.quality_text || 'HD'}] ${item.title}\n⚡ Định tuyến: Fast Stream CDN (Direct MP4)\nThời lượng: ${item.duration || 'N/A'} • Lượt xem: ${item.views_text || '0'}`
-        }));
+        if (list.length > 0) {
+            const metas = list.map(item => ({
+                id: `javhdmov:${item.id}`,
+                type: 'movie',
+                name: item.title,
+                poster: item.image_url,
+                posterShape: 'poster',
+                description: `JavHD MOV • [${item.quality_text || 'HD'}] ${item.title}\n⚡ Định tuyến: Fast Stream CDN (Direct MP4)\nThời lượng: ${item.duration || 'N/A'} • Lượt xem: ${item.views_text || '0'}`
+            }));
 
-        if (metas.length > 0) {
             cache.set(cacheKey, metas, 600);
+            return metas;
         }
-        return metas;
     } catch (err) {
-        console.error(`[JavHD MOV Catalog Error] ${path}:`, err.message);
-        return [];
+        console.warn(`[JavHD MOV Catalog API Error] ${path}:`, err.message);
     }
+
+    // Fallback to static catalog when API is temporarily down / rate limited (e.g. Cloudflare Worker error 1027)
+    let filtered = localCatalog;
+    if (extra.search && extra.search.trim()) {
+        const q = extra.search.toLowerCase().trim();
+        filtered = localCatalog.filter(m => m.title.toLowerCase().includes(q) || m.id.includes(q));
+    } else if (catalogId === 'javhdmov-censored') {
+        filtered = localCatalog.filter(m => m.type === 'censored');
+    } else if (catalogId === 'javhdmov-mosaic') {
+        filtered = localCatalog.filter(m => m.type === 'reducing mosaic');
+    } else if (extra.genre) {
+        const gKey = extra.genre.toLowerCase();
+        filtered = localCatalog.filter(m => Array.isArray(m.genres) && m.genres.some(g => g.toLowerCase().includes(gKey)));
+    }
+
+    return filtered.map(item => ({
+        id: `javhdmov:${item.id}`,
+        type: 'movie',
+        name: item.title,
+        poster: item.poster,
+        posterShape: 'poster',
+        description: `JavHD MOV • [${item.quality_text || 'HD'}] ${item.title}\n⚡ Định tuyến: Fast Stream CDN (Direct MP4)\nThời lượng: ${item.duration || 'N/A'} • Lượt xem: ${item.views_text || '0'}`
+    }));
 }
 
 async function getMeta(type, id) {
@@ -177,9 +206,28 @@ async function getMeta(type, id) {
         cache.set(cacheKey, meta, 3600);
         return meta;
     } catch (err) {
-        console.error(`[JavHD MOV Meta Error] ${cleanId}:`, err.message);
-        return null;
+        console.warn(`[JavHD MOV Meta API Error] ${cleanId}:`, err.message);
     }
+
+    const foundMeta = localCatalog.find(m => m.id === cleanId);
+    if (foundMeta) {
+        return {
+            id: `javhdmov:${cleanId}`,
+            type: 'movie',
+            name: foundMeta.title,
+            poster: foundMeta.poster,
+            background: foundMeta.poster,
+            posterShape: 'poster',
+            description: `JavHD MOV • ${foundMeta.title}\n⚡ Định tuyến: Fast Stream CDN (Direct MP4)`,
+            genres: foundMeta.genres || ['JavHD MOV', '18+'],
+            cast: foundMeta.cast || [],
+            releaseInfo: '2026',
+            behaviorHints: {
+                defaultVideoId: `javhdmov:${cleanId}`
+            }
+        };
+    }
+    return null;
 }
 
 async function getStream(id, type, host) {
@@ -192,37 +240,47 @@ async function getStream(id, type, host) {
         const res = await client.get(`/api/watch?path=/vn/video/${cleanId}`);
         const d = res.data;
         const playerSources = d?.player_sources || [];
-        if (playerSources.length === 0) {
-            console.warn(`[JavHD MOV] No player sources found for ${cleanId}`);
-            return [];
-        }
+        if (playerSources.length > 0) {
+            const sortedSources = [...playerSources].sort((a, b) => (b.size || 0) - (a.size || 0));
+            const best = sortedSources[0];
+            const qualityLabel = best.size ? `${best.size}p` : 'HD';
 
-        const sortedSources = [...playerSources].sort((a, b) => (b.size || 0) - (a.size || 0));
-        const best = sortedSources[0];
-        const qualityLabel = best.size ? `${best.size}p` : 'HD';
-
-        const streams = [{
-            name: '🔞 [Direct CDN] JavHD MOV',
-            title: `[${qualityLabel}] ${d.title}\n⚡ Định tuyến: Fast Stream CDN (Direct MP4)\n${d.type ? `Phân loại: ${d.type}` : ''}`.trim(),
-            url: best.src,
-            behaviorHints: {
-                notWebReady: false,
-                bingeGroup: `javhdmov-${cleanId}`,
-                proxyHeaders: {
-                    request: {
-                        'User-Agent': USER_AGENT,
-                        'Referer': `${BASE_URL}/`
+            const streams = [{
+                name: '🔞 [Direct CDN] JavHD MOV',
+                title: `[${qualityLabel}] ${d.title}\n⚡ Định tuyến: Fast Stream CDN (Direct MP4)\n${d.type ? `Phân loại: ${d.type}` : ''}`.trim(),
+                url: best.src,
+                behaviorHints: {
+                    notWebReady: false,
+                    bingeGroup: `javhdmov-${cleanId}`,
+                    proxyHeaders: {
+                        request: {
+                            'User-Agent': USER_AGENT,
+                            'Referer': `${BASE_URL}/`
+                        }
                     }
                 }
+            }];
+
+            cache.set(cacheKey, streams, 1800);
+            return streams;
+        }
+    } catch (err) {
+        console.warn(`[JavHD MOV Stream API Error] ${cleanId}:`, err.message);
+    }
+
+    const foundItem = localCatalog.find(m => m.id === cleanId);
+    if (foundItem && foundItem.stream_url) {
+        return [{
+            name: '🔞 [Direct CDN] JavHD MOV',
+            title: `[FHD] ${foundItem.title}\n⚡ Định tuyến: Fast Stream CDN (Direct MP4)`,
+            url: foundItem.stream_url,
+            behaviorHints: {
+                notWebReady: false,
+                bingeGroup: `javhdmov-${cleanId}`
             }
         }];
-
-        cache.set(cacheKey, streams, 1800);
-        return streams;
-    } catch (err) {
-        console.error(`[JavHD MOV Stream Error] ${cleanId}:`, err.message);
-        return [];
     }
+    return [];
 }
 
 module.exports = {
