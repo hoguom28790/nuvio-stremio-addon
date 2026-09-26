@@ -120,9 +120,16 @@ export default {
         const url = new URL(request.url);
         const host = url.host;
         const pathname = url.pathname;
-        const isNodeServer = typeof process !== 'undefined' && process.release && process.release.name === 'node';
+        // Correctly detect Cloudflare Workers vs Node.js on Render.com
+        const isCloudflareWorker = typeof WebSocketPair !== 'undefined' || (typeof caches !== 'undefined' && typeof caches.default !== 'undefined');
+        const isNodeServer = !isCloudflareWorker && typeof process !== 'undefined' && process.versions && !!process.versions.node;
         const isAlreadyOnRender = isNodeServer || host.includes('onrender.com') || host.includes('render.com') || host.includes('localhost') || host.includes('127.0.0.1');
         const RENDER_HOST = 'https://nuvio-stremio-addon-1.onrender.com';
+
+        // Keep Render.com awake with non-blocking background ping from CF Worker
+        if (!isAlreadyOnRender && ctx && typeof ctx.waitUntil === 'function') {
+            try { ctx.waitUntil(fetch(`${RENDER_HOST}/ping`).catch(() => {})); } catch (e) {}
+        }
 
         // 1. Static / Favicon / Logo
         // 0. Keepalive ping endpoint (used by GitHub Actions cron to prevent Render.com from sleeping)
@@ -176,7 +183,7 @@ export default {
             if (!isAlreadyOnRender && RENDER_HOST) {
                 try {
                     const renderUrl = `${RENDER_HOST.replace(/\/$/, '')}${pathname}${url.search || ''}`;
-                    const res = await fetch(renderUrl, { signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined });
+                    const res = await fetch(renderUrl, { signal: AbortSignal.timeout ? AbortSignal.timeout(25000) : undefined });
                     if (res.ok) {
                         return new Response(res.body, {
                             status: res.status,
@@ -234,8 +241,6 @@ export default {
 
             // Delegate to Render.com ONLY if running on Cloudflare Worker (not already on Render.com)
             // This prevents infinite self-calling loop on Render.com!
-            const isAlreadyOnRender = host.includes('onrender.com') || host.includes('render.com');
-            const RENDER_HOST = 'https://nuvio-stremio-addon-1.onrender.com';
             if (!isAlreadyOnRender && RENDER_HOST) {
                 try {
                     const renderUrl = `${RENDER_HOST.replace(/\/$/, '')}/javhd/stream/${slug}/${quality}.m3u8`;
@@ -312,9 +317,6 @@ export default {
         const avdbMatch = pathname.match(/^\/avdb\/stream\/([^/]+)\.m3u8$/);
         if (avdbMatch) {
             const slug = decodeURIComponent(avdbMatch[1]);
-            const isAlreadyOnRender = host.includes('onrender.com') || host.includes('render.com');
-            const RENDER_HOST = 'https://nuvio-stremio-addon-1.onrender.com';
-
             // Delegate to Render.com if on Cloudflare Worker (since upload18.org blocks CF IPs)
             if (!isAlreadyOnRender && RENDER_HOST) {
                 try {
@@ -352,6 +354,35 @@ export default {
         }
 
         // 9. Debug routes
+        if (pathname === '/debug/test-render') {
+            const target = url.searchParams.get('url') || `${RENDER_HOST}/catalog/movie/javhd-latest/genre=${encodeURIComponent('Thịnh Hành')}.json`;
+            try {
+                const t0 = Date.now();
+                const res = await fetch(target, {
+                    headers: { 'Accept': 'application/json', 'User-Agent': 'Stremio/4.4' },
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined
+                });
+                const elapsed = Date.now() - t0;
+                const text = await res.text();
+                return new Response(JSON.stringify({
+                    target,
+                    status: res.status,
+                    ok: res.ok,
+                    elapsedMs: elapsed,
+                    bodyLength: text.length,
+                    sample: text.substring(0, 300)
+                }, null, 2), {
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+                });
+            } catch (err) {
+                return new Response(JSON.stringify({
+                    target,
+                    error: err.message,
+                    stack: err.stack
+                }, null, 2), { status: 500, headers: CORS_HEADERS });
+            }
+        }
+
         if (pathname === '/debug/javhd') {
             const diag = {};
             try {
@@ -424,7 +455,7 @@ export default {
                             'Accept': 'application/json, text/plain, */*',
                             'User-Agent': request.headers.get('User-Agent') || 'Stremio/4.4'
                         },
-                        signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined
+                        signal: AbortSignal.timeout ? AbortSignal.timeout(28000) : undefined
                     });
                     if (renderRes.ok) {
                         const data = await renderRes.text();

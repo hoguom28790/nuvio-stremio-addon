@@ -329,11 +329,26 @@ async function getCatalog(catalogId, type, extra = {}) {
         if (cachedCatalog && Array.isArray(cachedCatalog) && cachedCatalog.length > 0) {
             let results = [...cachedCatalog];
             if (extra.genre) {
-                const g = extra.genre.toLowerCase();
-                if (g !== 'tất cả') {
-                    results = results.filter(m =>
-                        m.genres && m.genres.some(genre => genre.toLowerCase().includes(g) || g.includes(genre.toLowerCase()))
-                    );
+                const stripAccents = (s) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+                const gNorm = stripAccents(extra.genre);
+                if (gNorm !== 'tat ca' && gNorm !== 'moi cap nhat' && gNorm !== 'thinh hanh') {
+                    if (gNorm.includes('khong che') || gNorm.includes('uncensored')) {
+                        results = results.filter(m => (m.genres || []).some(genre => {
+                            const n = stripAccents(genre);
+                            return n.includes('khong che') || n.includes('uncensored');
+                        }));
+                    } else if (gNorm.includes('co che') || gNorm.includes('censored')) {
+                        results = results.filter(m => (m.genres || []).some(genre => {
+                            const n = stripAccents(genre);
+                            return n.includes('censored') || n.includes('co che') || !n.includes('khong che');
+                        }));
+                    } else {
+                        const keywords = gNorm.replace(/\([^)]*\)/g, '').trim().split(/\s+/).filter(Boolean);
+                        results = results.filter(m => (m.genres || []).some(genre => {
+                            const n = stripAccents(genre);
+                            return keywords.every(kw => n.includes(kw));
+                        }));
+                    }
                 }
             }
             const pageItems = results.slice(skip, skip + 18);
