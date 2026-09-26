@@ -5,6 +5,7 @@ const hentaiz = require('./scrapers/hentaiz');
 const javhd = require('./scrapers/javhd');
 const vlxx = require('./scrapers/vlxx');
 const avdb = require('./scrapers/avdb');
+const javhdmov = require('./scrapers/javhdmov');
 
 function parseConfig(configParam) {
     if (!configParam) return {};
@@ -412,8 +413,8 @@ export default {
             // Delegate JavHD requests (catalog, meta, stream) to Render.com when running on Cloudflare Worker
             // This is required because javhdz.bz blocks Cloudflare Workers with anti-bot/WAF,
             // while Render.com has full access to the entire live catalog, search, metadata, and streams.
-            const isJavhdRequest = (resource === 'catalog' && id && id.startsWith('javhd-')) ||
-                                   ((resource === 'meta' || resource === 'stream') && id && id.startsWith('javhd:'));
+            const isJavhdRequest = (resource === 'catalog' && id && (id.startsWith('javhd-') || id.startsWith('javhdmov-'))) ||
+                                   ((resource === 'meta' || resource === 'stream') && id && (id.startsWith('javhd:') || id.startsWith('javhdmov:')));
 
             if (!isAlreadyOnRender && RENDER_HOST && isJavhdRequest) {
                 try {

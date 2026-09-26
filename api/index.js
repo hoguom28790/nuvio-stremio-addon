@@ -59,8 +59,14 @@ const javhd = require('../src/scrapers/javhd');
 const vlxx = require('../src/scrapers/vlxx');
 const vsmov = require('../src/scrapers/vsmov');
 const avdb = require('../src/scrapers/avdb');
+const javhdmov = require('../src/scrapers/javhdmov');
 
 async function handleResource(req, res, config) {
+    const { resource, type } = req.params;
+    let id = req.params.id;
+    if (id) {
+        try { id = decodeURIComponent(id); } catch (e) {}
+    }
     const extra = req.params.extra ? qs.parse(req.params.extra) : {};
     if (extra && extra.genre && typeof extra.genre === 'string' && /phim\s+18(?:\s+|$)/i.test(extra.genre)) {
         extra.genre = extra.genre.replace(/phim\s+18(?:\s+|$)/i, 'Phim 18+');
@@ -467,6 +473,30 @@ app.get('/debug/javhd', async (req, res) => {
     }
     res.json({
         catalogCount,
+        sampleStreams
+    });
+});
+
+// Debug JavHD MOV
+app.get('/debug/javhdmov', async (req, res) => {
+    let catalogCount = 0;
+    let sampleItems = [];
+    let sampleStreams = null;
+    try {
+        const cat = await javhdmov.getCatalog('javhdmov-latest', 'movie', {});
+        catalogCount = cat ? cat.length : 0;
+        sampleItems = cat ? cat.slice(0, 3) : [];
+    } catch (e) {
+        catalogCount = e.message;
+    }
+    try {
+        sampleStreams = await javhdmov.getStream('javhdmov:113895', 'movie', req.headers.host);
+    } catch (e) {
+        sampleStreams = e.message;
+    }
+    res.json({
+        catalogCount,
+        sampleItems,
         sampleStreams
     });
 });

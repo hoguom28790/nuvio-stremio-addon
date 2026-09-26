@@ -243,9 +243,101 @@ const avdbCatalogs = [
     }
 ];
 
-const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs];
+const javhdmovGenres = [
+    "Tất Cả",
+    "Có Che (Censored)",
+    "Không Che (Uncensored)",
+    "Giảm Mosaic (Reducing Mosaic)",
+    "Dành Cho Bạn (For You)",
+    "Ngực Khủng (Big Tits)",
+    "Gái Xinh (Beautiful Girl)",
+    "Nghiệp Dư (Amateur)",
+    "Phụ Nữ Có Chồng (Married Woman)",
+    "Phụ Nữ Trưởng Thành (Mature Woman)",
+    "Nữ Sinh (School Girls)",
+    "Chính Kịch (Drama)",
+    "Ngoại Tình (Affair)",
+    "Nữ Văn Phòng (Office Lady)",
+    "Nữ Sinh Viên (Female Student)",
+    "Cosplay",
+    "Cô Giáo (Female Teacher)",
+    "AV Trung Quốc (Chinese AV)",
+    "BBW",
+    "Y Tá (Nurse)",
+    "Milf",
+    "Sếp Nữ (Female Boss)",
+    "Chị Dâu - Em Dâu (Sister-in-law)",
+    "Nữ Điều Tra (Female Investigator)",
+    "Thôi Miên (Hypnosis)",
+    "Người Giúp Việc (Housekeeper)"
+];
+
+const javhdmovCatalogs = [
+    {
+        type: "movie",
+        id: "javhdmov-latest",
+        name: "JavHD MOV • Mới Cập Nhật",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: javhdmovGenres }
+        ]
+    },
+    {
+        type: "movie",
+        id: "javhdmov-foryou",
+        name: "JavHD MOV • Dành Cho Bạn",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: javhdmovGenres }
+        ]
+    },
+    {
+        type: "movie",
+        id: "javhdmov-uncensored",
+        name: "JavHD MOV • Không Che",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: javhdmovGenres }
+        ]
+    },
+    {
+        type: "movie",
+        id: "javhdmov-censored",
+        name: "JavHD MOV • Có Che",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: javhdmovGenres }
+        ]
+    },
+    {
+        type: "movie",
+        id: "javhdmov-mosaic",
+        name: "JavHD MOV • Giảm Mosaic",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: javhdmovGenres }
+        ]
+    },
+    {
+        type: "movie",
+        id: "javhdmov-movie",
+        name: "JavHD MOV • Thể Loại",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: javhdmovGenres }
+        ]
+    }
+];
+
+const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs, ...javhdmovCatalogs];
 const allCatalogs = [...filteredCatalogs, ...adultCatalogs];
-const allPrefixes = ["tt", "nguonc:", "stp:", "hh3d:", "clbpx:", "yan:", "kkphim:", "hentaiz:", "javhd:", "vlxx:", "avdb:"];
+const allPrefixes = ["tt", "nguonc:", "stp:", "hh3d:", "clbpx:", "yan:", "kkphim:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "javhdmov:"];
 
 const baseManifest = {
     id: "org.hophim.stremio",
