@@ -453,7 +453,11 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
             return [];
         }
 
-        const hostBase = host.includes('://') ? host : `https://${host}`;
+        // JAVHD streams MUST go through Render.com (not CF Worker).
+        // CF Worker IPs are blocked by tiktokcdn.top (403), Render.com IPs are not.
+        // All M3U8 + segment proxying is handled by Render.com.
+        const RENDER_BASE = 'https://nuvio-stremio-addon-1.onrender.com';
+
         const proxyHeaders = {
             request: {
                 'User-Agent': USER_AGENT,
@@ -470,40 +474,40 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
 
         const streams = [];
 
-        // 1. Full HD 1080p
+        // 1. Full HD 1080p — via Render.com proxy
         streams.push({
             name: '🔞 JavHD',
             title: `[Full HD 1080p] ${title}\n⚡ Siêu Nét 1080p • Phát Mượt Mà • Tua Tức Thì`,
-            url: `${hostBase}/javhd/stream/${slug}/1080.m3u8`,
+            url: `${RENDER_BASE}/javhd/stream/${slug}/1080.m3u8`,
             behaviorHints: {
                 notWebReady: false,
                 bingeGroup: 'javhd-1080p'
             }
         });
 
-        // 2. HD 720p
+        // 2. HD 720p — via Render.com proxy
         streams.push({
             name: '🔞 JavHD',
             title: `[HD 720p] ${title}\n⚡ Tốc Độ Cao • Tua Nhanh Mượt Mà`,
-            url: `${hostBase}/javhd/stream/${slug}/720.m3u8`,
+            url: `${RENDER_BASE}/javhd/stream/${slug}/720.m3u8`,
             behaviorHints: {
                 notWebReady: false,
                 bingeGroup: 'javhd-720p'
             }
         });
 
-        // 3. Tự Động Auto
+        // 3. Auto — via Render.com proxy (adaptive bitrate)
         streams.push({
             name: '🔞 JavHD',
             title: `[Tự Động Auto] ${title}\n⚡ Đa Độ Phân Giải Thích Ứng (1080p/720p/480p)`,
-            url: `${hostBase}/javhd/stream/${slug}/master.m3u8`,
+            url: `${RENDER_BASE}/javhd/stream/${slug}/master.m3u8`,
             behaviorHints: {
                 notWebReady: false,
                 bingeGroup: 'javhd-auto'
             }
         });
 
-        // Direct CDN Stream for Stremio Desktop & Nuvio
+        // Direct CDN — client sends Referer directly to tiktokcdn (works on TV/desktop players)
         if (direct1080) {
             streams.push({
                 name: '🔞 JavHD [Direct]',
