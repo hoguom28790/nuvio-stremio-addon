@@ -273,9 +273,33 @@ export default {
         const avdbMatch = pathname.match(/^\/avdb\/stream\/([^/]+)\.m3u8$/);
         if (avdbMatch) {
             const slug = decodeURIComponent(avdbMatch[1]);
-            const direct = url.searchParams.get('direct');
+            const isAlreadyOnRender = host.includes('onrender.com') || host.includes('render.com');
+            const RENDER_HOST = 'https://nuvio-stremio-addon-1.onrender.com';
+
+            // Delegate to Render.com if on Cloudflare Worker (since upload18.org blocks CF IPs)
+            if (!isAlreadyOnRender && RENDER_HOST) {
+                try {
+                    const renderUrl = `${RENDER_HOST.replace(/\/$/, '')}/avdb/stream/${encodeURIComponent(slug)}.m3u8`;
+                    const renderRes = await fetch(renderUrl, { signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined });
+                    if (renderRes.ok) {
+                        const text = await renderRes.text();
+                        if (text && text.includes('#EXTM3U')) {
+                            return new Response(text, {
+                                headers: {
+                                    ...CORS_HEADERS,
+                                    'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                                    'Cache-Control': 'max-age=600, stale-while-revalidate=1200, public'
+                                }
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[AVDB] Render.com proxy failed, trying local:', e.message);
+                }
+            }
+
             try {
-                const playlist = await avdb.getM3u8(slug, host, direct);
+                const playlist = await avdb.getM3u8(slug, host);
                 return new Response(playlist, {
                     headers: {
                         ...CORS_HEADERS,

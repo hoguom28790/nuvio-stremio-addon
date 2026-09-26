@@ -187,39 +187,20 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
         if (!slug) slug = String(item.id);
 
         const typeName = item.type_name || '1080p';
+        const RENDER_BASE = 'https://nuvio-stremio-addon-1.onrender.com';
         const streams = [];
 
-        // Since Cloudflare Worker is blocked by upload18.com (Error 1020),
-        // we use the 18plusok Vercel addon as a backend extractor.
-        const extractorUrl = `https://18plusok.vercel.app/eyJoaWRlRnJvbUhvbWUiOnRydWV9/stream/movie/avdb:${encodeURIComponent(rawId)}.json`;
-        let directUrl = null;
-        try {
-            const extRes = await axios.get(extractorUrl, { timeout: 10000 });
-            if (extRes.data && extRes.data.streams && extRes.data.streams.length > 0) {
-                directUrl = extRes.data.streams[0].url;
+        // AVDB streams MUST be proxied through Render.com because helvid.com cryptographically binds
+        // the streaming token to the requester's IP address. Direct client requests always result in HTTP 404.
+        streams.push({
+            name: `⚡ [Direct CDN] AVDB • ${typeName}`,
+            title: `${item.name || item.movie_code}\n⚡ Luồng Trực Tiếp CDN • Nhanh & Mượt`,
+            url: `${RENDER_BASE}/avdb/stream/${encodeURIComponent(slug)}.m3u8`,
+            behaviorHints: {
+                notWebReady: false,
+                bingeGroup: `avdb-direct-${slug}`
             }
-        } catch (e) {
-            console.error('[AVDB] Extractor failed:', e.message);
-        }
-
-        if (directUrl) {
-            // Duy nhất luồng [Direct CDN] AVDB hoạt động mượt mà
-            streams.push({
-                name: `⚡ [Direct CDN] AVDB • ${typeName}`,
-                title: `${item.name || item.movie_code}\n⚡ Luồng Trực Tiếp CDN • Nhanh & Mượt`,
-                url: directUrl,
-                behaviorHints: {
-                    notWebReady: false,
-                    bingeGroup: `avdb-direct-${slug}`,
-                    proxyHeaders: {
-                        request: {
-                            'Referer': 'https://upload18.org/',
-                            'User-Agent': USER_AGENT
-                        }
-                    }
-                }
-            });
-        }
+        });
 
         return streams;
     } catch (err) {
