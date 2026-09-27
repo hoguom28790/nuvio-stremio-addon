@@ -174,8 +174,8 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
         const item = res.data?.list?.[0];
         if (!item) return [];
 
-        let slug = item.slug;
-        if (!slug && item.episodes?.server_data) {
+        let slug = null;
+        if (item.episodes?.server_data) {
             const firstEp = Object.values(item.episodes.server_data)[0];
             if (firstEp?.link_embed) {
                 const parts = firstEp.link_embed.split('/');
@@ -184,6 +184,7 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
                 slug = firstEp.slug;
             }
         }
+        if (!slug) slug = item.slug;
         if (!slug) slug = String(item.id);
 
         const typeName = item.type_name || '1080p';
