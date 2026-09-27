@@ -139,8 +139,9 @@ function fetchWithProxy(targetUrl, host, port, timeoutMs = 6000) {
  * Tries known proxies with race / fast fallback
  */
 async function fetchM3u8ViaVnProxy(targetUrl) {
-    const fresh = await refreshVnProxies();
-    const candidatePool = [...fresh, ...DEFAULT_VN_PROXIES];
+    // Start fetching fresh proxies in background, don't wait for them unless default pool fails
+    refreshVnProxies().catch(() => {});
+    const candidatePool = [...DEFAULT_VN_PROXIES, ...dynamicProxies];
 
     const seen = new Set();
     const uniqueProxies = candidatePool.filter(p => {
