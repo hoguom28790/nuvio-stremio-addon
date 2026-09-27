@@ -856,7 +856,7 @@ function renderConfigPage(host, initialConfig = {}) {
     if (btnInstall) btnInstall.href = stremioUrl;
 
     const btnNuvioWeb = document.getElementById('btn-nuvioweb');
-    if (btnNuvioWeb) btnNuvioWeb.href = "https://lucaboox.github.io/nuvio-web/#/?addon=" + encodeURIComponent(manifestUrl);
+    if (btnNuvioWeb) btnNuvioWeb.href = "https://hoguom28790.github.io/nuvio-web/#/?addon=" + encodeURIComponent(manifestUrl);
 
     const manifestText = document.getElementById('manifest-url-text');
     if (manifestText) manifestText.innerText = manifestUrl;
