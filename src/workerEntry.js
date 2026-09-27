@@ -527,7 +527,10 @@ export default {
                         signal: AbortSignal.timeout ? AbortSignal.timeout(28000) : undefined
                     });
                     if (renderRes.ok) {
-                        const data = await renderRes.text();
+                        let data = await renderRes.text();
+                        if (resource === 'stream') {
+                            data = data.replace(new RegExp(RENDER_HOST.replace(/\/$/, ''), 'g'), `https://${host}`);
+                        }
                         return new Response(data, {
                             headers: {
                                 ...CORS_HEADERS,
