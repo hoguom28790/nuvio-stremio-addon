@@ -348,21 +348,21 @@ async function getStream(id, type, host = '') {
             const targetItem = findEpisode(serverData, targetEp);
 
             if (targetItem && targetItem.link_m3u8) {
-                // Stream 1 (Mặc định): Luồng trực tiếp CDN gốc - tốc độ tối đa
+                // Stream 1: Lọc Quảng Cáo (Khử sạch QC 15:00 & 3:00)
                 streams.push({
-                    name: `⚡ [CDN] KKPhim • ${serverName} [Gốc]`,
-                    title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n⚡ Định tuyến: CDN Tốc Độ Cao (Direct HLS Mặc Định)\n🎞️ Độ phân giải: 1080p Full HD • Vietsub`,
-                    url: targetItem.link_m3u8,
+                    name: `🛡️ [CDN] KKPhim • ${serverName} [Lọc QC]`,
+                    title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n🛡️ Khử QC 15:00 & 3:00 (1080p Full HD)\n🎞️ 1080p Full HD • Vietsub`,
+                    url: `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(targetItem.link_m3u8)}`,
                     behaviorHints: {
                         notWebReady: false
                     }
                 });
 
-                // Stream 2: Lọc Quảng Cáo (Khử sạch QC 15:00 & 3:00)
+                // Stream 2 (Mặc định): Luồng trực tiếp CDN gốc - tốc độ tối đa
                 streams.push({
-                    name: `🛡️ [CDN] KKPhim • ${serverName} [Lọc QC]`,
-                    title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n🛡️ Khử QC 15:00 & 3:00 (1080p Full HD)\n🎞️ 1080p Full HD • Vietsub`,
-                    url: `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(targetItem.link_m3u8)}`,
+                    name: `⚡ [CDN] KKPhim • ${serverName} [Gốc]`,
+                    title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n⚡ Định tuyến: CDN Tốc Độ Cao (Direct HLS Mặc Định)\n🎞️ Độ phân giải: 1080p Full HD • Vietsub`,
+                    url: targetItem.link_m3u8,
                     behaviorHints: {
                         notWebReady: false
                     }
