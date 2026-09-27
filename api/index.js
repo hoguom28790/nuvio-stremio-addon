@@ -167,10 +167,16 @@ app.get('/javhd/segment.ts', async (req, res) => {
         upstream.data.on('data', (chunk) => {
             if (!stripped) {
                 buf = Buffer.concat([buf, chunk]);
-                if (buf.length >= 95) {
-                    // Check for PNG signature: 0x89 0x50 0x4E 0x47
+                if (buf.length >= 1024) {
                     if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) {
-                        res.write(buf.slice(95));
+                        let offset = 95;
+                        for (let i = 4; i <= buf.length - 376; i++) {
+                            if (buf[i] === 0x47 && buf[i + 188] === 0x47 && buf[i + 376] === 0x47) {
+                                offset = i;
+                                break;
+                            }
+                        }
+                        res.write(buf.slice(offset));
                     } else {
                         res.write(buf);
                     }
@@ -184,7 +190,11 @@ app.get('/javhd/segment.ts', async (req, res) => {
 
         upstream.data.on('end', () => {
             if (!stripped && buf && buf.length > 0) {
-                res.write(buf);
+                if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) {
+                    res.write(buf.slice(95));
+                } else {
+                    res.write(buf);
+                }
             }
             res.end();
         });
@@ -259,10 +269,16 @@ app.get('/vlxx/segment.ts', async (req, res) => {
         upstream.data.on('data', (chunk) => {
             if (!stripped) {
                 buf = Buffer.concat([buf, chunk]);
-                if (buf.length >= 95) {
-                    // Check for PNG signature: 0x89 0x50 0x4E 0x47
+                if (buf.length >= 1024) {
                     if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) {
-                        res.write(buf.slice(95));
+                        let offset = 95;
+                        for (let i = 4; i <= buf.length - 376; i++) {
+                            if (buf[i] === 0x47 && buf[i + 188] === 0x47 && buf[i + 376] === 0x47) {
+                                offset = i;
+                                break;
+                            }
+                        }
+                        res.write(buf.slice(offset));
                     } else {
                         res.write(buf);
                     }
@@ -276,7 +292,11 @@ app.get('/vlxx/segment.ts', async (req, res) => {
 
         upstream.data.on('end', () => {
             if (!stripped && buf && buf.length > 0) {
-                res.write(buf);
+                if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) {
+                    res.write(buf.slice(95));
+                } else {
+                    res.write(buf);
+                }
             }
             res.end();
         });
