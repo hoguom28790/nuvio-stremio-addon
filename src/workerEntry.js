@@ -382,7 +382,7 @@ export default {
                 try {
                     const renderRes = await fetch(`${RENDER_HOST}/kkphim/clean.m3u8?url=${encodeURIComponent(targetUrl)}`, {
                         headers: { 'Accept': '*/*' },
-                        signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined
+                        signal: AbortSignal.timeout ? AbortSignal.timeout(18000) : undefined
                     });
                     if (renderRes.ok) {
                         const cleanPlaylist = await renderRes.text();
