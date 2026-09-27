@@ -338,7 +338,8 @@ async function getStream(id, type, host = '') {
         if (episodes.length === 0) return [];
 
         const streams = [];
-        const hostBase = host ? (host.includes('://') ? host : `https://${host}`) : '';
+        const fallbackHost = 'https://hophimaddon.hophim-4g6qbubt.workers.dev';
+        const hostBase = host ? (host.includes('://') ? host : `https://${host}`) : fallbackHost;
 
         episodes.forEach(server => {
             const serverName = server.server_name || 'VIP';
@@ -358,16 +359,14 @@ async function getStream(id, type, host = '') {
                 });
 
                 // Stream 2: Lọc Quảng Cáo (Khử sạch QC 15:00 & 3:00)
-                if (hostBase) {
-                    streams.push({
-                        name: `🛡️ [CDN] KKPhim • ${serverName} [Lọc QC]`,
-                        title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n🛡️ Khử QC 15:00 & 3:00 (1080p Full HD)\n🎞️ 1080p Full HD • Vietsub`,
-                        url: `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(targetItem.link_m3u8)}`,
-                        behaviorHints: {
-                            notWebReady: false
-                        }
-                    });
-                }
+                streams.push({
+                    name: `🛡️ [CDN] KKPhim • ${serverName} [Lọc QC]`,
+                    title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n🛡️ Khử QC 15:00 & 3:00 (1080p Full HD)\n🎞️ 1080p Full HD • Vietsub`,
+                    url: `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(targetItem.link_m3u8)}`,
+                    behaviorHints: {
+                        notWebReady: false
+                    }
+                });
             }
         });
 
