@@ -17,18 +17,18 @@ const TYPE_MAPPING = {
 
 const GENRE_MAP = {
     'tat ca': 0,
-    'co che (censored)': 1,
+    'co che censored': 1,
     'censored': 1,
-    'khong che (uncensored)': 2,
+    'khong che uncensored': 2,
     'uncensored': 2,
-    'ro ri (uncensored leaked)': 3,
+    'ro ri uncensored leaked': 3,
     'uncensored leaked': 3,
-    'nghiep du (amateur)': 4,
+    'nghiep du amateur': 4,
     'amateur': 4,
-    'trung quoc (chinese av)': 5,
+    'trung quoc chinese av': 5,
     'chinese av': 5,
     'hentai': 6,
-    'phu de tieng anh (english sub)': 7,
+    'phu de tieng anh english sub': 7,
     'english subtitle': 7,
     'english sub': 7
 };
