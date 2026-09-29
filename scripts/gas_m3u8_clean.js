@@ -97,84 +97,64 @@ function doGet(e) {
 
 // ─── Lọc quảng cáo khỏi media playlist ───────────────────────────────────
 function filterAds(content, baseUrl) {
-  var lines = content.split('\n');
-  var cleaned = [];
-  var skippingAd = false;
+  var lines = content.split(/\r?\n/);
+  var cleanedLines = [];
+  var currentTags = [];
+  var inAdBlock = false;
 
   for (var i = 0; i < lines.length; i++) {
     var line = lines[i];
     var trimmed = line.trim();
+    if (!trimmed) continue;
 
-    // ── Xử lý DISCONTINUITY markers (ranh giới quảng cáo) ─────────────────
-    if (trimmed.indexOf('#EXT-X-DISCONTINUITY') === 0) {
-      // Lookahead: xem phía sau có đoạn QC không
-      var isAdAhead = false;
-      for (var j = i + 1; j < Math.min(lines.length, i + 25); j++) {
-        var next = lines[j].trim();
-        if (isAdUrl(next)) {
-          isAdAhead = true;
-          break;
-        }
-        // Nếu gặp EXTINF và dòng tiếp theo không phải QC → dừng lookahead
-        if (next.indexOf('#EXTINF:') === 0) {
-          var nextSeg = (j + 1 < lines.length) ? lines[j + 1].trim() : '';
-          if (!isAdUrl(nextSeg)) break;
-        }
-      }
-
-      if (isAdAhead) {
-        skippingAd = true;
-        continue; // Bỏ DISCONTINUITY này
-      } else if (skippingAd) {
-        // Kiểm tra xem đoạn QC đã kết thúc chưa
-        var stillAd = false;
-        for (var k = i + 1; k < Math.min(lines.length, i + 15); k++) {
-          if (isAdUrl(lines[k].trim())) {
-            stillAd = true;
-            break;
+    if (trimmed.charAt(0) === '#') {
+      currentTags.push(line);
+    } else {
+      var isAd = isAdUrl(trimmed);
+      if (isAd) {
+        currentTags = [];
+        inAdBlock = true;
+      } else {
+        if (inAdBlock) {
+          for (var k = currentTags.length - 1; k >= 0; k--) {
+            var tag = currentTags[k].trim();
+            if (tag.indexOf('#EXT-X-DISCONTINUITY') === 0 || tag.indexOf('#EXT-X-KEY:METHOD=NONE') === 0) {
+              currentTags.splice(k, 1);
+            }
           }
+          inAdBlock = false;
         }
-        if (!stillAd) {
-          skippingAd = false; // Thoát chế độ skip
-          continue; // Bỏ DISCONTINUITY cuối của đoạn QC
+
+        while (cleanedLines.length > 0 && cleanedLines[cleanedLines.length - 1].trim().indexOf('#EXT-X-DISCONTINUITY') === 0) {
+          cleanedLines.pop();
+        }
+
+        for (var t = 0; t < currentTags.length; t++) {
+          cleanedLines.push(currentTags[t]);
+        }
+
+        if (trimmed.indexOf('http://') !== 0 && trimmed.indexOf('https://') !== 0) {
+          cleanedLines.push(resolveUrl(trimmed, baseUrl));
         } else {
-          continue;
+          cleanedLines.push(line);
         }
+
+        currentTags = [];
       }
     }
-
-    // ── Bỏ qua tất cả dòng trong đoạn QC ──────────────────────────────────
-    if (skippingAd) continue;
-
-    // ── Safety: bắt URL QC sót lại ────────────────────────────────────────
-    if (isAdUrl(trimmed)) {
-      // Xoá EXTINF ngay trước nếu có
-      if (cleaned.length > 0 && cleaned[cleaned.length - 1].indexOf('#EXTINF:') === 0) {
-        cleaned.pop();
-      }
-      continue;
-    }
-
-    // ── Chuyển relative .ts URL → absolute URL ─────────────────────────────
-    if (trimmed && trimmed.charAt(0) !== '#') {
-      if (trimmed.indexOf('http://') !== 0 && trimmed.indexOf('https://') !== 0) {
-        cleaned.push(resolveUrl(trimmed, baseUrl));
-        continue;
-      }
-    }
-
-    cleaned.push(line);
   }
 
-  return cleaned.join('\n');
+  for (var t2 = 0; t2 < currentTags.length; t2++) {
+    cleanedLines.push(currentTags[t2]);
+  }
+
+  return cleanedLines.join('\n');
 }
 
 // ─── Nhận dạng URL quảng cáo ──────────────────────────────────────────────
 function isAdUrl(url) {
   if (!url) return false;
-  return url.indexOf('/v8/') !== -1 ||
-         url.indexOf('convertv8/') !== -1 ||
-         url.indexOf('segment_00') !== -1;
+  return /convertv\d*\/|\/v\d+\/.*segment_|segment_\d{4}/i.test(url);
 }
 
 // ─── Giải quyết URL tương đối → tuyệt đối ─────────────────────────────────

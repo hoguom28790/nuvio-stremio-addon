@@ -219,12 +219,35 @@ function cleanM3u8(content, baseUrl) {
     return cleanedLines.join('\n');
 }
 
+function processCleanM3u8(content, targetUrl, host = '') {
+    if (!content || typeof content !== 'string' || !content.includes('#EXTM3U')) {
+        return null;
+    }
+    const hostBase = host ? (host.includes('://') ? host : `https://${host}`) : '';
+
+    // 1. If this is a Master Playlist (#EXT-X-STREAM-INF), rewrite sub-playlist URLs to also be cleaned
+    if (content.includes('#EXT-X-STREAM-INF')) {
+        const lines = content.split(/\r?\n/);
+        const rewritten = lines.map(line => {
+            const trimmed = line.trim();
+            if (trimmed && !trimmed.startsWith('#')) {
+                const absoluteSubUrl = new URL(trimmed, targetUrl).toString();
+                return `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(absoluteSubUrl)}`;
+            }
+            return line;
+        });
+        return rewritten.join('\n');
+    }
+
+    // 2. If this is a Media Playlist (#EXTINF:), clean ad segments and make .ts URLs absolute
+    return cleanM3u8(content, targetUrl);
+}
+
 async function getCleanM3u8(targetUrl, host = 'localhost') {
     const hostBase = host ? (host.includes('://') ? host : `https://${host}`) : '';
     const cacheKey = `kkphim:clean:${targetUrl}`;
     const cached = cache.get(cacheKey);
     if (cached) return cached;
-
 
     try {
         const fetchHeaders = {
@@ -275,26 +298,12 @@ async function getCleanM3u8(targetUrl, host = 'localhost') {
             throw new Error('Invalid M3U8 content after all fetch attempts');
         }
 
-        // 1. If this is a Master Playlist (#EXT-X-STREAM-INF), rewrite sub-playlist URLs to also be cleaned
-        if (content.includes('#EXT-X-STREAM-INF')) {
-            const lines = content.split('\n');
-            const rewritten = lines.map(line => {
-                const trimmed = line.trim();
-                if (trimmed && !trimmed.startsWith('#')) {
-                    const absoluteSubUrl = new URL(trimmed, targetUrl).toString();
-                    return `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(absoluteSubUrl)}`;
-                }
-                return line;
-            });
-            const result = rewritten.join('\n');
-            cache.set(cacheKey, result, 7200);
-            return result;
+        const cleaned = processCleanM3u8(content, targetUrl, host);
+        if (cleaned) {
+            cache.set(cacheKey, cleaned, 7200);
+            return cleaned;
         }
-
-        // 2. If this is a Media Playlist (#EXTINF:), clean ad segments and make .ts URLs absolute
-        const cleaned = cleanM3u8(content, targetUrl);
-        cache.set(cacheKey, cleaned, 7200);
-        return cleaned;
+        return null;
     } catch (err) {
         console.warn(`[KKPhim Clean M3U8 Error for ${targetUrl}]:`, err.message);
         return null;
@@ -352,7 +361,7 @@ async function getStream(id, type, host = '') {
     }
 }
 
-module.exports = { getCatalog, getMeta, getStream, getCleanM3u8, formatPoster };
+module.exports = { getCatalog, getMeta, getStream, getCleanM3u8, cleanM3u8, processCleanM3u8, formatPoster };
 
 
 

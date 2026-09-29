@@ -284,19 +284,22 @@ export default {
             const gasProxyUrl = env?.KKPHIM_GAS_PROXY_URL || env?.GAS_PROXY_URL;
             if (gasProxyUrl) {
                 try {
-                    const gasRes = await fetch(`${gasProxyUrl}?url=${encodeURIComponent(targetUrl)}`, {
+                    const gasRes = await fetch(`${gasProxyUrl}?url=${encodeURIComponent(targetUrl)}&referer=${encodeURIComponent('https://player.phimapi.com/')}`, {
                         signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined
                     });
                     if (gasRes.ok) {
-                        const cleanPlaylist = await gasRes.text();
-                        if (cleanPlaylist && cleanPlaylist.includes('#EXTM3U')) {
-                            return new Response(cleanPlaylist, {
-                                headers: {
-                                    ...CORS_HEADERS,
-                                    'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
-                                    'Cache-Control': 'public, max-age=7200, s-maxage=14400'
-                                }
-                            });
+                        const rawGasText = await gasRes.text();
+                        if (rawGasText && rawGasText.includes('#EXTM3U')) {
+                            const cleanedPlaylist = kkphim.processCleanM3u8(rawGasText, targetUrl, host);
+                            if (cleanedPlaylist) {
+                                return new Response(cleanedPlaylist, {
+                                    headers: {
+                                        ...CORS_HEADERS,
+                                        'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                                        'Cache-Control': 'public, max-age=7200, s-maxage=14400'
+                                    }
+                                });
+                            }
                         }
                     }
                 } catch (gasErr) {
