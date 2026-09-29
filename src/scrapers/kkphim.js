@@ -239,17 +239,6 @@ async function getCleanM3u8(targetUrl, host = 'localhost') {
     const cached = cache.get(cacheKey);
     if (cached) return cached;
 
-    // Fast-path for Master Playlists:
-    // KKPhim master playlists (.../index.m3u8 without 3500kb/hls/) only contain a pointer to 3500kb/hls/index.m3u8.
-    // Return the rewritten master playlist immediately in 0ms with HTTP 200 without calling CDN!
-    // This prevents any cross-origin 302 redirects, fixing HTTP 403 on Nuvio Web and Stremio errors.
-    if (targetUrl.endsWith('/index.m3u8') && !targetUrl.includes('3500kb/hls/')) {
-        const subUrl = targetUrl.replace('/index.m3u8', '/3500kb/hls/index.m3u8');
-        const cleanSubUrl = `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(subUrl)}`;
-        const masterPlaylist = `#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=3500000,RESOLUTION=1920x1080\n${cleanSubUrl}\n`;
-        cache.set(cacheKey, masterPlaylist, 7200);
-        return masterPlaylist;
-    }
 
     try {
         const fetchHeaders = {
@@ -348,21 +337,21 @@ async function getStream(id, type, host = '') {
             const targetItem = findEpisode(serverData, targetEp);
 
             if (targetItem && targetItem.link_m3u8) {
-                // Stream 1: Lọc Quảng Cáo (Khử sạch QC 15:00 & 3:00)
+                // Stream 1 (Mặc định): Luồng trực tiếp CDN gốc - tốc độ tối đa, phát mượt trên mọi thiết bị
                 streams.push({
-                    name: `🛡️ [CDN] KKPhim • ${serverName} [Lọc QC]`,
-                    title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n🛡️ Khử QC 15:00 & 3:00 (1080p Full HD)\n🎞️ 1080p Full HD • Vietsub`,
-                    url: `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(targetItem.link_m3u8)}`,
+                    name: `⚡ [CDN] KKPhim • ${serverName} [Gốc]`,
+                    title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n⚡ Định tuyến: CDN Tốc Độ Cao (Direct HLS Mặc Định)\n🎞️ Độ phân giải: 1080p Full HD • Vietsub`,
+                    url: targetItem.link_m3u8,
                     behaviorHints: {
                         notWebReady: false
                     }
                 });
 
-                // Stream 2 (Mặc định): Luồng trực tiếp CDN gốc - tốc độ tối đa
+                // Stream 2: Lọc Quảng Cáo (Khử sạch QC 15:00 & 3:00)
                 streams.push({
-                    name: `⚡ [CDN] KKPhim • ${serverName} [Gốc]`,
-                    title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n⚡ Định tuyến: CDN Tốc Độ Cao (Direct HLS Mặc Định)\n🎞️ Độ phân giải: 1080p Full HD • Vietsub`,
-                    url: targetItem.link_m3u8,
+                    name: `🛡️ [CDN] KKPhim • ${serverName} [Lọc QC]`,
+                    title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n🛡️ Khử QC 15:00 & 3:00 (1080p Full HD)\n🎞️ 1080p Full HD • Vietsub`,
+                    url: `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(targetItem.link_m3u8)}`,
                     behaviorHints: {
                         notWebReady: false
                     }

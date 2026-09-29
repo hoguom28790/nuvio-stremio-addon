@@ -96,7 +96,7 @@ async function getStream(id, type, config = {}) {
                     const kkId = (type === 'series' && episode) 
                         ? `kkphim:${bestMatch.slug}:${season}:${episode}`
                         : `kkphim:${bestMatch.slug}`;
-                    const kkStreams = await kkphim.getStream(kkId, type);
+                    const kkStreams = await kkphim.getStream(kkId, type, config.host);
                     cdnStreams.push(...kkStreams);
                 }
             } catch (e) {
