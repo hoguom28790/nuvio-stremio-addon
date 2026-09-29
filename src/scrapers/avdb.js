@@ -188,15 +188,12 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
         if (!slug) slug = String(item.id);
 
         const typeName = item.type_name || '1080p';
-        const RENDER_BASE = 'https://nuvio-stremio-addon-1.onrender.com';
         const streams = [];
 
-        // AVDB streams MUST be proxied through Render.com because helvid.com cryptographically binds
-        // the streaming token to the requester's IP address. Direct client requests always result in HTTP 404.
         streams.push({
             name: `⚡ [Direct CDN] AVDB • ${typeName}`,
             title: `${item.name || item.movie_code}\n⚡ Luồng Trực Tiếp CDN • Nhanh & Mượt`,
-            url: `${RENDER_BASE}/avdb/stream/${encodeURIComponent(slug)}.m3u8`,
+            url: `${hostBase}/avdb/stream/${encodeURIComponent(slug)}.m3u8`,
             behaviorHints: {
                 notWebReady: false,
                 bingeGroup: `avdb-direct-${slug}`

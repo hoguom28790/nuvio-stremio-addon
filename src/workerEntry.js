@@ -121,16 +121,6 @@ export default {
         const url = new URL(request.url);
         const host = url.host;
         const pathname = url.pathname;
-        // Correctly detect Cloudflare Workers vs Node.js on Render.com
-        const isCloudflareWorker = typeof WebSocketPair !== 'undefined' || (typeof caches !== 'undefined' && typeof caches.default !== 'undefined');
-        const isNodeServer = !isCloudflareWorker && typeof process !== 'undefined' && process.versions && !!process.versions.node;
-        const isAlreadyOnRender = isNodeServer || host.includes('onrender.com') || host.includes('render.com') || host.includes('localhost') || host.includes('127.0.0.1');
-        const RENDER_HOST = 'https://nuvio-stremio-addon-1.onrender.com';
-
-        // Keep Render.com awake with non-blocking background ping from CF Worker
-        if (!isAlreadyOnRender && ctx && typeof ctx.waitUntil === 'function') {
-            try { ctx.waitUntil(fetch(`${RENDER_HOST}/ping`).catch(() => {})); } catch (e) {}
-        }
 
         // 1. Static / Favicon / Logo
         // 0. Keepalive ping endpoint (used by GitHub Actions cron to prevent Render.com from sleeping)
@@ -179,26 +169,8 @@ export default {
             });
         }
 
-        // 4. JavHD Segment Unwrapper
+        // 4. JavHD Segment Unwrapper (Direct Cloudflare Edge streaming with PNG-header unwrapping)
         if (pathname === '/javhd/segment.ts') {
-            if (!isAlreadyOnRender && RENDER_HOST) {
-                try {
-                    const renderUrl = `${RENDER_HOST.replace(/\/$/, '')}${pathname}${url.search || ''}`;
-                    const res = await fetch(renderUrl, { signal: AbortSignal.timeout ? AbortSignal.timeout(25000) : undefined });
-                    if (res.ok) {
-                        return new Response(res.body, {
-                            status: res.status,
-                            headers: {
-                                ...CORS_HEADERS,
-                                'Content-Type': res.headers.get('Content-Type') || 'video/mp2t',
-                                'Cache-Control': 'public, max-age=86400, s-maxage=86400, immutable'
-                            }
-                        });
-                    }
-                } catch (e) {
-                    console.warn('[JAVHD Segment] Delegation to Render failed, fallback to local:', e.message);
-                }
-            }
             return handleSegmentProxy(url.searchParams.get('url'), 'https://javhdz.bz/');
         }
 
@@ -207,26 +179,8 @@ export default {
             return handleSegmentProxy(url.searchParams.get('url'), 'https://vlxx.phd/');
         }
 
-        // 5c. AVDB Segment Proxy
+        // 5c. AVDB Segment Proxy (Direct Cloudflare Edge streaming)
         if (pathname === '/avdb/segment.ts') {
-            if (!isAlreadyOnRender && RENDER_HOST) {
-                try {
-                    const renderUrl = `${RENDER_HOST.replace(/\/$/, '')}${pathname}${url.search || ''}`;
-                    const res = await fetch(renderUrl, { signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined });
-                    if (res.ok) {
-                        return new Response(res.body, {
-                            status: res.status,
-                            headers: {
-                                ...CORS_HEADERS,
-                                'Content-Type': res.headers.get('Content-Type') || 'video/mp2t',
-                                'Cache-Control': 'public, max-age=86400, s-maxage=86400, immutable'
-                            }
-                        });
-                    }
-                } catch (e) {
-                    console.warn('[AVDB Segment] Delegation to Render failed, fallback to local:', e.message);
-                }
-            }
             return handleSegmentProxy(url.searchParams.get('url'), 'https://upload18.org/');
         }
 
@@ -235,37 +189,8 @@ export default {
         if (javhdMatch) {
             const [, slug, quality] = javhdMatch;
 
-            // resolveHost = current server (used for segment URL rewriting inside getM3u8)
-            // When running on Render.com: segments point to Render.com → Render.com fetches tiktokcdn (no IP block)
-            // When running on CF Worker without RENDER_HOST: segments point to CF Worker (may fail, fallback to Direct)
             const resolveHost = `https://${host}`;
 
-            // Delegate to Render.com ONLY if running on Cloudflare Worker (not already on Render.com)
-            // This prevents infinite self-calling loop on Render.com!
-            if (!isAlreadyOnRender && RENDER_HOST) {
-                try {
-                    const renderUrl = `${RENDER_HOST.replace(/\/$/, '')}/javhd/stream/${slug}/${quality}.m3u8`;
-                    const renderRes = await fetch(renderUrl, { signal: AbortSignal.timeout ? AbortSignal.timeout(25000) : undefined });
-                    if (renderRes.ok) {
-                        let text = await renderRes.text();
-                        if (text && text.includes('#EXTM3U')) {
-                            // Rewrite segments to point to CURRENT host (e.g. Cloudflare Worker edge) so segments are served via fast global CDN!
-                            text = text.replace(/https?:\/\/[^/]+\/javhd\/segment\.ts/g, `${resolveHost}/javhd/segment.ts`);
-                            return new Response(text, {
-                                headers: {
-                                    ...CORS_HEADERS,
-                                    'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
-                                    'Cache-Control': 'max-age=600, stale-while-revalidate=1200, public'
-                                }
-                            });
-                        }
-                    }
-                } catch (e) {
-                    console.warn('[JAVHD] Render.com proxy failed, trying local:', e.message);
-                }
-            }
-
-            // Local resolve (works on Render.com or any unblocked IP; may fail on CF Worker due to tiktokcdn IP block)
             try {
                 const playlist = await javhd.getM3u8(slug, quality, resolveHost, env);
                 return new Response(playlist, {
@@ -320,28 +245,6 @@ export default {
         const avdbMatch = pathname.match(/^\/avdb\/stream\/([^/]+)\.m3u8$/);
         if (avdbMatch) {
             const slug = decodeURIComponent(avdbMatch[1]);
-            // Delegate to Render.com if on Cloudflare Worker (since upload18.org blocks CF IPs)
-            if (!isAlreadyOnRender && RENDER_HOST) {
-                try {
-                    const renderUrl = `${RENDER_HOST.replace(/\/$/, '')}/avdb/stream/${encodeURIComponent(slug)}.m3u8`;
-                    const renderRes = await fetch(renderUrl, { signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined });
-                    if (renderRes.ok) {
-                        const text = await renderRes.text();
-                        if (text && text.includes('#EXTM3U')) {
-                            return new Response(text, {
-                                headers: {
-                                    ...CORS_HEADERS,
-                                    'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
-                                    'Cache-Control': 'max-age=600, stale-while-revalidate=1200, public'
-                                }
-                            });
-                        }
-                    }
-                } catch (e) {
-                    console.warn('[AVDB] Render.com proxy failed, trying local:', e.message);
-                }
-            }
-
             try {
                 const playlist = await avdb.getM3u8(slug, host);
                 return new Response(playlist, {
@@ -377,15 +280,15 @@ export default {
                 console.warn('[KKPhim Clean M3U8 Local Error]:', err.message);
             }
 
-            // 2. If on Cloudflare Worker and local fetch failed, try Render.com (Node.js with VN proxy pool)
-            if (!isAlreadyOnRender) {
+            // 2. If local fetch failed, try optional Google Apps Script proxy if configured
+            const gasProxyUrl = env?.KKPHIM_GAS_PROXY_URL || env?.GAS_PROXY_URL;
+            if (gasProxyUrl) {
                 try {
-                    const renderRes = await fetch(`${RENDER_HOST}/kkphim/clean.m3u8?url=${encodeURIComponent(targetUrl)}`, {
-                        headers: { 'Accept': '*/*' },
-                        signal: AbortSignal.timeout ? AbortSignal.timeout(18000) : undefined
+                    const gasRes = await fetch(`${gasProxyUrl}?url=${encodeURIComponent(targetUrl)}`, {
+                        signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined
                     });
-                    if (renderRes.ok) {
-                        const cleanPlaylist = await renderRes.text();
+                    if (gasRes.ok) {
+                        const cleanPlaylist = await gasRes.text();
                         if (cleanPlaylist && cleanPlaylist.includes('#EXTM3U')) {
                             return new Response(cleanPlaylist, {
                                 headers: {
@@ -396,8 +299,8 @@ export default {
                             });
                         }
                     }
-                } catch (renderErr) {
-                    console.warn('[KKPhim Clean M3U8 Render Delegation Error]:', renderErr.message);
+                } catch (gasErr) {
+                    console.warn('[KKPhim Clean M3U8 GAS Delegation Error]:', gasErr.message);
                 }
             }
 
@@ -411,9 +314,8 @@ export default {
             });
         }
 
-        // 9. Debug routes
         if (pathname === '/debug/test-render') {
-            const target = url.searchParams.get('url') || `${RENDER_HOST}/catalog/movie/javhd-latest/genre=${encodeURIComponent('Thịnh Hành')}.json`;
+            const target = url.searchParams.get('url') || 'https://javhdz.bz/';
             const customReferer = url.searchParams.get('referer');
             const customUa = url.searchParams.get('ua');
             const customOrigin = url.searchParams.get('origin');
@@ -510,39 +412,6 @@ export default {
                 }
             }
 
-            // Delegate JavHD requests (catalog, meta, stream) to Render.com when running on Cloudflare Worker
-            // This is required because javhdz.bz blocks Cloudflare Workers with anti-bot/WAF,
-            // while Render.com has full access to the entire live catalog, search, metadata, and streams.
-            const isJavhdRequest = (resource === 'catalog' && id && id.startsWith('javhd-')) ||
-                                   ((resource === 'meta' || resource === 'stream') && id && id.startsWith('javhd:'));
-
-            if (!isAlreadyOnRender && RENDER_HOST && isJavhdRequest) {
-                try {
-                    const renderUrl = `${RENDER_HOST.replace(/\/$/, '')}${pathname}${url.search || ''}`;
-                    const renderRes = await fetch(renderUrl, {
-                        headers: {
-                            'Accept': 'application/json, text/plain, */*',
-                            'User-Agent': request.headers.get('User-Agent') || 'Stremio/4.4'
-                        },
-                        signal: AbortSignal.timeout ? AbortSignal.timeout(28000) : undefined
-                    });
-                    if (renderRes.ok) {
-                        let data = await renderRes.text();
-                        if (resource === 'stream') {
-                            data = data.replace(new RegExp(RENDER_HOST.replace(/\/$/, ''), 'g'), `https://${host}`);
-                        }
-                        return new Response(data, {
-                            headers: {
-                                ...CORS_HEADERS,
-                                'Content-Type': 'application/json; charset=utf-8',
-                                'Cache-Control': 'max-age=120, stale-while-revalidate=600, public'
-                            }
-                        });
-                    }
-                } catch (e) {
-                    console.warn('[JAVHD] Render.com delegation failed, falling back to local handler:', e.message);
-                }
-            }
 
             try {
                 const resp = await addonInterface.get(resource, type, id, extra, config);

@@ -514,10 +514,6 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
             return [];
         }
 
-        // JAVHD streams MUST go through Render.com (not CF Worker).
-        // CF Worker IPs are blocked by tiktokcdn.top (403), Render.com IPs are not.
-        // All M3U8 + segment proxying is handled by Render.com.
-        const RENDER_BASE = 'https://nuvio-stremio-addon-1.onrender.com';
         const currentHost = host.includes('://') ? host : `https://${host}`;
 
         const proxyHeaders = {
@@ -540,20 +536,6 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
                 proxyHeaders: proxyHeaders
             }
         });
-
-        // Stream 2: Dự phòng Render Server nếu client không chạy trên Render
-        if (!currentHost.includes('onrender.com')) {
-            streams.push({
-                name: '🔞 JavHD [Dự Phòng Render]',
-                title: `[Full HD 1080p] ${title}\n🛡️ Máy Chủ Dự Phòng (Render Proxy)`,
-                url: `${RENDER_BASE}/javhd/stream/${slug}/1080.m3u8`,
-                behaviorHints: {
-                    notWebReady: false,
-                    bingeGroup: 'javhd-backup',
-                    proxyHeaders: proxyHeaders
-                }
-            });
-        }
 
         if (streams.length > 0) {
             cache.set(cacheKey, streams, 1800);
