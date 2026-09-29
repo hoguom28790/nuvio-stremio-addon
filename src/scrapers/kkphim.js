@@ -162,75 +162,61 @@ async function getMeta(type, id) {
 }
 
 function cleanM3u8(content, baseUrl) {
-    const lines = content.split('\n');
-    const cleaned = [];
-    let skippingAd = false;
+    const lines = content.split(/\r?\n/);
+    const cleanedLines = [];
+    let currentTags = [];
+    let inAdBlock = false;
 
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         const trimmed = line.trim();
+        if (!trimmed) continue;
 
-        if (trimmed.startsWith('#EXT-X-DISCONTINUITY')) {
-            // Lookahead to see if ad segments follow (/v8/ or segment_ or convertv8/)
-            let isAdAhead = false;
-            for (let j = i + 1; j < Math.min(lines.length, i + 25); j++) {
-                const next = lines[j].trim();
-                if (next.includes('/v8/') || next.includes('segment_00') || next.includes('convertv8/')) {
-                    isAdAhead = true;
-                    break;
-                }
-                if (next.startsWith('#EXTINF:') && !lines[j + 1]?.includes('/v8/') && !lines[j + 1]?.includes('convertv8/')) {
-                    break;
-                }
-            }
-
-            if (isAdAhead) {
-                skippingAd = true;
-                continue;
-            } else if (skippingAd) {
-                // Check if ad is STILL ahead
-                let stillAdAhead = false;
-                for (let j = i + 1; j < Math.min(lines.length, i + 15); j++) {
-                    const next = lines[j].trim();
-                    if (next.includes('/v8/') || next.includes('segment_00') || next.includes('convertv8/')) {
-                        stillAdAhead = true;
-                        break;
+        if (trimmed.startsWith('#')) {
+            currentTags.push(line);
+        } else {
+            // URI line - check for KKPhim / Ophim ad patterns
+            const isAd = /convertv\d*\/|\/v\d+\/.*segment_|segment_\d{4}/i.test(trimmed);
+            if (isAd) {
+                currentTags = [];
+                inAdBlock = true;
+            } else {
+                if (inAdBlock) {
+                    for (let k = currentTags.length - 1; k >= 0; k--) {
+                        const tag = currentTags[k].trim();
+                        if (tag.startsWith('#EXT-X-DISCONTINUITY') || tag.startsWith('#EXT-X-KEY:METHOD=NONE')) {
+                            currentTags.splice(k, 1);
+                        }
                     }
+                    inAdBlock = false;
                 }
-                if (!stillAdAhead) {
-                    skippingAd = false;
-                    continue;
+
+                while (cleanedLines.length > 0 && cleanedLines[cleanedLines.length - 1].trim().startsWith('#EXT-X-DISCONTINUITY')) {
+                    cleanedLines.pop();
+                }
+
+                for (const tag of currentTags) {
+                    cleanedLines.push(tag);
+                }
+
+                // Convert relative segment paths to absolute URLs so client fetches directly from CDN
+                if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+                    const fullUrl = new URL(trimmed, baseUrl).toString();
+                    cleanedLines.push(fullUrl);
                 } else {
-                    continue;
+                    cleanedLines.push(line);
                 }
+
+                currentTags = [];
             }
         }
-
-        if (skippingAd) {
-            continue;
-        }
-
-        // Safety check: if line itself has ad pattern
-        if (trimmed.includes('/v8/') || trimmed.includes('convertv8/')) {
-            if (cleaned.length > 0 && cleaned[cleaned.length - 1].startsWith('#EXTINF:')) {
-                cleaned.pop();
-            }
-            continue;
-        }
-
-        // Convert relative segment paths to absolute URLs so client fetches directly from CDN
-        if (trimmed && !trimmed.startsWith('#')) {
-            if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-                const fullUrl = new URL(trimmed, baseUrl).toString();
-                cleaned.push(fullUrl);
-                continue;
-            }
-        }
-
-        cleaned.push(line);
     }
 
-    return cleaned.join('\n');
+    for (const tag of currentTags) {
+        cleanedLines.push(tag);
+    }
+
+    return cleanedLines.join('\n');
 }
 
 async function getCleanM3u8(targetUrl, host = 'localhost') {
@@ -337,21 +323,21 @@ async function getStream(id, type, host = '') {
             const targetItem = findEpisode(serverData, targetEp);
 
             if (targetItem && targetItem.link_m3u8) {
-                // Stream 1 (Mặc định): Luồng trực tiếp CDN gốc - tốc độ tối đa, phát mượt trên mọi thiết bị
+                // Stream 1 (Ưu tiên số 1): Lọc Quảng Cáo (Khử sạch QC 15:00 & 3:00)
                 streams.push({
-                    name: `⚡ [CDN] KKPhim • ${serverName} [Gốc]`,
-                    title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n⚡ Định tuyến: CDN Tốc Độ Cao (Direct HLS Mặc Định)\n🎞️ Độ phân giải: 1080p Full HD • Vietsub`,
-                    url: targetItem.link_m3u8,
+                    name: `🛡️ [CDN] KKPhim • ${serverName} [Lọc QC]`,
+                    title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n🛡️ Khử QC 15:00 & 3:00 (1080p Full HD)\n🎞️ 1080p Full HD • Vietsub`,
+                    url: `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(targetItem.link_m3u8)}`,
                     behaviorHints: {
                         notWebReady: false
                     }
                 });
 
-                // Stream 2: Lọc Quảng Cáo (Khử sạch QC 15:00 & 3:00)
+                // Stream 2 (Dự phòng): Luồng trực tiếp CDN gốc
                 streams.push({
-                    name: `🛡️ [CDN] KKPhim • ${serverName} [Lọc QC]`,
-                    title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n🛡️ Khử QC 15:00 & 3:00 (1080p Full HD)\n🎞️ 1080p Full HD • Vietsub`,
-                    url: `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(targetItem.link_m3u8)}`,
+                    name: `⚡ [CDN] KKPhim • ${serverName} [Gốc]`,
+                    title: `${res.data?.movie?.name || ''} - Tập ${targetItem.name}\n⚡ Định tuyến: CDN Tốc Độ Cao (Direct HLS Gốc)\n🎞️ Độ phân giải: 1080p Full HD • Vietsub`,
+                    url: targetItem.link_m3u8,
                     behaviorHints: {
                         notWebReady: false
                     }
