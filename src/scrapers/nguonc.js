@@ -169,7 +169,7 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
             if (match && matchSource === 'kkphim') {
                 const kkSlug = match.id.replace('kkphim:', '').split(':')[0];
                 const kkId = targetEp ? `kkphim:${kkSlug}:1:${targetEp}` : `kkphim:${kkSlug}`;
-                const directStreams = await kkphim.getStream(kkId, type);
+                const directStreams = await kkphim.getStream(kkId, type, host);
                 directStreams.forEach(s => {
                     streams.push({
                         name: s.name.replace('KKPhim', 'NguonC (CDN HLS)'),
