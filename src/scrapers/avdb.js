@@ -284,11 +284,8 @@ async function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', d
             if (trimmed.startsWith('#U18-CANARY:')) {
                 continue;
             }
-            if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-                rewritten.push(`${segmentBase}${separator}url=${encodeURIComponent(trimmed)}`);
-            } else {
-                rewritten.push(line);
-            }
+            // Return direct segment URL to bypass Cloudflare Worker block
+            rewritten.push(line);
         }
         rewrittenContent = rewritten.join('\n');
     }
