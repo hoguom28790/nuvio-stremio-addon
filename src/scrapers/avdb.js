@@ -131,7 +131,10 @@ async function getMeta(type, id) {
 }
 
 async function fetchText(url, referer, env = {}) {
-    const gasUrl = (env && env.GAS_PROXY_URL) || (env && env.KKPHIM_GAS_PROXY_URL) || (typeof process !== 'undefined' && process.env && process.env.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.KKPHIM_GAS_PROXY_URL);
+    let gasUrl = (env && env.GAS_PROXY_URL) || (env && env.KKPHIM_GAS_PROXY_URL) || (typeof process !== 'undefined' && process.env && process.env.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.KKPHIM_GAS_PROXY_URL);
+    if (!gasUrl || gasUrl.includes('ax3vcn3ha')) {
+        gasUrl = 'https://vercel-m3u8-proxy.vercel.app/api/proxy';
+    }
     
     if (gasUrl) {
         try {
@@ -284,8 +287,11 @@ async function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', d
             if (trimmed.startsWith('#U18-CANARY:')) {
                 continue;
             }
-            // Return direct segment URL to bypass Cloudflare Worker block
-            rewritten.push(line);
+            if (trimmed.startsWith('/s/')) {
+                rewritten.push(`https://helvid.com${trimmed}`);
+            } else {
+                rewritten.push(line);
+            }
         }
         rewrittenContent = rewritten.join('\n');
     }
