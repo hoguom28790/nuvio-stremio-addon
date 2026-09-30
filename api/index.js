@@ -32,6 +32,9 @@ function parseConfig(configParam) {
     }
 }
 
+// Healthcheck ping
+app.get('/ping', (req, res) => res.json({ status: 'ok', ts: Date.now() }));
+
 // Serve logo.png
 const path = require('path');
 app.get('/logo.png', (req, res) => {
@@ -66,7 +69,6 @@ const hentaiz = require('../src/scrapers/hentaiz');
 const javhd = require('../src/scrapers/javhd');
 const vlxx = require('../src/scrapers/vlxx');
 const avdb = require('../src/scrapers/avdb');
-const kkphim = require('../src/scrapers/kkphim');
 
 async function handleResource(req, res, config) {
     const { resource, type } = req.params;
