@@ -640,10 +640,7 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
 
     // 2. Nếu fetch trực tiếp bị 403 (do Cloudflare Worker IP bị CDN chặn) -> Dùng Google Apps Script Resolver
     if (!content || !content.includes('#EXTM3U')) {
-        let gasUrl = (env && env.GAS_PROXY_URL) || (env && env.KKPHIM_GAS_PROXY_URL) || (typeof process !== 'undefined' && process.env && process.env.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.KKPHIM_GAS_PROXY_URL);
-        if (!gasUrl || gasUrl.includes('ax3vcn3ha') || !gasUrl.includes('/api/proxy')) {
-            gasUrl = 'https://vercel-m3u8-proxy.vercel.app/api/proxy';
-        }
+        const gasUrl = (env && env.GAS_PROXY_URL) || (env && env.KKPHIM_GAS_PROXY_URL) || (typeof process !== 'undefined' && process.env && process.env.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.KKPHIM_GAS_PROXY_URL);
         if (gasUrl) {
             for (const targetM3u8Url of candidateUrls) {
                 try {

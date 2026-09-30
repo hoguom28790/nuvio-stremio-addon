@@ -131,10 +131,7 @@ async function getMeta(type, id) {
 }
 
 async function fetchText(url, referer, env = {}) {
-    let gasUrl = (env && env.KKPHIM_GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.KKPHIM_GAS_PROXY_URL);
-    if (!gasUrl || gasUrl.includes('ax3vcn3ha')) {
-        gasUrl = 'https://vercel-m3u8-proxy.vercel.app/api/proxy';
-    }
+    const gasUrl = (env && env.GAS_PROXY_URL) || (env && env.KKPHIM_GAS_PROXY_URL) || (typeof process !== 'undefined' && process.env && process.env.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.KKPHIM_GAS_PROXY_URL);
     
     if (gasUrl) {
         try {
