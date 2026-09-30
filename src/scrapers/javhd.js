@@ -138,6 +138,8 @@ function parseMovieCards(html) {
             } else if (!poster.startsWith('http')) {
                 poster = `${BASE_URL}/${poster}`;
             }
+            // Proxy qua wsrv.nl để lách nhà mạng VN chặn javhdz.bz
+            poster = `https://wsrv.nl/?url=${encodeURIComponent(poster)}`;
         }
 
         let subBadge = '';
@@ -357,7 +359,7 @@ async function getCatalog(catalogId, type, extra = {}) {
                     id: m.id,
                     type: 'movie',
                     name: m.name,
-                    poster: m.poster,
+                    poster: m.poster && !m.poster.includes('wsrv.nl') ? `https://wsrv.nl/?url=${encodeURIComponent(m.poster)}` : m.poster,
                     posterShape: 'poster',
                     description: m.description
                 }));
@@ -382,12 +384,14 @@ async function getMeta(type, id) {
 
         if (slugMap && slugMap.has(slug)) {
             const item = slugMap.get(slug);
+            const proxyPoster = item.poster && !item.poster.includes('wsrv.nl') ? `https://wsrv.nl/?url=${encodeURIComponent(item.poster)}` : item.poster;
+            const proxyBg = item.background && !item.background.includes('wsrv.nl') ? `https://wsrv.nl/?url=${encodeURIComponent(item.background)}` : (proxyPoster || '');
             return {
                 id: `javhd:${slug}`,
                 type: 'movie',
                 name: item.name,
-                poster: item.poster,
-                background: item.background || item.poster,
+                poster: proxyPoster,
+                background: proxyBg,
                 posterShape: 'poster',
                 description: item.description || `Xem phim ${item.name} Vietsub Full HD tại JavHD.`,
                 genres: item.genres && item.genres.length > 0 ? item.genres : ['JavHD', 'Vietsub', '18+'],
@@ -427,6 +431,7 @@ async function getMeta(type, id) {
             } else if (!poster.startsWith('http')) {
                 poster = `${BASE_URL}/${poster}`;
             }
+            poster = `https://wsrv.nl/?url=${encodeURIComponent(poster)}`;
         }
 
         let description = '';
@@ -525,11 +530,11 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
 
         const streams = [];
 
-        // Stream 1: VIP CDN tốc độ cao (phát qua Cloudflare Edge / Addon Server hiện tại)
+        // Stream 1: VIP CDN tốc độ cao (phát trực tiếp từ CDN, không qua proxy để tránh block)
         streams.push({
             name: '🔞 JavHD [VIP CDN]',
-            title: `[Full HD 1080p] ${title}\n⚡ Siêu Tốc Độ • Mọi Thiết Bị (TV, Phone, Web)`,
-            url: `${currentHost}/javhd/stream/${slug}/1080.m3u8`,
+            title: `[Full HD 1080p] ${title}\n⚡ Luồng Trực Tiếp CDN • Nhanh & Mượt`,
+            url: masterUrl,
             behaviorHints: {
                 notWebReady: false,
                 bingeGroup: 'javhd-vip',
@@ -635,7 +640,10 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
 
     // 2. Nếu fetch trực tiếp bị 403 (do Cloudflare Worker IP bị CDN chặn) -> Dùng Google Apps Script Resolver
     if (!content || !content.includes('#EXTM3U')) {
-        const gasUrl = (env && env.GAS_PROXY_URL) || (typeof process !== 'undefined' && process.env && process.env.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.GAS_PROXY_URL);
+        let gasUrl = (env && env.GAS_PROXY_URL) || (env && env.KKPHIM_GAS_PROXY_URL) || (typeof process !== 'undefined' && process.env && process.env.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.KKPHIM_GAS_PROXY_URL);
+        if (!gasUrl || gasUrl.includes('ax3vcn3ha') || !gasUrl.includes('/api/proxy')) {
+            gasUrl = 'https://vercel-m3u8-proxy.vercel.app/api/proxy';
+        }
         if (gasUrl) {
             for (const targetM3u8Url of candidateUrls) {
                 try {

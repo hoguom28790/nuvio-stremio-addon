@@ -1,0 +1,10 @@
+{
+  "name": "hophim-m3u8-proxy",
+  "version": "1.0.0",
+  "description": "Vercel serverless proxy strictly for M3U8 text files (under 1KB) to bypass CDN geo-blocking.",
+  "main": "api/index.js",
+  "scripts": {
+    "start": "vercel dev"
+  },
+  "dependencies": {}
+}

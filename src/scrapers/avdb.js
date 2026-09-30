@@ -130,7 +130,20 @@ async function getMeta(type, id) {
     }
 }
 
-async function fetchText(url, referer) {
+async function fetchText(url, referer, env = {}) {
+    let gasUrl = (env && env.KKPHIM_GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.KKPHIM_GAS_PROXY_URL);
+    if (!gasUrl || gasUrl.includes('ax3vcn3ha')) {
+        gasUrl = 'https://vercel-m3u8-proxy.vercel.app/api/proxy';
+    }
+    
+    if (gasUrl) {
+        try {
+            const proxyTarget = `${gasUrl}?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer || 'https://upload18.org/')}`;
+            const gasRes = await fetch(proxyTarget);
+            if (gasRes.ok) return await gasRes.text();
+        } catch (e) {}
+    }
+
     if (typeof fetch !== 'undefined') {
         const headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -162,6 +175,7 @@ async function fetchText(url, referer) {
 }
 
 async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.dev') {
+// ... same as before
     const rawId = id.replace('avdb:', '');
     const hostBase = host.includes('://') ? host : `https://${host}`;
 
@@ -207,7 +221,7 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
     }
 }
 
-async function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', directUrl = null) {
+async function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', directUrl = null, env = {}) {
     const hostBase = host.includes('://') ? host : `https://${host}`;
     const cacheKey = `avdb:m3u8:${slug}:${host}`;
     const cached = cache.get(cacheKey);
@@ -218,7 +232,7 @@ async function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', d
     // 1. If directUrl was provided
     if (directUrl) {
         try {
-            content = await fetchText(directUrl, 'https://upload18.org/');
+            content = await fetchText(directUrl, 'https://upload18.org/', env);
         } catch (e) {
             console.warn('[AVDB] Direct fetch failed:', e.message);
         }
@@ -229,7 +243,7 @@ async function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', d
         try {
             const extRes = await axios.get(`https://18plusok.vercel.app/eyJoaWRlRnJvbUhvbWUiOnRydWV9/stream/movie/avdb:${encodeURIComponent(slug)}.json`, { timeout: 10000 });
             if (extRes.data?.streams?.[0]?.url) {
-                content = await fetchText(extRes.data.streams[0].url, 'https://upload18.org/');
+                content = await fetchText(extRes.data.streams[0].url, 'https://upload18.org/', env);
             }
         } catch (e) {}
     }
@@ -242,12 +256,12 @@ async function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', d
         ];
         for (const url of embedUrls) {
             try {
-                const html = await fetchText(url);
+                const html = await fetchText(url, null, env);
                 if (html && html.includes('"m3u8"')) {
                     const match = html.match(/"m3u8":\s*"([^"]+)"/);
                     if (match) {
                         const m3u8Url = JSON.parse(`"${match[1]}"`);
-                        content = await fetchText(m3u8Url, 'https://upload18.org/');
+                        content = await fetchText(m3u8Url, 'https://upload18.org/', env);
                         if (content) break;
                     }
                 }

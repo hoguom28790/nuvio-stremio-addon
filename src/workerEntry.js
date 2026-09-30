@@ -246,7 +246,7 @@ export default {
         if (avdbMatch) {
             const slug = decodeURIComponent(avdbMatch[1]);
             try {
-                const playlist = await avdb.getM3u8(slug, host);
+                const playlist = await avdb.getM3u8(slug, host, null, env);
                 return new Response(playlist, {
                     headers: {
                         ...CORS_HEADERS,
@@ -307,12 +307,14 @@ export default {
                 }
             }
 
-            // 3. Fallback: If cleaning failed, return 302 with CORS headers so client in VN can play directly
-            return new Response(null, {
-                status: 302,
+            // 3. Fallback: If cleaning failed (e.g. geo-blocked), DO NOT return 302 Redirect because it triggers CORS preflight (OPTIONS 405) on some clients.
+            // Instead, return a virtual master playlist pointing to the raw URL. Nuvio Web will fetch it directly and clean it client-side.
+            return new Response(`#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=3000000\n${targetUrl}\n`, {
+                status: 200,
                 headers: {
                     ...CORS_HEADERS,
-                    'Location': targetUrl
+                    'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                    'Cache-Control': 'no-cache'
                 }
             });
         }
