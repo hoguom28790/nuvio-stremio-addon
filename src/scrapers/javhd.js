@@ -47,15 +47,21 @@ async function ensureStaticCatalog() {
             const req = Function('return require')();
             const fs = req('fs');
             const path = req('path');
+            const dir = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
             const possible = [
+                path.resolve(dir, '../data/javhd_catalog.json'),
+                path.resolve(dir, '../../src/data/javhd_catalog.json'),
                 path.join(process.cwd(), 'src', 'data', 'javhd_catalog.json'),
-                path.join(process.cwd(), 'data', 'javhd_catalog.json')
+                path.join(process.cwd(), 'data', 'javhd_catalog.json'),
+                '/opt/render/project/src/src/data/javhd_catalog.json',
+                '/opt/render/project/src/data/javhd_catalog.json'
             ];
             for (const p of possible) {
                 if (fs.existsSync(p)) {
                     const raw = fs.readFileSync(p, 'utf8');
                     const text = raw && raw.charCodeAt(0) === 0xFEFF ? raw.slice(1) : raw;
                     cachedCatalog = JSON.parse(text);
+                    lastCatalogFetchTime = Date.now();
                     initSlugMap();
                     break;
                 }
@@ -74,6 +80,7 @@ async function ensureStaticCatalog() {
             }
             if (Array.isArray(data) && data.length > 0) {
                 cachedCatalog = data;
+                lastCatalogFetchTime = Date.now();
                 initSlugMap();
             }
         } catch (e) {

@@ -42,9 +42,14 @@ async function ensureStaticCatalog() {
             const req = Function('return require')();
             const fs = req('fs');
             const path = req('path');
+            const dir = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
             const possible = [
+                path.resolve(dir, '../data/hentaiz_catalog.json'),
+                path.resolve(dir, '../../src/data/hentaiz_catalog.json'),
                 path.join(process.cwd(), 'src', 'data', 'hentaiz_catalog.json'),
-                path.join(process.cwd(), 'data', 'hentaiz_catalog.json')
+                path.join(process.cwd(), 'data', 'hentaiz_catalog.json'),
+                '/opt/render/project/src/src/data/hentaiz_catalog.json',
+                '/opt/render/project/src/data/hentaiz_catalog.json'
             ];
             for (const p of possible) {
                 if (fs.existsSync(p)) {
