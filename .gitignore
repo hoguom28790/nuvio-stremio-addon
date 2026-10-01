@@ -3,3 +3,6 @@ node-v24.21.0-win-x64/
 Github cli-2.100.0/
 .env
 .DS_Store
+package/
+*.tgz
+test_*.js

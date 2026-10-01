@@ -288,7 +288,9 @@ async function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', d
                 continue;
             }
             if (trimmed.startsWith('/s/')) {
-                rewritten.push(`https://helvid.com${trimmed}`);
+                rewritten.push(`${segmentBase}${separator}url=${encodeURIComponent(`https://helvid.com${trimmed}`)}`);
+            } else if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+                rewritten.push(`${segmentBase}${separator}url=${encodeURIComponent(trimmed)}`);
             } else {
                 rewritten.push(line);
             }

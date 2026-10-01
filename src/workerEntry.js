@@ -188,9 +188,32 @@ export default {
         const javhdMatch = pathname.match(/^\/javhd\/stream\/([^/]+)\/([^/]+)\.m3u8$/);
         if (javhdMatch) {
             const [, slug, quality] = javhdMatch;
+            const resolveHost = host;
 
-            const resolveHost = `https://${host}`;
+            // 1. Delegate to Render (Render can bypass tiktokcdn.top 403 blocks)
+            const renderUrl = `https://nuvio-stremio-addon-1.onrender.com/javhd/stream/${slug}/${quality}.m3u8?cfhost=${encodeURIComponent(resolveHost)}`;
+            try {
+                const renderRes = await fetch(renderUrl, {
+                    headers: { 'User-Agent': 'Mozilla/5.0' },
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined
+                });
+                if (renderRes.ok) {
+                    const renderText = await renderRes.text();
+                    if (renderText && renderText.includes('#EXTM3U')) {
+                        return new Response(renderText, {
+                            headers: {
+                                ...CORS_HEADERS,
+                                'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                                'Cache-Control': 'max-age=600, stale-while-revalidate=1200, public'
+                            }
+                        });
+                    }
+                }
+            } catch (renderErr) {
+                console.warn('[JavHD Render Delegation Error]:', renderErr.message);
+            }
 
+            // 2. Fallback to local javhd.getM3u8
             try {
                 const playlist = await javhd.getM3u8(slug, quality, resolveHost, env);
                 return new Response(playlist, {
@@ -209,18 +232,48 @@ export default {
         const vlxxMatch = pathname.match(/^\/vlxx\/stream\/([^/]+)\/([^/]+)\.m3u8$/);
         if (vlxxMatch) {
             const [, vid, server] = vlxxMatch;
+            const resolveHost = host;
+
+            // 1. Try local resolution first
             try {
-                const playlist = await vlxx.getM3u8(vid, server, host);
-                return new Response(playlist, {
-                    headers: {
-                        ...CORS_HEADERS,
-                        'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
-                        'Cache-Control': 'max-age=600, stale-while-revalidate=1200, public'
-                    }
-                });
+                const playlist = await vlxx.getM3u8(vid, server, resolveHost);
+                if (playlist && playlist.includes('#EXTM3U')) {
+                    return new Response(playlist, {
+                        headers: {
+                            ...CORS_HEADERS,
+                            'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                            'Cache-Control': 'max-age=600, stale-while-revalidate=1200, public'
+                        }
+                    });
+                }
             } catch (err) {
-                return new Response('Error generating playlist: ' + err.message, { status: 500, headers: CORS_HEADERS });
+                console.warn('[VLXX Local M3U8 Error]:', err.message);
             }
+
+            // 2. Fallback to Render delegation
+            const renderUrl = `https://nuvio-stremio-addon-1.onrender.com/vlxx/stream/${vid}/${server}.m3u8?cfhost=${encodeURIComponent(resolveHost)}`;
+            try {
+                const renderRes = await fetch(renderUrl, {
+                    headers: { 'User-Agent': 'Mozilla/5.0' },
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined
+                });
+                if (renderRes.ok) {
+                    const renderText = await renderRes.text();
+                    if (renderText && renderText.includes('#EXTM3U')) {
+                        return new Response(renderText, {
+                            headers: {
+                                ...CORS_HEADERS,
+                                'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                                'Cache-Control': 'max-age=600, stale-while-revalidate=1200, public'
+                            }
+                        });
+                    }
+                }
+            } catch (renderErr) {
+                console.warn('[VLXX Render Delegation Error]:', renderErr.message);
+            }
+
+            return new Response('Error generating playlist', { status: 500, headers: CORS_HEADERS });
         }
 
         // 8. HentaiZ M3U8 Stream
@@ -245,8 +298,34 @@ export default {
         const avdbMatch = pathname.match(/^\/avdb\/stream\/([^/]+)\.m3u8$/);
         if (avdbMatch) {
             const slug = decodeURIComponent(avdbMatch[1]);
+            const resolveHost = host;
+
+            // 1. Delegate to Render (Render can bypass upload18.org Cloudflare bot protection)
+            const renderUrl = `https://nuvio-stremio-addon-1.onrender.com/avdb/stream/${encodeURIComponent(slug)}.m3u8?cfhost=${encodeURIComponent(resolveHost)}`;
             try {
-                const playlist = await avdb.getM3u8(slug, host, null, env);
+                const renderRes = await fetch(renderUrl, {
+                    headers: { 'User-Agent': 'Mozilla/5.0' },
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined
+                });
+                if (renderRes.ok) {
+                    const renderText = await renderRes.text();
+                    if (renderText && renderText.includes('#EXTM3U')) {
+                        return new Response(renderText, {
+                            headers: {
+                                ...CORS_HEADERS,
+                                'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                                'Cache-Control': 'max-age=600, stale-while-revalidate=1200, public'
+                            }
+                        });
+                    }
+                }
+            } catch (renderErr) {
+                console.warn('[AVDB Render Delegation Error]:', renderErr.message);
+            }
+
+            // 2. Fallback to local avdb.getM3u8
+            try {
+                const playlist = await avdb.getM3u8(slug, resolveHost, null, env);
                 return new Response(playlist, {
                     headers: {
                         ...CORS_HEADERS,
@@ -280,7 +359,30 @@ export default {
                 console.warn('[KKPhim Clean M3U8 Local Error]:', err.message);
             }
 
-            // 2. If local fetch failed, try optional Google Apps Script proxy if configured
+            // 2. Delegate to Render (Render can bypass Vietnam CDN geo-blocking on s5.phim1280.tv / a.kvp726.com)
+            const renderCleanUrl = `https://nuvio-stremio-addon-1.onrender.com/kkphim/clean.m3u8?url=${encodeURIComponent(targetUrl)}`;
+            try {
+                const renderRes = await fetch(renderCleanUrl, {
+                    headers: { 'User-Agent': 'Mozilla/5.0' },
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined
+                });
+                if (renderRes.ok) {
+                    const renderText = await renderRes.text();
+                    if (renderText && renderText.includes('#EXTM3U')) {
+                        return new Response(renderText, {
+                            headers: {
+                                ...CORS_HEADERS,
+                                'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                                'Cache-Control': 'public, max-age=7200, s-maxage=14400'
+                            }
+                        });
+                    }
+                }
+            } catch (renderErr) {
+                console.warn('[KKPhim Clean M3U8 Render Delegation Error]:', renderErr.message);
+            }
+
+            // 3. If local and Render failed, try optional Google Apps Script proxy if configured
             const gasProxyUrl = env?.KKPHIM_GAS_PROXY_URL || env?.GAS_PROXY_URL;
             if (gasProxyUrl) {
                 try {
@@ -307,7 +409,7 @@ export default {
                 }
             }
 
-            // 3. Fallback: If cleaning failed (e.g. geo-blocked), DO NOT return 302 Redirect because it triggers CORS preflight (OPTIONS 405) on some clients.
+            // 4. Fallback: If cleaning failed (e.g. geo-blocked), DO NOT return 302 Redirect because it triggers CORS preflight (OPTIONS 405) on some clients.
             // Instead, return a virtual master playlist pointing to the raw URL. Nuvio Web will fetch it directly and clean it client-side.
             return new Response(`#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=3000000\n${targetUrl}\n`, {
                 status: 200,

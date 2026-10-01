@@ -119,9 +119,9 @@ app.get('/hentaiz/stream/:videoId/:quality.m3u8', async (req, res) => {
 // JavHD HLS M3U8 Stream Delivery Route
 app.get('/javhd/stream/:slug/:quality.m3u8', async (req, res) => {
     const { slug, quality } = req.params;
-    const host = req.headers.host || 'hophimaddon.vercel.app';
+    const cfHost = req.query.cfhost || process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
     try {
-        const playlist = await javhd.getM3u8(slug, quality, host);
+        const playlist = await javhd.getM3u8(slug, quality, cfHost);
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
@@ -134,96 +134,24 @@ app.get('/javhd/stream/:slug/:quality.m3u8', async (req, res) => {
     }
 });
 
-// JavHD Segment Unwrapper (Strips 95-byte PNG fake header to output pure MPEG-TS)
-app.get('/javhd/segment.ts', async (req, res) => {
+// JavHD Segment Unwrapper: Redirect 302 to Cloudflare Worker edge to conserve Render bandwidth
+app.get('/javhd/segment.ts', (req, res) => {
     const rawUrl = req.query.url;
     if (!rawUrl) return res.status(400).send('Missing url');
 
-    if (process.env.SEGMENT_PROXY_URL) {
-        const base = process.env.SEGMENT_PROXY_URL.replace(/\/+$/, '');
-        const sep = base.includes('?') ? '&' : '?';
-        return res.redirect(302, `${base}${sep}url=${encodeURIComponent(rawUrl)}`);
-    }
-
-    try {
-        const upstream = await axios.get(rawUrl, {
-            responseType: 'stream',
-            timeout: 15000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Referer': 'https://javhdz.ac/'
-            }
-        });
-
-        res.setHeader('Content-Type', 'video/mp2t');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', '*');
-        res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400, immutable');
-        res.setHeader('CDN-Cache-Control', 'public, max-age=86400');
-        res.setHeader('Vercel-CDN-Cache-Control', 'public, max-age=86400');
-
-        let stripped = false;
-        let buf = Buffer.alloc(0);
-
-        upstream.data.on('data', (chunk) => {
-            if (!stripped) {
-                buf = Buffer.concat([buf, chunk]);
-                if (buf.length >= 1024) {
-                    if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) {
-                        let offset = 95;
-                        for (let i = 4; i <= buf.length - 376; i++) {
-                            if (buf[i] === 0x47 && buf[i + 188] === 0x47 && buf[i + 376] === 0x47) {
-                                offset = i;
-                                break;
-                            }
-                        }
-                        res.write(buf.slice(offset));
-                    } else {
-                        res.write(buf);
-                    }
-                    stripped = true;
-                    buf = null;
-                }
-            } else {
-                res.write(chunk);
-            }
-        });
-
-        upstream.data.on('end', () => {
-            if (!stripped && buf && buf.length > 0) {
-                if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) {
-                    res.write(buf.slice(95));
-                } else {
-                    res.write(buf);
-                }
-            }
-            res.end();
-        });
-
-        upstream.data.on('error', (err) => {
-            console.error('[JavHD Segment Stream Error]:', err.message);
-            if (!res.headersSent) res.status(502).send('Stream error');
-            else res.end();
-        });
-
-        req.on('close', () => {
-            if (upstream.data && typeof upstream.data.destroy === 'function') {
-                upstream.data.destroy();
-            }
-        });
-    } catch (err) {
-        console.error('[JavHD Segment Proxy Error]:', err.message);
-        if (!res.headersSent) res.status(502).send('Upstream error');
-    }
+    const cfHost = process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    return res.redirect(302, `https://${cfHost}/javhd/segment.ts?url=${encodeURIComponent(rawUrl)}`);
 });
 
 // VLXX HLS M3U8 Stream Delivery Route
 app.get('/vlxx/stream/:vid/:server.m3u8', async (req, res) => {
     const { vid, server } = req.params;
-    const host = req.headers.host || 'hophimaddon.vercel.app';
+    const cfHost = req.query.cfhost || process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
     try {
-        const playlist = await vlxx.getM3u8(vid, server, host);
+        const playlist = await vlxx.getM3u8(vid, server, cfHost);
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
@@ -236,97 +164,24 @@ app.get('/vlxx/stream/:vid/:server.m3u8', async (req, res) => {
     }
 });
 
-// VLXX Segment Unwrapper (Strips 95-byte PNG fake header to output pure MPEG-TS)
-app.get('/vlxx/segment.ts', async (req, res) => {
+// VLXX Segment Unwrapper: Redirect 302 to Cloudflare Worker edge to conserve Render bandwidth
+app.get('/vlxx/segment.ts', (req, res) => {
     const rawUrl = req.query.url;
     if (!rawUrl) return res.status(400).send('Missing url');
 
-    if (process.env.SEGMENT_PROXY_URL) {
-        const base = process.env.SEGMENT_PROXY_URL.replace(/\/+$/, '');
-        const sep = base.includes('?') ? '&' : '?';
-        return res.redirect(302, `${base}${sep}url=${encodeURIComponent(rawUrl)}`);
-    }
-
-    try {
-        const upstream = await axios.get(rawUrl, {
-            responseType: 'stream',
-            timeout: 15000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Referer': 'https://vlxx.phd/'
-            }
-        });
-
-        res.setHeader('Content-Type', 'video/mp2t');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', '*');
-        res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400, immutable');
-        res.setHeader('CDN-Cache-Control', 'public, max-age=86400');
-        res.setHeader('Vercel-CDN-Cache-Control', 'public, max-age=86400');
-
-        let stripped = false;
-        let buf = Buffer.alloc(0);
-
-        upstream.data.on('data', (chunk) => {
-            if (!stripped) {
-                buf = Buffer.concat([buf, chunk]);
-                if (buf.length >= 1024) {
-                    if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) {
-                        let offset = 95;
-                        for (let i = 4; i <= buf.length - 376; i++) {
-                            if (buf[i] === 0x47 && buf[i + 188] === 0x47 && buf[i + 376] === 0x47) {
-                                offset = i;
-                                break;
-                            }
-                        }
-                        res.write(buf.slice(offset));
-                    } else {
-                        res.write(buf);
-                    }
-                    stripped = true;
-                    buf = null;
-                }
-            } else {
-                res.write(chunk);
-            }
-        });
-
-        upstream.data.on('end', () => {
-            if (!stripped && buf && buf.length > 0) {
-                if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) {
-                    res.write(buf.slice(95));
-                } else {
-                    res.write(buf);
-                }
-            }
-            res.end();
-        });
-
-        upstream.data.on('error', (err) => {
-            console.error('[VLXX Segment Stream Error]:', err.message);
-            if (!res.headersSent) res.status(502).send('Stream error');
-            else res.end();
-        });
-
-        req.on('close', () => {
-            if (upstream.data && typeof upstream.data.destroy === 'function') {
-                upstream.data.destroy();
-            }
-        });
-    } catch (err) {
-        console.error('[VLXX Segment Proxy Error]:', err.message);
-        if (!res.headersSent) res.status(502).send('Upstream error');
-    }
+    const cfHost = process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    return res.redirect(302, `https://${cfHost}/vlxx/segment.ts?url=${encodeURIComponent(rawUrl)}`);
 });
-
 
 // AVDB HLS M3U8 Stream Delivery Route
 app.get('/avdb/stream/:slug.m3u8', async (req, res) => {
     const { slug } = req.params;
-    const host = req.headers.host || 'hophimaddon.hophim-4g6qbubt.workers.dev';
+    const cfHost = req.query.cfhost || process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
     try {
-        const playlist = await avdb.getM3u8(slug, host);
+        const playlist = await avdb.getM3u8(slug, cfHost);
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
@@ -339,52 +194,16 @@ app.get('/avdb/stream/:slug.m3u8', async (req, res) => {
     }
 });
 
-// AVDB Segment Proxy Route
-app.get('/avdb/segment.ts', async (req, res) => {
+// AVDB Segment Proxy Route: Redirect 302 to Cloudflare Worker edge to conserve Render bandwidth
+app.get('/avdb/segment.ts', (req, res) => {
     const rawUrl = req.query.url;
     if (!rawUrl) return res.status(400).send('Missing url');
 
-    if (process.env.SEGMENT_PROXY_URL) {
-        const base = process.env.SEGMENT_PROXY_URL.replace(/\/+$/, '');
-        const sep = base.includes('?') ? '&' : '?';
-        return res.redirect(302, `${base}${sep}url=${encodeURIComponent(rawUrl)}`);
-    }
-
-    try {
-        const upstream = await axios.get(rawUrl, {
-            responseType: 'stream',
-            timeout: 15000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Referer': 'https://upload18.org/'
-            }
-        });
-
-        res.setHeader('Content-Type', 'video/mp2t');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', '*');
-        res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400, immutable');
-        res.setHeader('CDN-Cache-Control', 'public, max-age=86400');
-        res.setHeader('Vercel-CDN-Cache-Control', 'public, max-age=86400');
-
-        upstream.data.pipe(res);
-
-        upstream.data.on('error', (err) => {
-            console.error('[AVDB Segment Stream Error]:', err.message);
-            if (!res.headersSent) res.status(502).send('Stream error');
-            else res.end();
-        });
-
-        req.on('close', () => {
-            if (upstream.data && typeof upstream.data.destroy === 'function') {
-                upstream.data.destroy();
-            }
-        });
-    } catch (err) {
-        console.error('[AVDB Segment Proxy Error]:', err.message);
-        if (!res.headersSent) res.status(502).send('Upstream error');
-    }
+    const cfHost = process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    return res.redirect(302, `https://${cfHost}/avdb/segment.ts?url=${encodeURIComponent(rawUrl)}`);
 });
 
 // KKPhim Clean M3U8 Stream Delivery Route (Filter out 15:00 and 3:00 SSAI ads)
