@@ -175,12 +175,14 @@ async function fetchText(url, referer, env = {}) {
 }
 
 async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.dev') {
-// ... same as before
     const rawId = id.replace('avdb:', '');
-    const hostBase = host.includes('://') ? host : `https://${host}`;
+    const edgeHost = host && !host.includes('onrender.com') ? host : ((typeof process !== 'undefined' && process.env && process.env.CF_HOST) || 'hophimaddon.hophim-4g6qbubt.workers.dev');
+    const hostBase = edgeHost.includes('://') ? edgeHost : `https://${edgeHost}`;
 
     try {
-        const res = await axios.get(`${BASE_URL}?ac=detail&ids=${encodeURIComponent(rawId)}`, {
+        const isNumeric = /^\d+$/.test(rawId);
+        const queryParam = isNumeric ? `ids=${encodeURIComponent(rawId)}` : `wd=${encodeURIComponent(rawId)}`;
+        const res = await axios.get(`${BASE_URL}?ac=detail&${queryParam}`, {
             timeout: 15000,
             headers: { 'User-Agent': 'Mozilla/5.0' }
         });
@@ -204,15 +206,40 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
         const typeName = item.type_name || '1080p';
         const streams = [];
 
+        // Stream 1: Cloudflare Edge Proxy (Hỗ trợ 100% Stremio Web và mọi trình duyệt)
         streams.push({
-            name: `⚡ [Direct CDN] AVDB • ${typeName}`,
-            title: `${item.name || item.movie_code}\n⚡ Luồng Trực Tiếp CDN • Nhanh & Mượt`,
+            name: `🛡️ [Proxy Edge] AVDB • ${typeName}`,
+            title: `${item.name || item.movie_code}\n🛡️ Luồng Qua Cloudflare Edge (Hỗ trợ 100% Stremio Web & Mọi Thiết Bị)`,
             url: `${hostBase}/avdb/stream/${encodeURIComponent(slug)}.m3u8`,
             behaviorHints: {
                 notWebReady: false,
-                bingeGroup: `avdb-direct-${slug}`
+                bingeGroup: `avdb-proxy-${slug}`
             }
         });
+
+        // Stream 2: Luồng VIP CDN Trực Tiếp từ 18plusok (Hỗ trợ proxyHeaders cho Stremio App, Android TV)
+        try {
+            const extUrl = `https://18plusok.vercel.app/eyJoaWRlRnJvbUhvbWUiOnRydWV9/stream/movie/avdb:${encodeURIComponent(item.id || rawId)}.json`;
+            const extRes = await axios.get(extUrl, { timeout: 3500 });
+            if (extRes.data?.streams?.[0]?.url) {
+                const s0 = extRes.data.streams[0];
+                streams.push({
+                    name: `⚡ [VIP Direct CDN] AVDB • ${typeName}`,
+                    title: `${item.name || item.movie_code}\n⚡ Luồng Trực Tiếp VIP CDN (Direct Helvid) • Nhanh & Mượt`,
+                    url: s0.url,
+                    behaviorHints: {
+                        notWebReady: false,
+                        bingeGroup: `avdb-vip-${slug}`,
+                        proxyHeaders: s0.behaviorHints?.proxyHeaders || {
+                            request: {
+                                'Referer': 'https://upload18.org/',
+                                'User-Agent': USER_AGENT
+                            }
+                        }
+                    }
+                });
+            }
+        } catch (eExt) {}
 
         return streams;
     } catch (err) {
@@ -275,8 +302,9 @@ async function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', d
 
     let rewrittenContent = content;
     if (typeof content === 'string') {
-        const rawProxy = process.env.SEGMENT_PROXY_URL;
-        const segmentBase = rawProxy ? rawProxy.replace(/\/+$/, '') : `${hostBase}/avdb/segment.ts`;
+        const edgeHost = host && !host.includes('onrender.com') ? host : ((typeof process !== 'undefined' && process.env && process.env.CF_HOST) || 'hophimaddon.hophim-4g6qbubt.workers.dev');
+        const edgeBase = edgeHost.includes('://') ? edgeHost : `https://${edgeHost}`;
+        const segmentBase = `${edgeBase}/avdb/segment.ts`;
         const separator = segmentBase.includes('?') ? '&' : '?';
 
         const lines = content.split('\n');

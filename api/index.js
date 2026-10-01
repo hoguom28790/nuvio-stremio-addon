@@ -209,10 +209,10 @@ app.get('/avdb/segment.ts', (req, res) => {
 // KKPhim Clean M3U8 Stream Delivery Route (Filter out 15:00 and 3:00 SSAI ads)
 app.get('/kkphim/clean.m3u8', async (req, res) => {
     const targetUrl = req.query.url;
-    const host = req.headers.host || 'localhost';
+    const cfHost = req.query.cfhost || process.env.CF_HOST || req.headers.host || 'hophimaddon.hophim-4g6qbubt.workers.dev';
     if (!targetUrl) return res.status(400).send('Missing url');
     try {
-        const playlist = await kkphim.getCleanM3u8(targetUrl, host);
+        const playlist = await kkphim.getCleanM3u8(targetUrl, cfHost);
         if (playlist) {
             res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
             res.setHeader('Access-Control-Allow-Origin', '*');

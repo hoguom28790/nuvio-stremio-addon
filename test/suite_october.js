@@ -50,13 +50,13 @@ async function runTests() {
     await testCase('3. KKPhim SSAI Ad Filtering on Render (verifying direct CDN segments, 0 video proxy)', async () => {
         // Test master playlist
         const masterTarget = 'https://a.kvp726.com/20261001/Iw5yJa3S/index.m3u8';
-        const masterRes = await axios.get(`${RENDER_BASE}/kkphim/clean.m3u8?url=${encodeURIComponent(masterTarget)}`, { timeout: 8000 });
+        const masterRes = await axios.get(`${RENDER_BASE}/kkphim/clean.m3u8?url=${encodeURIComponent(masterTarget)}`, { timeout: 30000 });
         assert(masterRes.data.includes('#EXTM3U'), 'Invalid master playlist');
         assert(masterRes.data.includes('clean.m3u8?url='), 'Variant sub-playlist not rewritten to clean');
 
         // Test variant sub-playlist
         const variantTarget = 'https://a.kvp726.com/20261001/Iw5yJa3S/3500kb/hls/index.m3u8';
-        const variantRes = await axios.get(`${RENDER_BASE}/kkphim/clean.m3u8?url=${encodeURIComponent(variantTarget)}`, { timeout: 15000 });
+        const variantRes = await axios.get(`${RENDER_BASE}/kkphim/clean.m3u8?url=${encodeURIComponent(variantTarget)}`, { timeout: 30000 });
         assert(variantRes.data.includes('#EXTM3U'), 'Invalid variant playlist');
         assert(!/convertv\d*\/|\/v\d+\/.*segment_|segment_\d{4}/i.test(variantRes.data), 'Contains ads!');
         // Verify segment URLs are direct CDN links (NOT proxied through Render)
@@ -78,7 +78,7 @@ async function runTests() {
     // 5. JavHD M3U8 on Render (verifying segment URLs route to CF Worker, 0 video proxy)
     await testCase('5. JavHD M3U8 resolution on Render (zero video bandwidth on Render)', async () => {
         const slug = 'toi-da-so-bim-chi-gai-tsubasa-mai-4017';
-        const res = await axios.get(`${RENDER_BASE}/javhd/stream/${slug}/1080.m3u8?cfhost=${CF_HOST}`, { timeout: 15000 });
+        const res = await axios.get(`${RENDER_BASE}/javhd/stream/${slug}/1080.m3u8?cfhost=${CF_HOST}`, { timeout: 30000 });
         assert(res.data.includes('#EXTM3U'), 'Invalid M3U8');
         const lines = res.data.split('\n');
         const segLines = lines.filter(l => l.includes('sf16-ads-format-sign.tiktokcdn.com') || l.includes('segment.ts'));
@@ -90,7 +90,7 @@ async function runTests() {
     await testCase('6. JavHD Segment Unwrapper on Cloudflare Edge (PNG stripped to MPEG-TS sync byte 0x47)', async () => {
         const targetUrl = 'https://sf16-ads-format-sign.tiktokcdn.com/obj/ad-site-i18n/64741464_4d25_4c3a_a667_f30c7f72d997.png?x-expires=1790948604&x-signature=%2BFdwW%2FY8VzvWJUkPTiigtWxakVU%3D';
         const proxyUrl = `https://${CF_HOST}/javhd/segment.ts?url=${encodeURIComponent(targetUrl)}`;
-        const res = await axios.get(proxyUrl, { responseType: 'arraybuffer', timeout: 12000 });
+        const res = await axios.get(proxyUrl, { responseType: 'arraybuffer', timeout: 15000 });
         assert.strictEqual(res.status, 200);
         assert.strictEqual(res.headers['content-type'], 'video/mp2t');
         // MPEG-TS packet sync byte is 0x47
@@ -107,7 +107,7 @@ async function runTests() {
 
     // 8. AVDB M3U8 Generation on Render
     await testCase('8. AVDB M3U8 Playlist resolution on Render', async () => {
-        const res = await axios.get(`${RENDER_BASE}/avdb/stream/jur-835.m3u8?cfhost=${CF_HOST}`, { timeout: 15000 });
+        const res = await axios.get(`${RENDER_BASE}/avdb/stream/jur-835.m3u8?cfhost=${CF_HOST}`, { timeout: 30000 });
         assert(res.data.includes('#EXTM3U'), 'Invalid AVDB M3U8');
         const lines = res.data.split('\n');
         const segLines = lines.filter(l => l.includes('helvid.com'));

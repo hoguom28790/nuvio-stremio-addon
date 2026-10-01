@@ -195,7 +195,7 @@ export default {
             try {
                 const renderRes = await fetch(renderUrl, {
                     headers: { 'User-Agent': 'Mozilla/5.0' },
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined
                 });
                 if (renderRes.ok) {
                     const renderText = await renderRes.text();
@@ -255,7 +255,7 @@ export default {
             try {
                 const renderRes = await fetch(renderUrl, {
                     headers: { 'User-Agent': 'Mozilla/5.0' },
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined
                 });
                 if (renderRes.ok) {
                     const renderText = await renderRes.text();
@@ -305,7 +305,7 @@ export default {
             try {
                 const renderRes = await fetch(renderUrl, {
                     headers: { 'User-Agent': 'Mozilla/5.0' },
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined
                 });
                 if (renderRes.ok) {
                     const renderText = await renderRes.text();
@@ -360,11 +360,11 @@ export default {
             }
 
             // 2. Delegate to Render (Render can bypass Vietnam CDN geo-blocking on s5.phim1280.tv / a.kvp726.com)
-            const renderCleanUrl = `https://nuvio-stremio-addon-1.onrender.com/kkphim/clean.m3u8?url=${encodeURIComponent(targetUrl)}`;
+            const renderCleanUrl = `https://nuvio-stremio-addon-1.onrender.com/kkphim/clean.m3u8?url=${encodeURIComponent(targetUrl)}&cfhost=${encodeURIComponent(host)}`;
             try {
                 const renderRes = await fetch(renderCleanUrl, {
                     headers: { 'User-Agent': 'Mozilla/5.0' },
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined
                 });
                 if (renderRes.ok) {
                     const renderText = await renderRes.text();

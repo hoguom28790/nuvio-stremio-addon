@@ -7,32 +7,15 @@ const BASE_URL = 'https://phimapi.com';
 const CDN_URL = 'https://phimimg.com';
 
 function getVnProxyFetcher() {
-    const isNode = typeof process !== 'undefined' && process.versions && !!process.versions.node;
-    if (!isNode) return null;
-    try {
-        return require('../utils/vnProxyFetcher');
-    } catch (e1) {
-        try {
-            const path = require('path');
-            const fs = require('fs');
-            const candidates = [
-                path.join(process.cwd(), 'src', 'utils', 'vnProxyFetcher.js'),
-                path.join(process.cwd(), 'utils', 'vnProxyFetcher.js'),
-                path.join(__dirname, '..', 'src', 'utils', 'vnProxyFetcher.js'),
-                path.join(__dirname, '..', 'utils', 'vnProxyFetcher.js'),
-                path.join(__dirname, 'src', 'utils', 'vnProxyFetcher.js'),
-                path.join(__dirname, 'utils', 'vnProxyFetcher.js'),
-                '/app/src/utils/vnProxyFetcher.js',
-                '/app/utils/vnProxyFetcher.js'
-            ];
-            for (const cand of candidates) {
-                if (fs.existsSync(cand)) {
-                    return require(cand);
-                }
-            }
-        } catch (e2) {}
+    if (typeof process === 'undefined' || !process?.versions?.node) {
+        return null;
     }
-    return null;
+    try {
+        const req = Function('return require')();
+        return req('../utils/vnProxyFetcher');
+    } catch (e1) {
+        return null;
+    }
 }
 
 function formatPoster(path, cdnDomain = CDN_URL) {

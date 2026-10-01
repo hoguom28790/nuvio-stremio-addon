@@ -358,8 +358,9 @@ async function getM3u8(vid, serverId = 1, host = 'hophimaddon.hophim-4g6qbubt.wo
         content = res.data;
     }
 
-    const rawProxy = process.env.SEGMENT_PROXY_URL;
-    const segmentBase = rawProxy ? rawProxy.replace(/\/+$/, '') : `${hostBase}/vlxx/segment.ts`;
+    const edgeHost = host && !host.includes('onrender.com') ? host : ((typeof process !== 'undefined' && process.env && process.env.CF_HOST) || 'hophimaddon.hophim-4g6qbubt.workers.dev');
+    const edgeBase = edgeHost.includes('://') ? edgeHost : `https://${edgeHost}`;
+    const segmentBase = `${edgeBase}/vlxx/segment.ts`;
     const separator = segmentBase.includes('?') ? '&' : '?';
 
     const lines = content.split('\n');

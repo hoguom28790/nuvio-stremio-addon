@@ -39,8 +39,9 @@ async function ensureStaticCatalog() {
     // Check local filesystem in Node.js
     if (typeof process !== 'undefined' && process.versions && process.versions.node) {
         try {
-            const fs = await import('node:fs');
-            const path = await import('node:path');
+            const req = Function('return require')();
+            const fs = req('fs');
+            const path = req('path');
             const possible = [
                 path.join(process.cwd(), 'src', 'data', 'hentaiz_catalog.json'),
                 path.join(process.cwd(), 'data', 'hentaiz_catalog.json')

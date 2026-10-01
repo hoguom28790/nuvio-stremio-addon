@@ -1,14 +1,13 @@
 const http = require('http');
 const https = require('https');
 
-// Pool of Vietnam HTTP proxies (verified fast & reliable)
 const DEFAULT_VN_PROXIES = [
-    { host: '14.251.13.17', port: 8080 },
     { host: '210.211.113.34', port: 80 },
     { host: '210.211.113.35', port: 80 },
     { host: '210.211.113.37', port: 80 },
     { host: '113.161.59.136', port: 8080 },
-    { host: '113.22.113.75', port: 8080 }
+    { host: '113.22.113.75', port: 8080 },
+    { host: '14.251.13.17', port: 8080 }
 ];
 
 let dynamicProxies = [];

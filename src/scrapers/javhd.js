@@ -44,8 +44,9 @@ async function ensureStaticCatalog() {
     // Check local filesystem in Node.js
     if (typeof process !== 'undefined' && process.versions && process.versions.node) {
         try {
-            const fs = await import('node:fs');
-            const path = await import('node:path');
+            const req = Function('return require')();
+            const fs = req('fs');
+            const path = req('path');
             const possible = [
                 path.join(process.cwd(), 'src', 'data', 'javhd_catalog.json'),
                 path.join(process.cwd(), 'data', 'javhd_catalog.json')
@@ -680,8 +681,9 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
                 return `${hostBase}/javhd/stream/${slug}/${p1}.m3u8`;
             });
         } else {
-            const rawProxy = process.env.SEGMENT_PROXY_URL;
-            const segmentBase = rawProxy ? rawProxy.replace(/\/+$/, '') : `${hostBase}/javhd/segment.ts`;
+            const edgeHost = host && !host.includes('onrender.com') ? host : ((typeof process !== 'undefined' && process.env && process.env.CF_HOST) || 'hophimaddon.hophim-4g6qbubt.workers.dev');
+            const edgeBase = edgeHost.includes('://') ? edgeHost : `https://${edgeHost}`;
+            const segmentBase = `${edgeBase}/javhd/segment.ts`;
             const separator = segmentBase.includes('?') ? '&' : '?';
             const lines = content.split('\n');
             const rewritten = lines.map(line => {
