@@ -82,8 +82,8 @@ async function handleResource(req, res, config) {
         extra.genre = extra.genre.replace(/phim\s+18(?:\s+|$)/i, 'Phim 18+');
     }
     
-    // Inject current host into config for dynamic stream URLs
-    config.host = req.headers.host || 'hophimaddon.hophim-4g6qbubt.workers.dev';
+    // Inject current host into config for dynamic stream URLs (prioritize x-forwarded-host and cfhost)
+    config.host = req.headers['x-forwarded-host'] || req.query.cfhost || process.env.CF_HOST || req.headers.host || 'hophimaddon.hophim-4g6qbubt.workers.dev';
 
     try {
         const resp = await addonInterface.get(resource, type, id, extra, config);

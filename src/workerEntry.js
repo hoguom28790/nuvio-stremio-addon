@@ -579,21 +579,50 @@ export default {
             }
 
 
+            let resp = null;
             try {
-                const resp = await addonInterface.get(resource, type, id, extra, config);
-                return new Response(JSON.stringify(resp), {
-                    headers: {
-                        ...CORS_HEADERS,
-                        'Content-Type': 'application/json; charset=utf-8',
-                        'Cache-Control': 'max-age=120, stale-while-revalidate=600, public'
-                    }
-                });
+                resp = await addonInterface.get(resource, type, id, extra, config);
             } catch (err) {
                 if (err && err.noHandler) {
                     return new Response(JSON.stringify({ err: 'not found' }), { status: 404, headers: CORS_HEADERS });
                 }
-                return new Response(JSON.stringify({ err: 'handler error: ' + (err.message || err) }), { status: 500, headers: CORS_HEADERS });
             }
+
+            // Fallback / Delegation to Render for adult resources that may be blocked on Cloudflare edge IPs (MissAV, JavHD, VLXX, AVDB)
+            const isAdultSource = id && (id.startsWith('missav') || id.startsWith('javhd') || id.startsWith('vlxx') || id.startsWith('avdb'));
+            const isEmpty = !resp || 
+                (resource === 'catalog' && (!resp.metas || resp.metas.length === 0)) ||
+                (resource === 'meta' && (!resp.meta || !resp.meta.name)) ||
+                (resource === 'stream' && (!resp.streams || resp.streams.length === 0));
+
+            if (isAdultSource && isEmpty) {
+                const renderResourceUrl = `https://nuvio-stremio-addon-1.onrender.com${pathname}`;
+                try {
+                    const rRes = await fetch(renderResourceUrl, {
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                            'x-forwarded-host': host
+                        },
+                        signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined
+                    });
+                    if (rRes.ok) {
+                        const rJson = await rRes.json();
+                        if (rJson && ((rJson.metas && rJson.metas.length > 0) || (rJson.meta && rJson.meta.name) || (rJson.streams && rJson.streams.length > 0))) {
+                            resp = rJson;
+                        }
+                    }
+                } catch (rErr) {
+                    console.warn('[Render Resource Delegation Error]:', rErr.message);
+                }
+            }
+
+            return new Response(JSON.stringify(resp || { metas: [] }), {
+                headers: {
+                    ...CORS_HEADERS,
+                    'Content-Type': 'application/json; charset=utf-8',
+                    'Cache-Control': 'max-age=120, stale-while-revalidate=600, public'
+                }
+            });
         }
 
         return new Response('Not Found', { status: 404, headers: CORS_HEADERS });
