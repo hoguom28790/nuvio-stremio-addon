@@ -69,6 +69,7 @@ const hentaiz = require('../src/scrapers/hentaiz');
 const javhd = require('../src/scrapers/javhd');
 const vlxx = require('../src/scrapers/vlxx');
 const avdb = require('../src/scrapers/avdb');
+const missav = require('../src/scrapers/missav');
 
 async function handleResource(req, res, config) {
     const { resource, type } = req.params;
@@ -204,6 +205,36 @@ app.get('/avdb/segment.ts', (req, res) => {
     res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', '*');
     return res.redirect(302, `https://${cfHost}/avdb/segment.ts?url=${encodeURIComponent(rawUrl)}`);
+});
+
+// MissAV HLS M3U8 Stream Delivery Route
+app.get(['/missav/stream/:slug.m3u8', '/missav/stream/:slug/:quality.m3u8'], async (req, res) => {
+    const { slug, quality = '1080' } = req.params;
+    const cfHost = req.query.cfhost || process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
+    try {
+        const playlist = await missav.getM3u8(slug, quality, cfHost);
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', '*');
+        res.setHeader('Cache-Control', 'max-age=600, stale-while-revalidate=1200, public');
+        res.send(playlist);
+    } catch (err) {
+        console.error('[MissAV M3U8 Error]:', err.message);
+        res.status(500).send('Error generating playlist');
+    }
+});
+
+// MissAV Segment Proxy Route: Redirect 302 to Cloudflare Worker edge to conserve Render bandwidth
+app.get('/missav/segment.ts', (req, res) => {
+    const rawUrl = req.query.url;
+    if (!rawUrl) return res.status(400).send('Missing url');
+
+    const cfHost = process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    return res.redirect(302, `https://${cfHost}/missav/segment.ts?url=${encodeURIComponent(rawUrl)}`);
 });
 
 // KKPhim Clean M3U8 Stream Delivery Route (Filter out 15:00 and 3:00 SSAI ads)

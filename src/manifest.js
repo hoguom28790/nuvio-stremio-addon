@@ -195,9 +195,47 @@ const avdbCatalogs = [
     }
 ];
 
-const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs];
+const missavGenres = [
+    "Tất Cả",
+    "Phát Hành Mới",
+    "Mới Cập Nhật",
+    "Không Che (Uncensored)",
+    "Vietsub / Phụ Đề",
+    "Phụ Đề Tiếng Anh",
+    "Nghiệp Dư / FC2",
+    "Thịnh Hành (Hôm nay)",
+    "Thịnh Hành (Tuần)",
+    "Thịnh Hành (Tháng)",
+    "VR Thực Tế Ảo",
+    "Siro (Amateur)",
+    "Luxu (Amateur)",
+    "Gana (Amateur)",
+    "Maan (Amateur)",
+    "Nữ Sinh (Schoolgirl)",
+    "Ngực Khủng (Big Breasts)",
+    "Vợ / MILF (Mature Woman)",
+    "Xuất Tinh Trong (Creampie)",
+    "Gái Xinh (Pretty Girl)",
+    "Oral Sex",
+    "Tập Thể (Orgy)"
+];
+
+const missavCatalogs = [
+    {
+        type: "movie",
+        id: "missav-movie",
+        name: "MissAV",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: missavGenres }
+        ]
+    }
+];
+
+const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs, ...missavCatalogs];
 const allCatalogs = [...filteredCatalogs, ...adultCatalogs];
-const allPrefixes = ["tt", "nguonc:", "stp:", "hh3d:", "clbpx:", "yan:", "kkphim:", "hentaiz:", "javhd:", "vlxx:", "avdb:"];
+const allPrefixes = ["tt", "nguonc:", "stp:", "hh3d:", "clbpx:", "yan:", "kkphim:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "missav:"];
 
 const baseManifest = {
     id: "org.hophim.stremio",

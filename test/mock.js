@@ -22,7 +22,8 @@ async function testAllScrapers() {
         { id: 'hh3d-movie', type: 'movie' },
         { id: 'clbpx-movie', type: 'movie' },
         { id: 'stp-movie', type: 'movie' },
-        { id: 'yan-movie', type: 'movie' }
+        { id: 'yan-movie', type: 'movie' },
+        { id: 'missav-movie', type: 'movie' }
     ];
 
     console.log('[2] Testing Catalog Handlers:');
@@ -58,7 +59,8 @@ async function testAllScrapers() {
     console.log('[4] Testing Stream Handlers:');
     const streamsToTest = [
         { id: 'kkphim:biet-doi-danh-thue-4', type: 'movie' },
-        { id: 'nguonc:khach', type: 'movie' }
+        { id: 'nguonc:khach', type: 'movie' },
+        { id: 'missav:siro-5719', type: 'movie' }
     ];
     for (const s of streamsToTest) {
         try {

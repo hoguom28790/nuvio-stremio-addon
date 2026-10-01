@@ -5,6 +5,7 @@ const hentaiz = require('./scrapers/hentaiz');
 const javhd = require('./scrapers/javhd');
 const vlxx = require('./scrapers/vlxx');
 const avdb = require('./scrapers/avdb');
+const missav = require('./scrapers/missav');
 const kkphim = require('./scrapers/kkphim');
 
 function parseConfig(configParam) {
@@ -34,10 +35,19 @@ async function handleSegmentProxy(targetUrl, referer) {
     if (!targetUrl) return new Response('Missing url query parameter', { status: 400 });
 
     try {
+        let origin = '';
+        try {
+            origin = new URL(referer).origin;
+        } catch (e) {
+            origin = referer;
+        }
+
         const upstream = await fetch(targetUrl, {
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Referer': referer
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Referer': referer,
+                'Origin': origin,
+                'Accept': '*/*'
             },
             referrer: referer,
             referrerPolicy: 'unsafe-url',
@@ -182,6 +192,11 @@ export default {
         // 5c. AVDB Segment Proxy (Direct Cloudflare Edge streaming)
         if (pathname === '/avdb/segment.ts') {
             return handleSegmentProxy(url.searchParams.get('url'), 'https://upload18.org/');
+        }
+
+        // 5d. MissAV Segment Proxy (Direct Cloudflare Edge streaming)
+        if (pathname === '/missav/segment.ts') {
+            return handleSegmentProxy(url.searchParams.get('url'), 'https://missav.ai/');
         }
 
         // 6. JavHD M3U8 Stream
@@ -338,7 +353,51 @@ export default {
             }
         }
 
-        // 8d. KKPhim Clean M3U8 Stream (Filter out 15:00 and 3:00 SSAI ads with auto-fallback)
+        // 8d. MissAV M3U8 Stream
+        const missavMatch = pathname.match(/^\/missav\/stream\/([^/]+)(?:\/([^/]+))?\.m3u8$/);
+        if (missavMatch) {
+            const [, slug, quality = '1080'] = missavMatch;
+            const resolveHost = host;
+
+            // 1. Delegate to Render (Render resolves playlist with zero video bandwidth)
+            const renderUrl = `https://nuvio-stremio-addon-1.onrender.com/missav/stream/${encodeURIComponent(slug)}/${quality}.m3u8?cfhost=${encodeURIComponent(resolveHost)}`;
+            try {
+                const renderRes = await fetch(renderUrl, {
+                    headers: { 'User-Agent': 'Mozilla/5.0' },
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined
+                });
+                if (renderRes.ok) {
+                    const renderText = await renderRes.text();
+                    if (renderText && renderText.includes('#EXTM3U')) {
+                        return new Response(renderText, {
+                            headers: {
+                                ...CORS_HEADERS,
+                                'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                                'Cache-Control': 'max-age=600, stale-while-revalidate=1200, public'
+                            }
+                        });
+                    }
+                }
+            } catch (renderErr) {
+                console.warn('[MissAV Render Delegation Error]:', renderErr.message);
+            }
+
+            // 2. Fallback to local missav.getM3u8
+            try {
+                const playlist = await missav.getM3u8(slug, quality, resolveHost);
+                return new Response(playlist, {
+                    headers: {
+                        ...CORS_HEADERS,
+                        'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                        'Cache-Control': 'max-age=600, stale-while-revalidate=1200, public'
+                    }
+                });
+            } catch (err) {
+                return new Response('Error generating playlist: ' + err.message, { status: 500, headers: CORS_HEADERS });
+            }
+        }
+
+        // 8e. KKPhim Clean M3U8 Stream (Filter out 15:00 and 3:00 SSAI ads with auto-fallback)
         if (pathname === '/kkphim/clean.m3u8') {
             const targetUrl = url.searchParams.get('url');
             if (!targetUrl) return new Response('Missing url query parameter', { status: 400, headers: CORS_HEADERS });
