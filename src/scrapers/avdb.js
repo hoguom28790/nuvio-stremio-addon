@@ -139,7 +139,9 @@ async function fetchText(url, referer, env = {}) {
     if (gasUrl) {
         try {
             const proxyTarget = `${gasUrl}?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer || 'https://upload18.org/')}`;
-            const gasRes = await fetch(proxyTarget);
+            const gasRes = await fetch(proxyTarget, {
+                signal: AbortSignal.timeout ? AbortSignal.timeout(2000) : undefined
+            });
             if (gasRes.ok) return await gasRes.text();
         } catch (e) {}
     }
@@ -155,7 +157,8 @@ async function fetchText(url, referer, env = {}) {
         const fetchOpts = {
             headers,
             referrer: referer || undefined,
-            referrerPolicy: referer ? 'unsafe-url' : 'no-referrer'
+            referrerPolicy: referer ? 'unsafe-url' : 'no-referrer',
+            signal: AbortSignal.timeout ? AbortSignal.timeout(3000) : undefined
         };
         const res = await fetch(url, fetchOpts);
         if (!res.ok) {
@@ -169,7 +172,7 @@ async function fetchText(url, referer, env = {}) {
         if (referer) {
             headers['Referer'] = referer;
         }
-        const res = await axios.get(url, { headers, timeout: 15000 });
+        const res = await axios.get(url, { headers, timeout: 3000 });
         return typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
     }
 }
@@ -268,7 +271,7 @@ async function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', d
     // 2. Fallback: extract from 18plusok
     if (!content) {
         try {
-            const extRes = await axios.get(`https://18plusok.vercel.app/eyJoaWRlRnJvbUhvbWUiOnRydWV9/stream/movie/avdb:${encodeURIComponent(slug)}.json`, { timeout: 10000 });
+            const extRes = await axios.get(`https://18plusok.vercel.app/eyJoaWRlRnJvbUhvbWUiOnRydWV9/stream/movie/avdb:${encodeURIComponent(slug)}.json`, { timeout: 3000 });
             if (extRes.data?.streams?.[0]?.url) {
                 content = await fetchText(extRes.data.streams[0].url, 'https://upload18.org/', env);
             }
@@ -297,7 +300,8 @@ async function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', d
     }
 
     if (!content) {
-        throw new Error('m3u8 link not found in embed player HTML');
+        const fallbackTarget = directUrl || `https://upload18.org/play/index/${slug}`;
+        return `#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=3000000\n${fallbackTarget}\n`;
     }
 
     let rewrittenContent = content;

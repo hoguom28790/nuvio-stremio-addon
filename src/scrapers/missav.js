@@ -36,7 +36,9 @@ async function fetchM3u8Content(targetUrl, referer = 'https://missav.ai/') {
         'User-Agent': USER_AGENT,
         'Referer': referer,
         'Origin': origin,
-        'Accept': '*/*'
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Connection': 'keep-alive'
     };
 
     // If running in Node.js environment, use https.request to ensure HTTP/1.1 clean TLS handshake
@@ -46,36 +48,36 @@ async function fetchM3u8Content(targetUrl, referer = 'https://missav.ai/') {
             if (reqFn) {
                 const https = reqFn('https');
                 return await new Promise((resolve, reject) => {
-                const u = new URL(targetUrl);
-                const req = https.request({
-                    protocol: u.protocol,
-                    hostname: u.hostname,
-                    port: u.port || 443,
-                    path: u.pathname + u.search,
-                    method: 'GET',
-                    headers: {
-                        'Host': u.hostname,
-                        ...headers
-                    },
-                    timeout: 10000
-                }, res => {
-                    let data = '';
-                    res.on('data', chunk => data += chunk);
-                    res.on('end', () => {
-                        if (res.statusCode >= 200 && res.statusCode < 400) {
-                            resolve(data);
-                        } else {
-                            reject(new Error(`Upstream returned ${res.statusCode}`));
-                        }
+                    const u = new URL(targetUrl);
+                    const req = https.request({
+                        protocol: u.protocol,
+                        hostname: u.hostname,
+                        port: u.port || 443,
+                        path: u.pathname + u.search,
+                        method: 'GET',
+                        headers: {
+                            'Host': u.hostname,
+                            ...headers
+                        },
+                        timeout: 3500
+                    }, res => {
+                        let data = '';
+                        res.on('data', chunk => data += chunk);
+                        res.on('end', () => {
+                            if (res.statusCode >= 200 && res.statusCode < 400) {
+                                resolve(data);
+                            } else {
+                                reject(new Error(`Upstream returned ${res.statusCode}`));
+                            }
+                        });
                     });
+                    req.on('error', reject);
+                    req.on('timeout', () => {
+                        req.destroy();
+                        reject(new Error('Request timeout'));
+                    });
+                    req.end();
                 });
-                req.on('error', reject);
-                req.on('timeout', () => {
-                    req.destroy();
-                    reject(new Error('Request timeout'));
-                });
-                req.end();
-            });
             }
         } catch (nodeErr) {
             console.warn('[MissAV] Node https.request error, falling back to fetch:', nodeErr.message);
@@ -85,7 +87,7 @@ async function fetchM3u8Content(targetUrl, referer = 'https://missav.ai/') {
     // Cloudflare Worker / standard fetch environment
     const res = await fetch(targetUrl, {
         headers,
-        signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined
+        signal: AbortSignal.timeout ? AbortSignal.timeout(3500) : undefined
     });
     if (!res.ok) {
         throw new Error(`Fetch failed with status ${res.status}`);
@@ -101,40 +103,109 @@ async function fetchPage(targetUrl) {
     const cached = cache.get(cacheKey);
     if (cached) return cached;
 
-    // 1. Direct fetch with browser headers
-    try {
-        const res = await axios.get(targetUrl, {
-            headers: {
-                'User-Agent': USER_AGENT,
-                'Referer': `${BASE_URL}/`,
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8'
-            },
-            timeout: 7000
-        });
-        const html = typeof res.data === 'string' ? res.data : '';
-        if (html && !html.includes('Attention Required') && !html.includes('Cloudflare</title>') && (html.includes('thumbnail') || html.includes('eval(function') || html.includes('plyr'))) {
-            cache.set(cacheKey, html, 900); // 15 min cache
-            return html;
-        }
-    } catch (e) {
-        // Continue to Jina reader
+    const urlsToTry = [targetUrl];
+    if (targetUrl.includes('missav.ai')) {
+        urlsToTry.push(targetUrl.replace('missav.ai', 'missav.ws'));
     }
 
-    // 2. High-speed Jina AI Reader proxy (bypasses Cloudflare bot challenges & ISP blocks)
-    try {
-        const jinaUrl = `https://r.jina.ai/${targetUrl}`;
-        const res = await axios.get(jinaUrl, {
-            headers: { 'X-Return-Format': 'html' },
-            timeout: 12000
-        });
-        const html = typeof res.data === 'string' ? res.data : '';
-        if (html && (html.includes('thumbnail') || html.includes('eval(function') || html.includes('plyr') || html.includes('<h1'))) {
-            cache.set(cacheKey, html, 900);
-            return html;
+    for (const url of urlsToTry) {
+        // 1. Direct fetch with quick timeout (fails fast if Cloudflare challenge)
+        try {
+            const res = await axios.get(url, {
+                headers: {
+                    'User-Agent': USER_AGENT,
+                    'Referer': `${BASE_URL}/`,
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8'
+                },
+                timeout: 1500
+            });
+            const html = typeof res.data === 'string' ? res.data : '';
+            const isBlocked = !html || html.includes('Attention Required') || html.includes('Cloudflare</title>') || html.includes('Just a moment...') || html.includes('cf_chl_opt');
+            if (!isBlocked && (html.includes('thumbnail') || html.includes('eval(function') || html.includes('plyr'))) {
+                cache.set(cacheKey, html, 900); // 15 min cache
+                return html;
+            }
+        } catch (e) {
+            // Continue to Jina reader
         }
-    } catch (jinaErr) {
-        console.warn(`[MissAV] Jina fetch failed for ${targetUrl}:`, jinaErr.message);
+
+        // 2. High-speed Jina AI Reader proxy (bypasses Cloudflare bot challenges & ISP blocks)
+        try {
+            const jinaUrl = `https://r.jina.ai/${url}`;
+            const res = await axios.get(jinaUrl, {
+                headers: {
+                    'X-Return-Format': 'html',
+                    'X-No-Cache': 'true'
+                },
+                timeout: 5000
+            });
+            const html = typeof res.data === 'string' ? res.data : '';
+            const isBlocked = !html || html.includes('Just a moment...') || html.includes('Enable JavaScript and cookies') || html.includes('cf_chl_opt') || html.includes('Attention Required');
+            if (!isBlocked && (html.includes('thumbnail') || html.includes('eval(function') || html.includes('plyr') || html.includes('<h1'))) {
+                cache.set(cacheKey, html, 900);
+                return html;
+            }
+        } catch (jinaErr) {
+            // try next candidate
+        }
+    }
+
+    return '';
+}
+
+/**
+ * Fetch movie page by slug trying clean direct slug without /en/ and mirrors to bypass CF Turnstile
+ */
+async function fetchMoviePage(slug) {
+    const cleanSlug = slug.replace(/^missav:/, '').replace(/\.json$/, '');
+    const cacheKey = `missav:movie_page:${cleanSlug}`;
+    const cached = cache.get(cacheKey);
+    if (cached) return cached;
+
+    const candidateUrls = [
+        `${BASE_URL}/${cleanSlug}`,
+        `https://missav.ws/${cleanSlug}`,
+        `https://missav.ws/en/${cleanSlug}`,
+        `${BASE_URL}/en/${cleanSlug}`
+    ];
+
+    for (const url of candidateUrls) {
+        // Direct
+        try {
+            const res = await axios.get(url, {
+                headers: {
+                    'User-Agent': USER_AGENT,
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8'
+                },
+                timeout: 1500
+            });
+            const html = typeof res.data === 'string' ? res.data : '';
+            const isBlocked = !html || html.includes('Just a moment...') || html.includes('Cloudflare</title>') || html.includes('cf_chl_opt') || html.includes('Attention Required');
+            if (!isBlocked && (html.includes('eval(function') || html.includes('plyr') || html.includes('thumbnail'))) {
+                cache.set(cacheKey, html, 900);
+                return html;
+            }
+        } catch (e) {}
+
+        // Jina with X-No-Cache
+        try {
+            const jinaUrl = `https://r.jina.ai/${url}`;
+            const res = await axios.get(jinaUrl, {
+                headers: {
+                    'X-Return-Format': 'html',
+                    'X-No-Cache': 'true'
+                },
+                timeout: 5000
+            });
+            const html = typeof res.data === 'string' ? res.data : '';
+            const isBlocked = !html || html.includes('Just a moment...') || html.includes('Enable JavaScript and cookies') || html.includes('cf_chl_opt');
+            if (!isBlocked && (html.includes('eval(function') || html.includes('plyr') || html.includes('thumbnail'))) {
+                cache.set(cacheKey, html, 900);
+                return html;
+            }
+        } catch (e) {}
     }
 
     return '';
@@ -194,7 +265,7 @@ function parseMovieCards(html) {
     while ((blockMatch = blockRegex.exec(html)) !== null) {
         const block = blockMatch[0];
 
-        const linkMatch = block.match(/href="https:\/\/missav\.ai\/(?:[a-z]{2}\/)?([a-zA-Z0-9_-]+)"/i);
+        const linkMatch = block.match(/href="(?:https?:\/\/[^"\/]+)?(?:\/[a-z]{2})?\/([a-zA-Z0-9_-]+)"/i);
         if (!linkMatch || !linkMatch[1]) continue;
         const slug = linkMatch[1].trim();
 
@@ -239,7 +310,7 @@ function parseMovieCards(html) {
 
     // Pattern 2 Fallback: Match links directly if blocks not detected
     if (metas.length === 0) {
-        const linkRegex = /href="https:\/\/missav\.ai\/(?:[a-z]{2}\/)?([a-zA-Z0-9_-]+)"[^>]*alt="([^"]+)"/gi;
+        const linkRegex = /href="(?:https?:\/\/[^"\/]+)?(?:\/[a-z]{2})?\/([a-zA-Z0-9_-]+)"[^>]*alt="([^"]+)"/gi;
         let lm;
         while ((lm = linkRegex.exec(html)) !== null) {
             const slug = lm[1].trim();
@@ -332,8 +403,26 @@ async function getMeta(type, id) {
         if (cached) return cached;
 
         const targetUrl = `${BASE_URL}/en/${slug}`;
-        const html = await fetchPage(targetUrl);
-        if (!html) return null;
+        const html = await fetchMoviePage(slug) || await fetchPage(targetUrl);
+
+        if (!html) {
+            const fallbackMeta = {
+                id: `missav:${slug}`,
+                type: 'movie',
+                name: slug.toUpperCase(),
+                poster: `https://wsrv.nl/?url=${encodeURIComponent(`https://fourhoi.se/img/${slug}/cover.jpg`)}`,
+                background: `https://wsrv.nl/?url=${encodeURIComponent(`https://fourhoi.se/img/${slug}/cover.jpg`)}`,
+                posterShape: 'poster',
+                description: `MissAV • ${slug.toUpperCase()}\nPhim người lớn Nhật Bản MissAV`,
+                genres: ['MissAV', 'JAV', '18+'],
+                releaseInfo: '2026',
+                behaviorHints: {
+                    defaultVideoId: `missav:${slug}`
+                }
+            };
+            cache.set(cacheKey, fallbackMeta, 1800);
+            return fallbackMeta;
+        }
 
         // 1. Title
         let title = '';
@@ -428,7 +517,7 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
         if (cached) return cached;
 
         const targetUrl = `${BASE_URL}/en/${slug}`;
-        const html = await fetchPage(targetUrl);
+        const html = await fetchMoviePage(slug) || await fetchPage(targetUrl);
         if (!html) return [];
 
         const sources = unpackDeanEdwards(html);
@@ -444,7 +533,44 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
         const currentHost = host.includes('://') ? host : `https://${host}`;
         const streams = [];
 
-        // Stream 1: Cloudflare Edge Proxy 1080p (Unlimited bandwidth, zero Render cost, smooth playback on all platforms)
+        const proxyHeaders = {
+            request: {
+                'User-Agent': USER_AGENT,
+                'Referer': `${BASE_URL}/`,
+                'Origin': BASE_URL
+            }
+        };
+
+        // Stream 1: VIP Direct CDN (Full HD 1080p) - Works natively on Stremio Desktop / Android TV & Nuvio TV via residential IP
+        const direct1080 = sources['1080'] || sources.master;
+        if (direct1080) {
+            streams.push({
+                name: '⚡ [VIP Direct CDN] MissAV',
+                title: `[Full HD 1080p] ${title}\n⚡ Luồng Trực Tiếp CDN surrit.com • proxyHeaders (TV & Desktop)`,
+                url: direct1080,
+                behaviorHints: {
+                    notWebReady: false,
+                    bingeGroup: `missav-vip-${slug}`,
+                    proxyHeaders: proxyHeaders
+                }
+            });
+        }
+
+        // Stream 2: VIP Direct CDN (HD 720p)
+        if (sources['720']) {
+            streams.push({
+                name: '⚡ [VIP Direct CDN] MissAV 720p',
+                title: `[HD 720p] ${title}\n⚡ Luồng Trực Tiếp CDN surrit.com • proxyHeaders (Tiết Kiệm Băng Thông)`,
+                url: sources['720'],
+                behaviorHints: {
+                    notWebReady: false,
+                    bingeGroup: `missav-vip-720-${slug}`,
+                    proxyHeaders: proxyHeaders
+                }
+            });
+        }
+
+        // Stream 3: Cloudflare Edge Proxy 1080p (Virtual Master Playlist / Edge unwrap)
         streams.push({
             name: '🛡️ [Edge Proxy] MissAV',
             title: `[Full HD 1080p] ${title}\n🛡️ Tuyến Cloudflare Edge Siêu Tốc • MPEG-TS (Stremio Web, TV, Nuvio)`,
@@ -455,7 +581,7 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
             }
         });
 
-        // Stream 2: Cloudflare Edge Proxy 720p (Tiết kiệm băng thông di động)
+        // Stream 4: Cloudflare Edge Proxy 720p
         if (sources['720']) {
             streams.push({
                 name: '🛡️ [Edge Proxy] MissAV 720p',
@@ -464,27 +590,6 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
                 behaviorHints: {
                     notWebReady: false,
                     bingeGroup: `missav-edge-720-${slug}`
-                }
-            });
-        }
-
-        // Stream 3: VIP Direct CDN (Cho Stremio Desktop / Android TV có hỗ trợ proxyHeaders)
-        const directM3u8 = sources['1080'] || sources.master;
-        if (directM3u8) {
-            streams.push({
-                name: '⚡ [VIP Direct CDN] MissAV',
-                title: `[Gốc VIP CDN] ${title}\n⚡ Luồng Trực Tiếp CDN surrit.com • proxyHeaders`,
-                url: directM3u8,
-                behaviorHints: {
-                    notWebReady: false,
-                    bingeGroup: `missav-vip-${slug}`,
-                    proxyHeaders: {
-                        request: {
-                            'User-Agent': USER_AGENT,
-                            'Referer': `${BASE_URL}/`,
-                            'Origin': BASE_URL
-                        }
-                    }
                 }
             });
         }
@@ -509,7 +614,7 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
     if (cached) return cached;
 
     const targetUrl = `${BASE_URL}/en/${slug}`;
-    const html = await fetchPage(targetUrl);
+    const html = await fetchMoviePage(slug) || await fetchPage(targetUrl);
     if (!html) {
         throw new Error('Failed to fetch MissAV page');
     }
@@ -532,8 +637,19 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
         throw new Error('M3U8 target URL not resolved');
     }
 
-    // Fetch the M3U8 playlist
-    let m3u8Content = await fetchM3u8Content(targetM3u8, `${BASE_URL}/`);
+    // Fetch the M3U8 playlist with error-handling fallback
+    let m3u8Content = null;
+    try {
+        m3u8Content = await fetchM3u8Content(targetM3u8, `${BASE_URL}/`);
+    } catch (fetchErr) {
+        console.warn(`[MissAV] Upstream M3U8 fetch failed for ${slug}:`, fetchErr.message);
+    }
+
+    // Fallback: If fetching upstream playlist failed (e.g. datacenter IP block), return Virtual Master Playlist
+    // This allows the player to fetch directly with 200 OK!
+    if (!m3u8Content || !m3u8Content.includes('#EXTM3U')) {
+        return `#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=6000000,RESOLUTION=1920x1080\n${targetM3u8}\n`;
+    }
 
     // If master playlist with variants, select the desired variant
     if (m3u8Content.includes('#EXT-X-STREAM-INF')) {
@@ -558,7 +674,11 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
         }
         if (chosenSubUrl) {
             targetM3u8 = chosenSubUrl;
-            m3u8Content = await fetchM3u8Content(chosenSubUrl, `${BASE_URL}/`);
+            try {
+                m3u8Content = await fetchM3u8Content(chosenSubUrl, `${BASE_URL}/`);
+            } catch (subErr) {
+                return `#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=6000000,RESOLUTION=1920x1080\n${chosenSubUrl}\n`;
+            }
         }
     }
 
@@ -583,6 +703,8 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
 module.exports = {
     GENRE_MAP,
     fetchPage,
+    fetchMoviePage,
+    unpackDeanEdwards,
     parseMovieCards,
     getCatalog,
     getMeta,

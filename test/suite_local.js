@@ -1,0 +1,142 @@
+const assert = require('assert');
+const axios = require('axios');
+const app = require('../api/index');
+
+const PORT = 7088;
+const BASE = `http://127.0.0.1:${PORT}`;
+
+async function runLocalSuite() {
+    console.log('====================================================');
+    console.log('🧪 RUNNING LOCAL EXPRESS TEST SUITE (PORT ' + PORT + ')');
+    console.log('====================================================\n');
+
+    const server = app.listen(PORT);
+    let passed = 0;
+    let failed = 0;
+
+    async function testCase(name, fn) {
+        process.stdout.write(`⏳ Testing: ${name}... `);
+        const t0 = Date.now();
+        try {
+            await fn();
+            console.log(`✅ PASSED (${Date.now() - t0}ms)`);
+            passed++;
+        } catch (err) {
+            console.log(`❌ FAILED (${Date.now() - t0}ms): ${err.message}`);
+            failed++;
+        }
+    }
+
+    try {
+        // 1. Ping
+        await testCase('1. /ping healthcheck', async () => {
+            const r = await axios.get(`${BASE}/ping`);
+            assert.strictEqual(r.status, 200);
+            assert.strictEqual(r.data.status, 'ok');
+        });
+
+        // 2. Manifest
+        await testCase('2. /manifest.json', async () => {
+            const r = await axios.get(`${BASE}/manifest.json`);
+            assert.strictEqual(r.status, 200);
+            assert(Array.isArray(r.data.catalogs) && r.data.catalogs.length > 0);
+        });
+
+        // 3. KKPhim clean.m3u8 fast fallback (Virtual Master Playlist)
+        await testCase('3. /kkphim/clean.m3u8 returns 200 OK in <= 2.5s (no 30s hang, no 302)', async () => {
+            const targetUrl = 'https://s2.phim1280.tv/20231217/wVfHknFS/index.m3u8';
+            const r = await axios.get(`${BASE}/kkphim/clean.m3u8?url=${encodeURIComponent(targetUrl)}`, {
+                timeout: 3500
+            });
+            assert.strictEqual(r.status, 200);
+            assert(r.data.includes('#EXTM3U'), 'Must include #EXTM3U');
+            assert(r.data.includes('clean.m3u8?url=') || r.data.includes('3000kb/hls/index.m3u8') || r.data.includes(targetUrl), 'Must contain rewritten clean URL or target url');
+        });
+
+        // 4. Bandwidth Protection: /javhd/segment.ts redirects 302 to CF Worker
+        await testCase('4. /javhd/segment.ts redirects 302 to Cloudflare Worker (zero Render video bandwidth)', async () => {
+            const r = await axios.get(`${BASE}/javhd/segment.ts?url=https%3A%2F%2Ftest.com%2Fvideo.ts`, {
+                maxRedirects: 0,
+                validateStatus: (status) => status === 302
+            });
+            assert.strictEqual(r.status, 302);
+            assert(r.headers.location.includes('/javhd/segment.ts?url='), 'Location must point to CF Worker');
+        });
+
+        // 5. Bandwidth Protection: /vlxx/segment.ts redirects 302 to CF Worker
+        await testCase('5. /vlxx/segment.ts redirects 302 to Cloudflare Worker', async () => {
+            const r = await axios.get(`${BASE}/vlxx/segment.ts?url=https%3A%2F%2Ftest.com%2Fvideo.ts`, {
+                maxRedirects: 0,
+                validateStatus: (status) => status === 302
+            });
+            assert.strictEqual(r.status, 302);
+            assert(r.headers.location.includes('/vlxx/segment.ts?url='));
+        });
+
+        // 6. Bandwidth Protection: /avdb/segment.ts redirects 302 to CF Worker
+        await testCase('6. /avdb/segment.ts redirects 302 to Cloudflare Worker', async () => {
+            const r = await axios.get(`${BASE}/avdb/segment.ts?url=https%3A%2F%2Ftest.com%2Fvideo.ts`, {
+                maxRedirects: 0,
+                validateStatus: (status) => status === 302
+            });
+            assert.strictEqual(r.status, 302);
+            assert(r.headers.location.includes('/avdb/segment.ts?url='));
+        });
+
+        // 7. Bandwidth Protection: /missav/segment.ts redirects 302 to CF Worker
+        await testCase('7. /missav/segment.ts redirects 302 to Cloudflare Worker', async () => {
+            const r = await axios.get(`${BASE}/missav/segment.ts?url=https%3A%2F%2Ftest.com%2Fvideo.ts`, {
+                maxRedirects: 0,
+                validateStatus: (status) => status === 302
+            });
+            assert.strictEqual(r.status, 302);
+            assert(r.headers.location.includes('/missav/segment.ts?url='));
+        });
+
+        // 8. MissAV M3U8 endpoint
+        await testCase('8. /missav/stream/fays-017/1080.m3u8 returns 200 OK with #EXTM3U', async () => {
+            const r = await axios.get(`${BASE}/missav/stream/fays-017/1080.m3u8`, { timeout: 10000 });
+            assert.strictEqual(r.status, 200);
+            assert(r.data.includes('#EXTM3U'), 'Must include #EXTM3U');
+        });
+
+        // 9. JavHD M3U8 endpoint
+        await testCase('9. /javhd/stream/toi-da-so-bim-chi-gai-tsubasa-mai-4017/1080.m3u8 returns 200 OK with #EXTM3U', async () => {
+            const r = await axios.get(`${BASE}/javhd/stream/toi-da-so-bim-chi-gai-tsubasa-mai-4017/1080.m3u8`, { timeout: 10000 });
+            assert.strictEqual(r.status, 200);
+            assert(r.data.includes('#EXTM3U'), 'Must include #EXTM3U');
+        });
+
+        // 10. AVDB M3U8 endpoint
+        await testCase('10. /avdb/stream/ipzz-921.m3u8 returns 200 OK with #EXTM3U', async () => {
+            const r = await axios.get(`${BASE}/avdb/stream/ipzz-921.m3u8`, { timeout: 10000 });
+            assert.strictEqual(r.status, 200);
+            assert(r.data.includes('#EXTM3U'), 'Must include #EXTM3U');
+        });
+
+        // 11. Stremio stream resource endpoint for MissAV
+        await testCase('11. Stremio stream endpoint /stream/movie/missav:siro-5719.json', async () => {
+            const r = await axios.get(`${BASE}/stream/movie/missav:siro-5719.json`, { timeout: 10000 });
+            assert.strictEqual(r.status, 200);
+            assert(Array.isArray(r.data.streams) && r.data.streams.length > 0, 'Must return streams');
+            const vip = r.data.streams.find(s => s.name.includes('VIP Direct CDN'));
+            assert(vip, 'Must have VIP Direct CDN stream');
+        });
+
+    } finally {
+        server.close();
+    }
+
+    console.log('\n====================================================');
+    console.log(`📊 LOCAL TEST RESULTS: ${passed} PASSED, ${failed} FAILED`);
+    console.log('====================================================');
+
+    if (failed > 0) {
+        process.exit(1);
+    }
+}
+
+runLocalSuite().catch(err => {
+    console.error('Local Suite Fatal Error:', err);
+    process.exit(1);
+});

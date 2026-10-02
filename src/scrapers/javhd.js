@@ -194,7 +194,7 @@ async function fetchPage(targetUrl) {
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                     'Accept-Language': 'vi,en-US;q=0.9,en;q=0.8'
                 },
-                timeout: 8000
+                timeout: 1500
             });
             const html = typeof res.data === 'string' ? res.data : '';
             if (html && !html.includes('Attention Required') && !html.includes('Cloudflare</title>') && (html.includes('movie-item') || html.includes('window.atob') || html.includes('<h1'))) {
@@ -209,7 +209,7 @@ async function fetchPage(targetUrl) {
         const proxyUrl = `https://r.jina.ai/${targetUrl}`;
         const resProxy = await axios.get(proxyUrl, {
             headers: { 'X-Return-Format': 'html' },
-            timeout: 15000
+            timeout: 5000
         });
         const html = typeof resProxy.data === 'string' ? resProxy.data : '';
         if (html && (html.includes('movie-item') || html.includes('window.atob') || html.includes('<h1'))) {
@@ -636,7 +636,8 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
                 const res = await fetch(targetM3u8Url, {
                     headers: fetchHeaders,
                     referrer: `${BASE_URL}/`,
-                    referrerPolicy: 'unsafe-url'
+                    referrerPolicy: 'unsafe-url',
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(2000) : undefined
                 });
                 if (res.ok) {
                     const text = await res.text();
@@ -648,7 +649,7 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
             } catch (e) {}
         } else {
             try {
-                const m3u8Res = await client.get(targetM3u8Url, { headers: fetchHeaders });
+                const m3u8Res = await client.get(targetM3u8Url, { headers: fetchHeaders, timeout: 2000 });
                 if (m3u8Res && m3u8Res.data && String(m3u8Res.data).includes('#EXTM3U')) {
                     content = m3u8Res.data;
                     break;
@@ -664,7 +665,9 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
             for (const targetM3u8Url of candidateUrls) {
                 try {
                     const proxyTarget = `${gasUrl}?url=${encodeURIComponent(targetM3u8Url)}&referer=${encodeURIComponent(BASE_URL + '/')}`;
-                    const gasRes = await fetch(proxyTarget);
+                    const gasRes = await fetch(proxyTarget, {
+                        signal: AbortSignal.timeout ? AbortSignal.timeout(2000) : undefined
+                    });
                     if (gasRes.ok) {
                         const text = await gasRes.text();
                         if (text && text.includes('#EXTM3U')) {

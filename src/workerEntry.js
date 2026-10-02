@@ -210,7 +210,7 @@ export default {
             try {
                 const renderRes = await fetch(renderUrl, {
                     headers: { 'User-Agent': 'Mozilla/5.0' },
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(2500) : undefined
                 });
                 if (renderRes.ok) {
                     const renderText = await renderRes.text();
@@ -270,7 +270,7 @@ export default {
             try {
                 const renderRes = await fetch(renderUrl, {
                     headers: { 'User-Agent': 'Mozilla/5.0' },
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(2500) : undefined
                 });
                 if (renderRes.ok) {
                     const renderText = await renderRes.text();
@@ -320,7 +320,7 @@ export default {
             try {
                 const renderRes = await fetch(renderUrl, {
                     headers: { 'User-Agent': 'Mozilla/5.0' },
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(2500) : undefined
                 });
                 if (renderRes.ok) {
                     const renderText = await renderRes.text();
@@ -364,7 +364,7 @@ export default {
             try {
                 const renderRes = await fetch(renderUrl, {
                     headers: { 'User-Agent': 'Mozilla/5.0' },
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(2000) : undefined
                 });
                 if (renderRes.ok) {
                     const renderText = await renderRes.text();
@@ -423,7 +423,7 @@ export default {
             try {
                 const renderRes = await fetch(renderCleanUrl, {
                     headers: { 'User-Agent': 'Mozilla/5.0' },
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(2000) : undefined
                 });
                 if (renderRes.ok) {
                     const renderText = await renderRes.text();
@@ -446,7 +446,7 @@ export default {
             if (gasProxyUrl) {
                 try {
                     const gasRes = await fetch(`${gasProxyUrl}?url=${encodeURIComponent(targetUrl)}&referer=${encodeURIComponent('https://player.phimapi.com/')}`, {
-                        signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined
+                        signal: AbortSignal.timeout ? AbortSignal.timeout(1500) : undefined
                     });
                     if (gasRes.ok) {
                         const rawGasText = await gasRes.text();
@@ -603,7 +603,7 @@ export default {
                             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                             'x-forwarded-host': host
                         },
-                        signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined
+                        signal: AbortSignal.timeout ? AbortSignal.timeout(2500) : undefined
                     });
                     if (rRes.ok) {
                         const rJson = await rRes.json();
@@ -616,7 +616,8 @@ export default {
                 }
             }
 
-            return new Response(JSON.stringify(resp || { metas: [] }), {
+            const defaultFallback = resource === 'stream' ? { streams: [] } : resource === 'meta' ? { meta: null } : { metas: [] };
+            return new Response(JSON.stringify(resp || defaultFallback), {
                 headers: {
                     ...CORS_HEADERS,
                     'Content-Type': 'application/json; charset=utf-8',

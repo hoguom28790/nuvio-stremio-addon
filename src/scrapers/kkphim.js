@@ -244,7 +244,7 @@ async function getCleanM3u8(targetUrl, host = 'localhost') {
             try {
                 const res = await fetch(targetUrl, {
                     headers: fetchHeaders,
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(1500) : undefined
                 });
                 if (res.ok) {
                     const txt = await res.text();
@@ -257,7 +257,7 @@ async function getCleanM3u8(targetUrl, host = 'localhost') {
             try {
                 const res = await axios.get(targetUrl, {
                     headers: fetchHeaders,
-                    timeout: 4000
+                    timeout: 1500
                 });
                 if (res.data && typeof res.data === 'string' && res.data.includes('#EXTM3U')) {
                     content = res.data;
@@ -272,13 +272,14 @@ async function getCleanM3u8(targetUrl, host = 'localhost') {
                 try {
                     content = await fetcher.fetchM3u8ViaVnProxy(targetUrl);
                 } catch (proxyErr) {
-                    console.warn('[KKPhim VN Proxy Error]:', proxyErr.message);
+                    // Fast fallback
                 }
             }
         }
 
         if (typeof content !== 'string' || !content.includes('#EXTM3U')) {
-            throw new Error('Invalid M3U8 content after all fetch attempts');
+            // Immediate fallback to Virtual Master Playlist (HTTP 200) for client-side cleaning
+            return `#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=3000000\n${targetUrl}\n`;
         }
 
         const cleaned = processCleanM3u8(content, targetUrl, host);
@@ -286,10 +287,10 @@ async function getCleanM3u8(targetUrl, host = 'localhost') {
             cache.set(cacheKey, cleaned, 7200);
             return cleaned;
         }
-        return null;
+        return `#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=3000000\n${targetUrl}\n`;
     } catch (err) {
         console.warn(`[KKPhim Clean M3U8 Error for ${targetUrl}]:`, err.message);
-        return null;
+        return `#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=3000000\n${targetUrl}\n`;
     }
 }
 

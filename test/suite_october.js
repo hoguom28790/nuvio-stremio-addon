@@ -6,6 +6,7 @@ const avdb = require('../src/scrapers/avdb');
 const vlxx = require('../src/scrapers/vlxx');
 const hentaiz = require('../src/scrapers/hentaiz');
 const nguonc = require('../src/scrapers/nguonc');
+const missav = require('../src/scrapers/missav');
 
 const RENDER_BASE = 'https://nuvio-stremio-addon-1.onrender.com';
 const CF_HOST = 'hophimaddon.hophim-4g6qbubt.workers.dev';
@@ -140,6 +141,17 @@ async function runTests() {
         assert(Array.isArray(cat) && cat.length > 0, 'NguonC catalog empty');
         const streams = await nguonc.getStream(cat[0].id, 'movie', CF_HOST);
         assert(Array.isArray(streams) && streams.length > 0, 'NguonC streams empty');
+    });
+
+    // 12. MissAV Catalog, Stream & M3U8
+    await testCase('12. MissAV Catalog, Stream & M3U8 generation', async () => {
+        const cat = await missav.getCatalog('missav-movie', 'movie', {});
+        assert(Array.isArray(cat) && cat.length > 0, 'MissAV catalog empty');
+        const streams = await missav.getStream('missav:siro-5719', 'movie', CF_HOST);
+        assert(Array.isArray(streams) && streams.length > 0, 'MissAV streams empty');
+        const vipStream = streams.find(s => s.name.includes('VIP Direct CDN'));
+        assert(vipStream, 'Missing VIP Direct CDN stream');
+        assert(vipStream.behaviorHints && vipStream.behaviorHints.proxyHeaders, 'Missing proxyHeaders on VIP stream');
     });
 
     console.log('\n====================================================');

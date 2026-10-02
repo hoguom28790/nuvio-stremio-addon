@@ -255,12 +255,13 @@ app.get('/kkphim/clean.m3u8', async (req, res) => {
     } catch (err) {
         console.error('[KKPhim Clean M3U8 Error]:', err.message);
     }
-    // Auto-fallback: redirect directly to upstream targetUrl
-    // MUST include CORS headers so Stremio Web (browser) can follow the cross-origin redirect
-    res.set('Access-Control-Allow-Origin', '*');
-    res.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-    res.set('Access-Control-Allow-Headers', '*');
-    return res.redirect(302, targetUrl);
+    // Auto-fallback: return Virtual Master Playlist (HTTP 200 OK) to avoid CORS Preflight (OPTIONS 405) from upstream CDN
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    res.setHeader('Cache-Control', 'no-cache');
+    return res.send(`#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=3000000\n${targetUrl}\n`);
 });
 
 // Debug JavHD

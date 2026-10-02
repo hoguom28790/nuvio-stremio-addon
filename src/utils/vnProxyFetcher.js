@@ -2,12 +2,9 @@ const http = require('http');
 const https = require('https');
 
 const DEFAULT_VN_PROXIES = [
-    { host: '210.211.113.34', port: 80 },
-    { host: '210.211.113.35', port: 80 },
     { host: '210.211.113.37', port: 80 },
-    { host: '113.161.59.136', port: 8080 },
-    { host: '113.22.113.75', port: 8080 },
-    { host: '14.251.13.17', port: 8080 }
+    { host: '210.211.113.35', port: 80 },
+    { host: '210.211.113.34', port: 80 }
 ];
 
 let dynamicProxies = [];
@@ -150,20 +147,14 @@ async function fetchM3u8ViaVnProxy(targetUrl) {
         return true;
     });
 
-    const batchSize = 4;
-    for (let i = 0; i < Math.min(uniqueProxies.length, 12); i += batchSize) {
-        const batch = uniqueProxies.slice(i, i + batchSize);
-        try {
-            const result = await Promise.any(
-                batch.map(p => fetchWithProxy(targetUrl, p.host, p.port, 4500))
-            );
-            if (result && result.includes('#EXTM3U')) {
-                return result;
-            }
-        } catch (e) {
-            // Try next batch
+    try {
+        const result = await Promise.any(
+            uniqueProxies.slice(0, 6).map(p => fetchWithProxy(targetUrl, p.host, p.port, 2000))
+        );
+        if (result && result.includes('#EXTM3U')) {
+            return result;
         }
-    }
+    } catch (e) {}
 
     throw new Error('All Vietnam proxies failed to fetch M3U8');
 }
