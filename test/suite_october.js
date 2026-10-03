@@ -83,6 +83,7 @@ async function runTests() {
     });
 
     // 5. JavHD M3U8 on Render (verifying segment URLs route to CF Worker, 0 video proxy)
+    let liveJavhdSegUrl = '';
     await testCase('5. JavHD M3U8 resolution on Render (zero video bandwidth on Render)', async () => {
         const cat = await javhd.getCatalog('javhd-latest', 'movie', {}, CF_HOST);
         const slug = (cat && cat[0] && cat[0].id.replace('javhd:', '')) || 'anh-hai-nung-qua-suc-cu-cho-anh-di-miyuu-kiyohara-4049';
@@ -92,13 +93,13 @@ async function runTests() {
         const lines = res.data.split('\n');
         const segLines = lines.filter(l => l.includes('segment.ts'));
         assert(segLines.length > 0, 'No segment lines found');
-        console.log(`\n     Sample segment URL: ${segLines[0].slice(0, 90)}...`);
+        liveJavhdSegUrl = segLines[0];
+        console.log(`\n     Sample segment URL: ${liveJavhdSegUrl.slice(0, 90)}...`);
     });
 
     // 6. JavHD Segment Unwrapper on Cloudflare Worker (strips 95-byte PNG)
     await testCase('6. JavHD Segment Unwrapper on Cloudflare Edge (PNG stripped to MPEG-TS sync byte 0x47)', async () => {
-        const targetUrl = 'https://sf16-ads-format-sign.tiktokcdn.com/obj/ad-site-i18n/64741464_4d25_4c3a_a667_f30c7f72d997.png?x-expires=1790948604&x-signature=%2BFdwW%2FY8VzvWJUkPTiigtWxakVU%3D';
-        const proxyUrl = `https://${CF_HOST}/javhd/segment.ts?url=${encodeURIComponent(targetUrl)}`;
+        const proxyUrl = liveJavhdSegUrl || `https://${CF_HOST}/javhd/segment.ts?url=${encodeURIComponent('https://sf16-ads-format-sign.tiktokcdn.com/obj/ad-site-i18n/64741464_4d25_4c3a_a667_f30c7f72d997.png')}`;
         const res = await axios.get(proxyUrl, { responseType: 'arraybuffer', timeout: 15000 });
         assert.strictEqual(res.status, 200);
         assert.strictEqual(res.headers['content-type'], 'video/mp2t');
