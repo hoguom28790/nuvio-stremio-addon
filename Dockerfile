@@ -17,7 +17,8 @@ RUN npx esbuild src/workerEntry.js \
     --format=cjs \
     --outfile=dist/worker.js \
     --minify \
-    --target=es2022
+    --target=es2022 \
+    --alias:cloudflare:sockets=./src/utils/socketsStub.js
 
 # ==============================
 # Stage 2: Runtime

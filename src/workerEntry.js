@@ -9,7 +9,11 @@ const missav = require('./scrapers/missav');
 const kkphim = require('./scrapers/kkphim');
 import { vnFetchText } from './utils/vnSocketFetch';
 
-const VN_FETCH = { fetchText: vnFetchText };
+// The same bundle also runs on Render (Dockerfile -> Node). There, raw sockets are unavailable (the Node proxy pool
+// in vnProxyFetcher.js is used instead) and "delegate to Render" would be Render calling itself.
+// navigator.userAgent is the reliable check: nodejs_compat also defines process.versions.node on Workers.
+const IS_CF_WORKER = typeof navigator !== 'undefined' && navigator.userAgent === 'Cloudflare-Workers';
+const VN_FETCH = IS_CF_WORKER ? { fetchText: vnFetchText } : {};
 
 // Edge cache for generated playlists (Workers do not cache their own responses automatically)
 async function edgeCached(request, ctx, ttlSeconds, build) {
@@ -198,7 +202,7 @@ export default {
         const pathname = url.pathname;
 
         // Wake Render in the background while the user is just browsing (it sleeps on the free plan)
-        if (ctx && ctx.waitUntil && /\/(catalog|meta|stream)\//.test(pathname) && Date.now() - lastRenderWarm > 240000) {
+        if (IS_CF_WORKER && ctx && ctx.waitUntil && /\/(catalog|meta|stream)\//.test(pathname) && Date.now() - lastRenderWarm > 240000) {
             lastRenderWarm = Date.now();
             ctx.waitUntil(fetch(`${RENDER_BASE}/ping`, { headers: { 'User-Agent': 'Mozilla/5.0' } }).catch(() => {}));
         }
@@ -295,7 +299,7 @@ export default {
         if (pathname === '/avdb/segment.ts') {
             const rawTarget = url.searchParams.get('url');
             if (!rawTarget) return new Response('Missing url parameter', { status: 400, headers: CORS_HEADERS });
-            if (url.searchParams.get('via') === 'render') {
+            if (url.searchParams.get('via') === 'render' && IS_CF_WORKER) {
                 return proxyViaRender(`${RENDER_BASE}/avdb/segment.ts?stream=1&url=${encodeURIComponent(rawTarget)}`);
             }
             return handleSegmentProxy(rawTarget, 'https://upload18.com/');
@@ -305,6 +309,7 @@ export default {
         if (pathname === '/missav/segment.ts') {
             const rawUrl = url.searchParams.get('url');
             if (!rawUrl) return new Response('Missing url parameter', { status: 400, headers: CORS_HEADERS });
+            if (!IS_CF_WORKER) return handleSegmentProxy(rawUrl, 'https://missav.ai/');
             return proxyViaRender(`${RENDER_BASE}/missav/segment.ts?stream=1&url=${encodeURIComponent(rawUrl)}`);
         }
 
@@ -377,7 +382,7 @@ export default {
 
                 // 2. Fallback: delegate to Render (slow, ~20s)
                 const renderUrl = `${RENDER_BASE}/javhd/stream/${slug}/${quality}.m3u8?cfhost=${encodeURIComponent(resolveHost)}`;
-                try {
+                if (IS_CF_WORKER) try {
                     const renderRes = await fetch(renderUrl, {
                         headers: { 'User-Agent': 'Mozilla/5.0' },
                         signal: AbortSignal.timeout ? AbortSignal.timeout(25000) : undefined
@@ -417,7 +422,7 @@ export default {
 
             // 2. Fallback to Render delegation
             const renderUrl = `https://nuvio-stremio-addon-1.onrender.com/vlxx/stream/${vid}/${server}.m3u8?cfhost=${encodeURIComponent(resolveHost)}`;
-            try {
+            if (IS_CF_WORKER) try {
                 const renderRes = await fetch(renderUrl, {
                     headers: { 'User-Agent': 'Mozilla/5.0' },
                     signal: AbortSignal.timeout ? AbortSignal.timeout(2500) : undefined
@@ -470,7 +475,7 @@ export default {
             // helvid tokens last ~2h -> short edge cache.
             return edgeCached(request, ctx, 600, async () => {
                 const renderUrl = `${RENDER_BASE}/avdb/stream/${encodeURIComponent(slug)}.m3u8?cfhost=${encodeURIComponent(resolveHost)}${avdbId ? `&id=${encodeURIComponent(avdbId)}` : ''}`;
-                try {
+                if (IS_CF_WORKER) try {
                     const renderRes = await fetch(renderUrl, {
                         headers: { 'User-Agent': 'Mozilla/5.0' },
                         signal: AbortSignal.timeout ? AbortSignal.timeout(28000) : undefined
@@ -483,9 +488,11 @@ export default {
                     console.warn('[AVDB Render Delegation Error]:', renderErr.message);
                 }
 
-                // Fallback: local mint (works only if upload18/helvid stop blocking Cloudflare)
+                // On Render: mint here (mirror URL first), segments come back through Render (via=render).
+                // On Cloudflare this fallback only works if upload18/helvid stop blocking Cloudflare IPs.
                 try {
-                    const playlist = await avdb.getM3u8(slug, resolveHost, null, env);
+                    const mirror = !IS_CF_WORKER && avdbId ? await avdb.fetchMirrorStream(avdbId) : null;
+                    const playlist = await avdb.getM3u8(slug, resolveHost, mirror ? mirror.url : null, env, IS_CF_WORKER ? 'edge' : 'render');
                     return playlistResponse(playlist, 600);
                 } catch (err) {
                     return new Response('Error generating playlist: ' + err.message, { status: 502, headers: CORS_HEADERS });
@@ -501,7 +508,7 @@ export default {
 
             // 1. Delegate to Render (Render resolves playlist with zero video bandwidth)
             const renderUrl = `https://nuvio-stremio-addon-1.onrender.com/missav/stream/${encodeURIComponent(slug)}/${quality}.m3u8?cfhost=${encodeURIComponent(resolveHost)}`;
-            try {
+            if (IS_CF_WORKER) try {
                 const renderRes = await fetch(renderUrl, {
                     headers: { 'User-Agent': 'Mozilla/5.0' },
                     cf: {
@@ -566,7 +573,7 @@ export default {
 
             // 2. Delegate to Render (Render can bypass Vietnam CDN geo-blocking on s5.phim1280.tv / a.kvp726.com)
             const renderCleanUrl = `https://nuvio-stremio-addon-1.onrender.com/kkphim/clean.m3u8?url=${encodeURIComponent(targetUrl)}&cfhost=${encodeURIComponent(host)}`;
-            try {
+            if (IS_CF_WORKER) try {
                 const renderRes = await fetch(renderCleanUrl, {
                     headers: { 'User-Agent': 'Mozilla/5.0' },
                     signal: AbortSignal.timeout ? AbortSignal.timeout(2000) : undefined
@@ -743,7 +750,7 @@ export default {
 
             if (isAdultSource && isEmpty) {
                 const renderResourceUrl = `https://nuvio-stremio-addon-1.onrender.com${pathname}`;
-                try {
+                if (IS_CF_WORKER) try {
                     const rRes = await fetch(renderResourceUrl, {
                         headers: {
                             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
