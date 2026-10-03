@@ -242,6 +242,11 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
             }
         } catch (eExt) {}
 
+        // The Proxy Edge stream pulls every helvid segment through Render (helvid refuses Cloudflare IPs), which costs
+        // Render bandwidth. Apps that honour proxyHeaders (Android TV, Stremio/Nuvio apps) play VIP Direct with zero
+        // server bandwidth -> list it first; browsers fall back to Proxy Edge.
+        streams.sort((a, b) => Number(b.name.includes('VIP Direct')) - Number(a.name.includes('VIP Direct')));
+
         return streams;
     } catch (err) {
         console.error(`[AVDB Stream Error] ${id}:`, err.message);
@@ -273,17 +278,17 @@ async function fetchMirrorStream(avdbId) {
  *  - segmentMode 'render' : minted by Render -> segments go Worker -> Render (?stream=1) so the IP matches
  */
 const inflightM3u8 = new Map();
-function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', directUrl = null, env = {}, segmentMode = 'edge') {
-    const key = `${slug}|${host}|${segmentMode}|${directUrl || ''}`;
+function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', directUrl = null, env = {}, segmentMode = 'edge', opts = {}) {
+    const key = `${slug}|${host}|${segmentMode}|${directUrl || ''}|${opts.fresh ? 1 : 0}`;
     if (inflightM3u8.has(key)) return inflightM3u8.get(key);
-    const p = getM3u8Impl(slug, host, directUrl, env, segmentMode).finally(() => inflightM3u8.delete(key));
+    const p = getM3u8Impl(slug, host, directUrl, env, segmentMode, opts).finally(() => inflightM3u8.delete(key));
     inflightM3u8.set(key, p);
     return p;
 }
 
-async function getM3u8Impl(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', directUrl = null, env = {}, segmentMode = 'edge') {
+async function getM3u8Impl(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', directUrl = null, env = {}, segmentMode = 'edge', opts = {}) {
     const cacheKey = `avdb:m3u8:${slug}:${host}:${segmentMode}`;
-    const cached = cache.get(cacheKey);
+    const cached = opts.fresh ? null : cache.get(cacheKey);
     if (cached) return cached;
 
     let content = null;
@@ -337,7 +342,7 @@ async function getM3u8Impl(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev
                 if (firstEp?.link_embed) {
                     const embedHash = firstEp.link_embed.split('/').pop();
                     if (embedHash && embedHash !== slug) {
-                        return await getM3u8(embedHash, host, directUrl, env, segmentMode);
+                        return await getM3u8(embedHash, host, directUrl, env, segmentMode, opts);
                     }
                 }
             }
@@ -354,6 +359,12 @@ async function getM3u8Impl(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev
         ? `${edgeBase}/avdb/segment.ts?via=render&url=`
         : `${edgeBase}/avdb/segment.ts?url=`;
 
+    // helvid tokens expire (~2h). `r=slug~avdbId~index` (index 'm' = init segment) lets the Worker re-resolve a fresh
+    // URL for the same segment when helvid rejects an expired one (long movies, pauses, seeking).
+    const refBase = `${encodeURIComponent(slug)}~${encodeURIComponent(opts.avdbId || '')}`;
+    let segIndex = 0;
+    const seg = (abs, idx) => `${segmentBase}${encodeURIComponent(abs)}&r=${refBase}~${idx}`;
+
     const rewritten = [];
     for (const line of content.split('\n')) {
         const trimmed = line.trim();
@@ -364,14 +375,14 @@ async function getM3u8Impl(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev
         if (trimmed.startsWith('#EXT-X-MAP:')) {
             rewritten.push(trimmed.replace(/URI="([^"]+)"/, (m, uri) => {
                 const abs = uri.startsWith('/') ? `https://helvid.com${uri}` : uri;
-                return `URI="${segmentBase}${encodeURIComponent(abs)}"`;
+                return `URI="${seg(abs, 'm')}"`;
             }));
             continue;
         }
         if (trimmed.startsWith('/s/')) {
-            rewritten.push(segmentBase + encodeURIComponent(`https://helvid.com${trimmed}`));
+            rewritten.push(seg(`https://helvid.com${trimmed}`, segIndex++));
         } else if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-            rewritten.push(segmentBase + encodeURIComponent(trimmed));
+            rewritten.push(seg(trimmed, segIndex++));
         } else {
             rewritten.push(line);
         }

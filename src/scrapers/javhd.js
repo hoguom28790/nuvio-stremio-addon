@@ -595,7 +595,7 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
     await ensureStaticCatalog();
     const hostBase = host.includes('://') ? host : `https://${host}`;
     const cacheKey = `javhd:m3u8:${slug}:${quality}:${host}`;
-    const cached = cache.get(cacheKey);
+    const cached = opts.fresh ? null : cache.get(cacheKey);
     if (cached) return cached;
 
     let masterUrl = null;
@@ -672,7 +672,9 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
     // 1. Concurrent race across candidate qualities. Generous per-request timeout: datacenter IPs (Render)
     //    can take several seconds to reach tiktokcdn.top; the fastest response still wins immediately.
     try {
-        const winning = await Promise.any(candidateUrls.map(u => fetchSingleM3u8(u, fetchHeaders, 12000)));
+        // On Cloudflare (opts.fetchText set) tiktokcdn.top never answers the edge IP -> don't wait long for it
+        const directTimeout = typeof opts.fetchText === 'function' ? 2500 : 12000;
+        const winning = await Promise.any(candidateUrls.map(u => fetchSingleM3u8(u, fetchHeaders, directTimeout)));
         content = winning.content;
     } catch (raceErr) {
         content = '';
@@ -682,7 +684,7 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
     if ((!content || !content.includes('#EXTM3U')) && typeof opts.fetchText === 'function') {
         for (const targetM3u8Url of [candidateUrls[0], masterUrl]) {
             try {
-                content = await opts.fetchText(targetM3u8Url, { headers: fetchHeaders });
+                content = await opts.fetchText(targetM3u8Url, { headers: fetchHeaders, timeoutMs: 10000 });
                 if (content && content.includes('#EXTM3U')) break;
             } catch (e) {
                 content = '';
@@ -751,7 +753,7 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
             } catch (errSub) {
                 if (typeof opts.fetchText === 'function') {
                     try {
-                        const viaProxy = await opts.fetchText(subTargetUrl, { headers: fetchHeaders });
+                        const viaProxy = await opts.fetchText(subTargetUrl, { headers: fetchHeaders, timeoutMs: 10000 });
                         if (viaProxy && viaProxy.includes('#EXTM3U')) content = viaProxy;
                     } catch (e) {}
                 }
@@ -759,7 +761,8 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
         }
     }
 
-    if (!content || !content.includes('#EXTM3U')) {
+    // A master playlist here means the variant could not be fetched; its relative variant URLs would break the player
+    if (!content || !content.includes('#EXTM3U') || content.includes('#EXT-X-STREAM-INF')) {
         throw new Error('Could not retrieve JavHD stream playlist');
     }
 
@@ -769,11 +772,15 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
     const segmentBase = `${edgeBase}/javhd/segment.ts`;
     const separator = segmentBase.includes('?') ? '&' : '?';
 
+    // Signed segment URLs expire (~2h). `r=slug~quality~index` lets the Worker re-resolve a fresh URL for the same
+    // segment when the CDN rejects an expired one (long movies, pauses, seeking).
+    const refBase = `${encodeURIComponent(slug)}~${encodeURIComponent(quality)}`;
+    let segIndex = 0;
     const lines = content.split('\n');
     const rewritten = lines.map(line => {
         const trimmed = line.trim();
         if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-            return `${segmentBase}${separator}url=${encodeURIComponent(trimmed)}`;
+            return `${segmentBase}${separator}url=${encodeURIComponent(trimmed)}&r=${refBase}~${segIndex++}`;
         }
         return line;
     }).join('\n');

@@ -37,6 +37,45 @@ async function edgeCached(request, ctx, ttlSeconds, build) {
     return res;
 }
 
+// ---- Expired signed segment URLs (JavHD tiktokcdn x-expires, AVDB helvid e=, both ~2h) ----
+// Playlists tag each segment with `r=<id parts>~<index>`. When the CDN rejects an expired URL, load a fresh playlist
+// and retry the same segment index. Fresh playlists are memoised per isolate so a whole movie needs one refresh.
+const refreshMemo = new Map();
+
+function nthSegmentTarget(playlist, idx) {
+    let line = null;
+    if (idx === 'm') {
+        const m = playlist.match(/#EXT-X-MAP:URI="([^"]+)"/);
+        line = m && m[1];
+    } else {
+        const segs = playlist.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+        line = segs[parseInt(idx, 10)];
+    }
+    if (!line) return null;
+    try { return new URL(line).searchParams.get('url'); } catch (e) { return null; }
+}
+
+async function refreshSegmentUrl(kind, ref, failedUrl, loadPlaylist) {
+    const parts = String(ref).split('~');
+    const idx = parts.pop();
+    const ids = parts.map(p => { try { return decodeURIComponent(p); } catch (e) { return p; } });
+    const key = `${kind}:${parts.join('~')}`;
+
+    const memo = refreshMemo.get(key);
+    if (memo) {
+        const text = await memo.promise.catch(() => null);
+        const u = text && nthSegmentTarget(text, idx);
+        if (u && u !== failedUrl && Date.now() - memo.ts < 3600000) return u;
+    }
+    const promise = loadPlaylist(ids);
+    refreshMemo.set(key, { promise, ts: Date.now() });
+    if (refreshMemo.size > 200) refreshMemo.delete(refreshMemo.keys().next().value);
+    const text = await promise.catch(() => null);
+    if (!text) { refreshMemo.delete(key); return null; }
+    const u = nthSegmentTarget(text, idx);
+    return u && u !== failedUrl ? u : null;
+}
+
 function playlistResponse(text, ttlSeconds) {
     return new Response(text, {
         headers: {
@@ -256,7 +295,14 @@ export default {
 
         // 4. JavHD Segment Unwrapper (Direct Cloudflare Edge streaming with PNG-header unwrapping)
         if (pathname === '/javhd/segment.ts') {
-            return handleSegmentProxy(url.searchParams.get('url'), 'https://javhdz.wtf/');
+            const segUrl = url.searchParams.get('url');
+            const res = await handleSegmentProxy(segUrl, 'https://javhdz.wtf/');
+            const ref = url.searchParams.get('r');
+            if (res.status < 400 || !ref) return res;
+            // Signed tiktokcdn URL expired -> fresh playlist (via VN proxy) -> same segment index
+            const fresh = await refreshSegmentUrl('javhd', ref, segUrl, ([slug, quality]) =>
+                javhd.getM3u8(slug, quality, host, env, { ...VN_FETCH, fresh: true }));
+            return fresh ? handleSegmentProxy(fresh, 'https://javhdz.wtf/') : res;
         }
 
         // 4b. JavHD Poster Proxy (Edge cached with 7 days TTL, CORS enabled, bypasses ISP blocks)
@@ -300,7 +346,19 @@ export default {
             const rawTarget = url.searchParams.get('url');
             if (!rawTarget) return new Response('Missing url parameter', { status: 400, headers: CORS_HEADERS });
             if (url.searchParams.get('via') === 'render' && IS_CF_WORKER) {
-                return proxyViaRender(`${RENDER_BASE}/avdb/segment.ts?stream=1&url=${encodeURIComponent(rawTarget)}`);
+                const res = await proxyViaRender(`${RENDER_BASE}/avdb/segment.ts?stream=1&url=${encodeURIComponent(rawTarget)}`);
+                const ref = url.searchParams.get('r');
+                if (res.status < 400 || !ref) return res;
+                // helvid token expired -> re-mint on Render (bypassing caches) -> same segment index
+                const fresh = await refreshSegmentUrl('avdb', ref, rawTarget, async ([slug, avdbId]) => {
+                    const r = await fetch(`${RENDER_BASE}/avdb/stream/${encodeURIComponent(slug)}.m3u8?cfhost=${encodeURIComponent(host)}&fresh=1${avdbId ? `&id=${encodeURIComponent(avdbId)}` : ''}`, {
+                        headers: { 'User-Agent': 'Mozilla/5.0' },
+                        signal: AbortSignal.timeout ? AbortSignal.timeout(25000) : undefined
+                    });
+                    const text = r.ok ? await r.text() : '';
+                    return text.includes('#EXTM3U') ? text : null;
+                });
+                return fresh ? proxyViaRender(`${RENDER_BASE}/avdb/segment.ts?stream=1&url=${encodeURIComponent(fresh)}`) : res;
             }
             return handleSegmentProxy(rawTarget, 'https://upload18.com/');
         }
@@ -470,11 +528,12 @@ export default {
             const slug = decodeURIComponent(avdbMatch[1]);
             const resolveHost = host;
             const avdbId = url.searchParams.get('id');
+            const fresh = url.searchParams.get('fresh') === '1';
 
             // helvid refuses Cloudflare IPs entirely -> the playlist (and its segments, via=render) come from Render.
-            // helvid tokens last ~2h -> short edge cache.
-            return edgeCached(request, ctx, 600, async () => {
-                const renderUrl = `${RENDER_BASE}/avdb/stream/${encodeURIComponent(slug)}.m3u8?cfhost=${encodeURIComponent(resolveHost)}${avdbId ? `&id=${encodeURIComponent(avdbId)}` : ''}`;
+            // helvid tokens last ~2h -> short edge cache. fresh=1 (expired-token refresh) bypasses every cache.
+            const build = async () => {
+                const renderUrl = `${RENDER_BASE}/avdb/stream/${encodeURIComponent(slug)}.m3u8?cfhost=${encodeURIComponent(resolveHost)}${avdbId ? `&id=${encodeURIComponent(avdbId)}` : ''}${fresh ? '&fresh=1' : ''}`;
                 if (IS_CF_WORKER) try {
                     const renderRes = await fetch(renderUrl, {
                         headers: { 'User-Agent': 'Mozilla/5.0' },
@@ -492,12 +551,14 @@ export default {
                 // On Cloudflare this fallback only works if upload18/helvid stop blocking Cloudflare IPs.
                 try {
                     const mirror = !IS_CF_WORKER && avdbId ? await avdb.fetchMirrorStream(avdbId) : null;
-                    const playlist = await avdb.getM3u8(slug, resolveHost, mirror ? mirror.url : null, env, IS_CF_WORKER ? 'edge' : 'render');
+                    const playlist = await avdb.getM3u8(slug, resolveHost, mirror ? mirror.url : null, env,
+                        IS_CF_WORKER ? 'edge' : 'render', { avdbId: avdbId || '', fresh });
                     return playlistResponse(playlist, 600);
                 } catch (err) {
                     return new Response('Error generating playlist: ' + err.message, { status: 502, headers: CORS_HEADERS });
                 }
-            });
+            };
+            return fresh ? build() : edgeCached(request, ctx, 600, build);
         }
 
         // 8d. MissAV M3U8 Stream
