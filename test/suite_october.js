@@ -84,7 +84,8 @@ async function runTests() {
 
     // 5. JavHD M3U8 on Render (verifying segment URLs route to CF Worker, 0 video proxy)
     await testCase('5. JavHD M3U8 resolution on Render (zero video bandwidth on Render)', async () => {
-        const slug = 'toi-da-so-bim-chi-gai-tsubasa-mai-4017';
+        const cat = await javhd.getCatalog('javhd-latest', 'movie', {}, CF_HOST);
+        const slug = (cat && cat[0] && cat[0].id.replace('javhd:', '')) || 'anh-hai-nung-qua-suc-cu-cho-anh-di-miyuu-kiyohara-4049';
         const res = await axios.get(`${RENDER_BASE}/javhd/stream/${slug}/1080.m3u8?cfhost=${CF_HOST}`, { timeout: 30000 });
         assert(res.data.includes('#EXTM3U'), 'Invalid M3U8');
         assert(res.data.includes('segment.ts?url='), 'Must rewrite segments to CF Worker edge');
