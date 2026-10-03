@@ -59,7 +59,7 @@ async function fetchM3u8Content(targetUrl, referer = 'https://missav.ai/') {
                             'Host': u.hostname,
                             ...headers
                         },
-                        timeout: 3500
+                        timeout: 12000
                     }, res => {
                         let data = '';
                         res.on('data', chunk => data += chunk);
@@ -383,6 +383,24 @@ async function getCatalog(catalogId, type, extra = {}) {
             }
         }
 
+        // 3. Fallback: Delegate to Render if local fetch was blocked by Cloudflare Turnstile
+        if (typeof fetch !== 'undefined') {
+            try {
+                const renderCatUrl = `https://nuvio-stremio-addon-1.onrender.com/catalog/${type}/${catalogId}.json${extra.genre ? `?genre=${encodeURIComponent(extra.genre)}` : ''}`;
+                const rRes = await fetch(renderCatUrl, {
+                    headers: { 'User-Agent': 'Mozilla/5.0' },
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined
+                });
+                if (rRes.ok) {
+                    const rData = await rRes.json();
+                    if (rData && rData.metas && rData.metas.length > 0) {
+                        cache.set(cacheKey, rData.metas, 600);
+                        return rData.metas;
+                    }
+                }
+            } catch (rErr) {}
+        }
+
         return [];
     } catch (err) {
         console.error('[MissAV Catalog Error]:', err.message);
@@ -541,7 +559,31 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
             }
         };
 
-        // Stream 1: VIP Direct CDN (Full HD 1080p) - Works natively on Stremio Desktop / Android TV & Nuvio TV via residential IP
+        // Stream 1: Cloudflare Edge Proxy 1080p (Chuẩn MPEG-TS qua Cloudflare Edge - Hỗ trợ 100% Stremio Web & Nuvio Web)
+        streams.push({
+            name: '🛡️ [Edge Proxy] MissAV',
+            title: `[Full HD 1080p] ${title}\n🛡️ Tuyến Cloudflare Edge Siêu Tốc • MPEG-TS (Stremio Web, TV, Nuvio)`,
+            url: `${currentHost}/missav/stream/${slug}/1080.m3u8`,
+            behaviorHints: {
+                notWebReady: false,
+                bingeGroup: `missav-edge-${slug}`
+            }
+        });
+
+        // Stream 2: Cloudflare Edge Proxy 720p (Tiết kiệm băng thông di động)
+        if (sources['720']) {
+            streams.push({
+                name: '🛡️ [Edge Proxy] MissAV 720p',
+                title: `[HD 720p] ${title}\n🛡️ Tuyến Cloudflare Edge Tiết Kiệm Băng Thông`,
+                url: `${currentHost}/missav/stream/${slug}/720.m3u8`,
+                behaviorHints: {
+                    notWebReady: false,
+                    bingeGroup: `missav-edge-720-${slug}`
+                }
+            });
+        }
+
+        // Stream 3: VIP Direct CDN (Full HD 1080p) - Cho Stremio Desktop / Android TV có hỗ trợ proxyHeaders
         const direct1080 = sources['1080'] || sources.master;
         if (direct1080) {
             streams.push({
@@ -556,7 +598,7 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
             });
         }
 
-        // Stream 2: VIP Direct CDN (HD 720p)
+        // Stream 4: VIP Direct CDN (HD 720p)
         if (sources['720']) {
             streams.push({
                 name: '⚡ [VIP Direct CDN] MissAV 720p',
@@ -566,30 +608,6 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
                     notWebReady: false,
                     bingeGroup: `missav-vip-720-${slug}`,
                     proxyHeaders: proxyHeaders
-                }
-            });
-        }
-
-        // Stream 3: Cloudflare Edge Proxy 1080p (Virtual Master Playlist / Edge unwrap)
-        streams.push({
-            name: '🛡️ [Edge Proxy] MissAV',
-            title: `[Full HD 1080p] ${title}\n🛡️ Tuyến Cloudflare Edge Siêu Tốc • MPEG-TS (Stremio Web, TV, Nuvio)`,
-            url: `${currentHost}/missav/stream/${slug}/1080.m3u8`,
-            behaviorHints: {
-                notWebReady: false,
-                bingeGroup: `missav-edge-${slug}`
-            }
-        });
-
-        // Stream 4: Cloudflare Edge Proxy 720p
-        if (sources['720']) {
-            streams.push({
-                name: '🛡️ [Edge Proxy] MissAV 720p',
-                title: `[HD 720p] ${title}\n🛡️ Tuyến Cloudflare Edge Tiết Kiệm Băng Thông`,
-                url: `${currentHost}/missav/stream/${slug}/720.m3u8`,
-                behaviorHints: {
-                    notWebReady: false,
-                    bingeGroup: `missav-edge-720-${slug}`
                 }
             });
         }

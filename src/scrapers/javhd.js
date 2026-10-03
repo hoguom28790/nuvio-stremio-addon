@@ -669,19 +669,13 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
         throw new Error('Failed to fetch M3U8 from ' + targetUrl);
     }
 
-    // 1. Concurrent race across candidate qualities (fastest response wins in ~200-300ms)
+    // 1. Concurrent race across candidate qualities. Generous per-request timeout: datacenter IPs (Render)
+    //    can take several seconds to reach tiktokcdn.top; the fastest response still wins immediately.
     try {
-        const winning = await Promise.any(candidateUrls.map(u => fetchSingleM3u8(u, fetchHeaders, 2500)));
+        const winning = await Promise.any(candidateUrls.map(u => fetchSingleM3u8(u, fetchHeaders, 12000)));
         content = winning.content;
     } catch (raceErr) {
-        // Fallback to sequential retry if race timed out
-        for (const targetM3u8Url of candidateUrls) {
-            try {
-                const item = await fetchSingleM3u8(targetM3u8Url, fetchHeaders, 2000);
-                content = item.content;
-                break;
-            } catch (e) {}
-        }
+        content = '';
     }
 
     // 2. Nếu fetch trực tiếp không thành công -> Dùng GAS / Proxy Resolver
@@ -738,7 +732,7 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
                 subTargetUrl = baseDir + selectedSub;
             }
             try {
-                const item = await fetchSingleM3u8(subTargetUrl, fetchHeaders, 2500);
+                const item = await fetchSingleM3u8(subTargetUrl, fetchHeaders, 10000);
                 if (item && item.content && item.content.includes('#EXTM3U')) {
                     content = item.content;
                 }

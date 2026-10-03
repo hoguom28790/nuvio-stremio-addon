@@ -30,9 +30,36 @@ const CORS_HEADERS = {
     'Access-Control-Allow-Headers': '*'
 };
 
+const RENDER_BASE = 'https://nuvio-stremio-addon-1.onrender.com';
+
+// Segment bridge through Render for upstreams that refuse Cloudflare IPs (MissAV/surrit) or whose tokens are
+// bound to Render's IP (Render-minted AVDB/helvid playlists). Successful responses are cached at the edge.
+async function proxyViaRender(renderUrl) {
+    try {
+        const upstream = await fetch(renderUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+            redirect: 'manual',
+            cf: { cacheEverything: true, cacheTtlByStatus: { '200-299': 86400, '300-599': 0 } }
+        });
+        if (!upstream.ok) {
+            return new Response(`Upstream error: ${upstream.status}`, { status: upstream.status === 302 ? 502 : upstream.status, headers: CORS_HEADERS });
+        }
+        const headers = {
+            ...CORS_HEADERS,
+            'Content-Type': 'video/mp2t',
+            'Cache-Control': 'public, max-age=86400, s-maxage=86400, immutable'
+        };
+        const len = upstream.headers.get('content-length');
+        if (len) headers['Content-Length'] = len;
+        return new Response(upstream.body, { status: 200, headers });
+    } catch (err) {
+        return new Response('Render bridge error: ' + err.message, { status: 502, headers: CORS_HEADERS });
+    }
+}
+
 // Video segment unwrapper function (strips 95-byte PNG header with streaming & unlimited bandwidth)
 async function handleSegmentProxy(targetUrl, referer) {
-    if (!targetUrl) return new Response('Missing url query parameter', { status: 400 });
+    if (!targetUrl) return new Response('Missing url query parameter', { status: 400, headers: CORS_HEADERS });
 
     try {
         let origin = '';
@@ -53,12 +80,12 @@ async function handleSegmentProxy(targetUrl, referer) {
             referrerPolicy: 'unsafe-url',
             cf: {
                 cacheEverything: true,
-                cacheTtl: 86400
+                cacheTtlByStatus: { '200-299': 86400, '300-599': 0 }
             }
         });
 
         if (!upstream.ok) {
-            return new Response(`Upstream error: ${upstream.status}`, { status: upstream.status });
+            return new Response(`Upstream error: ${upstream.status}`, { status: upstream.status, headers: CORS_HEADERS });
         }
 
         const reader = upstream.body.getReader();
@@ -218,15 +245,25 @@ export default {
             return handleSegmentProxy(url.searchParams.get('url'), 'https://vlxx.phd/');
         }
 
-        // 5c. AVDB Segment Proxy (Direct Cloudflare Edge streaming)
+        // 5c. AVDB Segment Proxy
+        //  - default: playlist was minted by this Worker -> fetch helvid directly at the edge (0 Render bandwidth)
+        //  - via=render: playlist was minted by Render -> helvid token is bound to Render's IP -> bridge through Render
         if (pathname === '/avdb/segment.ts') {
-            return handleSegmentProxy(url.searchParams.get('url'), 'https://upload18.org/');
+            const rawTarget = url.searchParams.get('url');
+            if (!rawTarget) return new Response('Missing url parameter', { status: 400, headers: CORS_HEADERS });
+            if (url.searchParams.get('via') === 'render') {
+                return proxyViaRender(`${RENDER_BASE}/avdb/segment.ts?stream=1&url=${encodeURIComponent(rawTarget)}`);
+            }
+            return handleSegmentProxy(rawTarget, 'https://upload18.com/');
         }
 
-        // 5d. MissAV Segment Proxy (Direct Cloudflare Edge streaming)
+        // 5d. MissAV Segment Proxy (surrit.com refuses Cloudflare IPs -> bridge through Render, cached at the edge)
         if (pathname === '/missav/segment.ts') {
-            return handleSegmentProxy(url.searchParams.get('url'), 'https://missav.ai/');
+            const rawUrl = url.searchParams.get('url');
+            if (!rawUrl) return new Response('Missing url parameter', { status: 400, headers: CORS_HEADERS });
+            return proxyViaRender(`${RENDER_BASE}/missav/segment.ts?stream=1&url=${encodeURIComponent(rawUrl)}`);
         }
+
 
         // 6. JavHD M3U8 Stream
         const javhdMatch = pathname.match(/^\/javhd\/stream\/([^/]+)\/([^/]+)\.m3u8$/);
@@ -355,7 +392,11 @@ export default {
             try {
                 const renderRes = await fetch(renderUrl, {
                     headers: { 'User-Agent': 'Mozilla/5.0' },
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(2500) : undefined
+                    cf: {
+                        cacheEverything: true,
+                        cacheTtl: 1800
+                    },
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined
                 });
                 if (renderRes.ok) {
                     const renderText = await renderRes.text();
@@ -364,7 +405,8 @@ export default {
                             headers: {
                                 ...CORS_HEADERS,
                                 'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
-                                'Cache-Control': 'max-age=600, stale-while-revalidate=1200, public'
+                                'Cache-Control': 'public, max-age=1800, s-maxage=1800, stale-while-revalidate=3600',
+                                'CDN-Cache-Control': 'public, max-age=1800'
                             }
                         });
                     }
@@ -380,7 +422,8 @@ export default {
                     headers: {
                         ...CORS_HEADERS,
                         'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
-                        'Cache-Control': 'max-age=600, stale-while-revalidate=1200, public'
+                        'Cache-Control': 'public, max-age=1800, s-maxage=1800, stale-while-revalidate=3600',
+                        'CDN-Cache-Control': 'public, max-age=1800'
                     }
                 });
             } catch (err) {
@@ -399,7 +442,11 @@ export default {
             try {
                 const renderRes = await fetch(renderUrl, {
                     headers: { 'User-Agent': 'Mozilla/5.0' },
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(2000) : undefined
+                    cf: {
+                        cacheEverything: true,
+                        cacheTtl: 1800
+                    },
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined
                 });
                 if (renderRes.ok) {
                     const renderText = await renderRes.text();
@@ -408,7 +455,8 @@ export default {
                             headers: {
                                 ...CORS_HEADERS,
                                 'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
-                                'Cache-Control': 'max-age=600, stale-while-revalidate=1200, public'
+                                'Cache-Control': 'public, max-age=1800, s-maxage=1800, stale-while-revalidate=3600',
+                                'CDN-Cache-Control': 'public, max-age=1800'
                             }
                         });
                     }
@@ -424,7 +472,8 @@ export default {
                     headers: {
                         ...CORS_HEADERS,
                         'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
-                        'Cache-Control': 'max-age=600, stale-while-revalidate=1200, public'
+                        'Cache-Control': 'public, max-age=1800, s-maxage=1800, stale-while-revalidate=3600',
+                        'CDN-Cache-Control': 'public, max-age=1800'
                     }
                 });
             } catch (err) {
@@ -638,7 +687,7 @@ export default {
                             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                             'x-forwarded-host': host
                         },
-                        signal: AbortSignal.timeout ? AbortSignal.timeout(2500) : undefined
+                        signal: AbortSignal.timeout ? AbortSignal.timeout(18000) : undefined
                     });
                     if (rRes.ok) {
                         const rJson = await rRes.json();

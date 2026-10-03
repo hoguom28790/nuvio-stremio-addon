@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const qs = require('querystring');
+const https = require('https');
 const axios = require('axios');
 const addonInterface = require('../src/addon');
 const { getManifest } = require('../src/manifest');
@@ -186,33 +187,94 @@ app.get('/vlxx/segment.ts', (req, res) => {
     return res.redirect(302, `https://${cfHost}/vlxx/segment.ts?url=${encodeURIComponent(rawUrl)}`);
 });
 
-// AVDB HLS M3U8 Stream Delivery Route
-app.get('/avdb/stream/:slug.m3u8', async (req, res) => {
-    const { slug } = req.params;
-    const cfHost = req.query.cfhost || process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
+// Stream a single upstream segment through Render (only used when the Cloudflare edge cannot fetch it itself).
+// Host-allowlisted so this never becomes an open proxy.
+function streamUpstreamSegment(res, rawUrl, { referer, allowedHosts }) {
+    let u;
     try {
-        const playlist = await avdb.getM3u8(slug, cfHost);
-        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', '*');
-        res.setHeader('Cache-Control', 'max-age=600, stale-while-revalidate=1200, public');
-        res.send(playlist);
-    } catch (err) {
-        console.error('[AVDB M3U8 Error]:', err.message);
-        res.status(500).send('Error generating playlist');
+        u = new URL(rawUrl);
+    } catch (e) {
+        return res.status(400).send('Bad url');
     }
-});
+    if (!allowedHosts.some(h => u.hostname === h || u.hostname.endsWith('.' + h))) {
+        return res.status(403).send('Host not allowed');
+    }
+    res.setHeader('Content-Type', 'video/mp2t');
+    res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400, immutable');
 
-// AVDB Segment Proxy Route: Redirect 302 to Cloudflare Worker edge to conserve Render bandwidth
-app.get('/avdb/segment.ts', (req, res) => {
-    const rawUrl = req.query.url;
-    if (!rawUrl) return res.status(400).send('Missing url');
+    let origin = referer;
+    try { origin = new URL(referer).origin; } catch (e) {}
 
-    const cfHost = process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
+    const upstreamReq = https.request({
+        protocol: u.protocol,
+        hostname: u.hostname,
+        port: u.port || 443,
+        path: u.pathname + u.search,
+        method: 'GET',
+        headers: {
+            'Host': u.hostname,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Referer': referer,
+            'Origin': origin,
+            'Accept': '*/*',
+            'Connection': 'keep-alive'
+        },
+        timeout: 20000
+    }, upstreamRes => {
+        if (upstreamRes.statusCode >= 400) {
+            upstreamRes.resume();
+            return res.status(upstreamRes.statusCode).send('Upstream error: ' + upstreamRes.statusCode);
+        }
+        res.status(upstreamRes.statusCode);
+        if (upstreamRes.headers['content-length']) {
+            res.setHeader('Content-Length', upstreamRes.headers['content-length']);
+        }
+        upstreamRes.pipe(res);
+    });
+    upstreamReq.on('error', err => {
+        if (!res.headersSent) res.status(502).send('Error: ' + err.message);
+    });
+    upstreamReq.on('timeout', () => {
+        upstreamReq.destroy();
+        if (!res.headersSent) res.status(504).send('Timeout');
+    });
+    upstreamReq.end();
+}
+
+function setCors(res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', '*');
+}
+
+// AVDB HLS M3U8 Stream Delivery Route
+// Playlist minted on Render -> helvid token bound to Render's IP -> segments must come back through Render (via=render)
+app.get('/avdb/stream/:slug.m3u8', async (req, res) => {
+    const { slug } = req.params;
+    const cfHost = req.query.cfhost || process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
+    setCors(res);
+    try {
+        const playlist = await avdb.getM3u8(slug, cfHost, null, {}, 'render');
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=600');
+        res.send(playlist);
+    } catch (err) {
+        console.error('[AVDB M3U8 Error]:', err.message);
+        res.status(502).send('Error generating playlist');
+    }
+});
+
+// AVDB Segment Route
+// - ?stream=1 (called by the Cloudflare Worker for Render-minted playlists): stream from helvid with Render's IP
+// - otherwise: 302 to the Cloudflare Worker edge (0 Render bandwidth)
+app.get('/avdb/segment.ts', (req, res) => {
+    const rawUrl = req.query.url;
+    if (!rawUrl) return res.status(400).send('Missing url');
+    setCors(res);
+    if (req.query.stream === '1') {
+        return streamUpstreamSegment(res, rawUrl, { referer: 'https://upload18.com/', allowedHosts: ['helvid.com'] });
+    }
+    const cfHost = process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
     return res.redirect(302, `https://${cfHost}/avdb/segment.ts?url=${encodeURIComponent(rawUrl)}`);
 });
 
@@ -220,29 +282,29 @@ app.get('/avdb/segment.ts', (req, res) => {
 app.get(['/missav/stream/:slug.m3u8', '/missav/stream/:slug/:quality.m3u8'], async (req, res) => {
     const { slug, quality = '1080' } = req.params;
     const cfHost = req.query.cfhost || process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
+    setCors(res);
     try {
         const playlist = await missav.getM3u8(slug, quality, cfHost);
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', '*');
-        res.setHeader('Cache-Control', 'max-age=600, stale-while-revalidate=1200, public');
+        res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
         res.send(playlist);
     } catch (err) {
         console.error('[MissAV M3U8 Error]:', err.message);
-        res.status(500).send('Error generating playlist');
+        res.status(502).send('Error generating playlist');
     }
 });
 
-// MissAV Segment Proxy Route: Redirect 302 to Cloudflare Worker edge to conserve Render bandwidth
+// MissAV Segment Route
+// - ?stream=1 (called by the Cloudflare Worker, surrit.com blocks Cloudflare IPs): stream via Render
+// - otherwise: 302 to the Cloudflare Worker edge
 app.get('/missav/segment.ts', (req, res) => {
     const rawUrl = req.query.url;
     if (!rawUrl) return res.status(400).send('Missing url');
-
+    setCors(res);
+    if (req.query.stream === '1') {
+        return streamUpstreamSegment(res, rawUrl, { referer: 'https://missav.ai/', allowedHosts: ['surrit.com'] });
+    }
     const cfHost = process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', '*');
     return res.redirect(302, `https://${cfHost}/missav/segment.ts?url=${encodeURIComponent(rawUrl)}`);
 });
 

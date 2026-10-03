@@ -146,6 +146,44 @@ async function runLocalSuite() {
             assert(first.poster.includes('/javhd/poster/') || first.poster.includes('javhdz.wtf'), 'Must use live or edge poster URL');
         });
 
+        // 13. AVDB Segment streaming via stream=1 (Verifying Render bridge returns 200 and MPEG-TS)
+        await testCase('13. AVDB Segment streaming (/avdb/segment.ts?stream=1)', async () => {
+            const plRes = await axios.get(`${BASE}/avdb/stream/ipzz-921.m3u8`, { timeout: 10000 });
+            assert.strictEqual(plRes.headers['access-control-allow-origin'], '*', 'Playlist must have CORS');
+            const lines = plRes.data.split('\n').filter(l => l.includes('/avdb/segment.ts'));
+            assert(lines.length > 0, 'Must have avdb segment URLs');
+            const firstSegMatch = lines[0].match(/url=([^&\s]+)/);
+            assert(firstSegMatch, 'Must find raw helvid url');
+            const rawHelvidUrl = decodeURIComponent(firstSegMatch[1]);
+            const segRes = await axios.get(`${BASE}/avdb/segment.ts?stream=1&url=${encodeURIComponent(rawHelvidUrl)}`, {
+                responseType: 'arraybuffer',
+                timeout: 15000
+            });
+            assert.strictEqual(segRes.status, 200);
+            assert.strictEqual(segRes.headers['access-control-allow-origin'], '*', 'Segment must have CORS');
+            assert.strictEqual(segRes.headers['content-type'], 'video/mp2t');
+            assert(segRes.data.length > 1000, 'Segment body must be non-empty video chunk');
+        });
+
+        // 14. MissAV Segment streaming via stream=1 (Verifying surrit bridge returns 200 and MPEG-TS)
+        await testCase('14. MissAV Segment streaming (/missav/segment.ts?stream=1)', async () => {
+            const plRes = await axios.get(`${BASE}/missav/stream/fays-017/1080.m3u8`, { timeout: 10000 });
+            assert.strictEqual(plRes.headers['access-control-allow-origin'], '*', 'Playlist must have CORS');
+            const lines = plRes.data.split('\n').filter(l => l.includes('/missav/segment.ts'));
+            assert(lines.length > 0, 'Must have missav segment URLs');
+            const firstSegMatch = lines[0].match(/url=([^&\s]+)/);
+            assert(firstSegMatch, 'Must find raw surrit url');
+            const rawSurritUrl = decodeURIComponent(firstSegMatch[1]);
+            const segRes = await axios.get(`${BASE}/missav/segment.ts?stream=1&url=${encodeURIComponent(rawSurritUrl)}`, {
+                responseType: 'arraybuffer',
+                timeout: 15000
+            });
+            assert.strictEqual(segRes.status, 200);
+            assert.strictEqual(segRes.headers['access-control-allow-origin'], '*', 'Segment must have CORS');
+            assert.strictEqual(segRes.headers['content-type'], 'video/mp2t');
+            assert(segRes.data.length > 1000, 'Segment body must be non-empty video chunk');
+        });
+
     } finally {
         server.close();
     }

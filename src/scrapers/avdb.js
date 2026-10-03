@@ -131,50 +131,48 @@ async function getMeta(type, id) {
 }
 
 async function fetchText(url, referer, env = {}) {
-    let gasUrl = (env && env.GAS_PROXY_URL) || (env && env.KKPHIM_GAS_PROXY_URL) || (typeof process !== 'undefined' && process.env && process.env.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.KKPHIM_GAS_PROXY_URL);
-    if (!gasUrl || gasUrl.includes('ax3vcn3ha')) {
-        gasUrl = 'https://vercel-m3u8-proxy.vercel.app/api/proxy';
+    const headers = {
+        'User-Agent': USER_AGENT,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+    };
+    if (referer) {
+        headers['Referer'] = referer;
+        headers['Origin'] = referer.endsWith('/') ? referer.slice(0, -1) : referer;
     }
-    
-    if (gasUrl) {
+
+    // 1. Direct fetch first (fastest and cleanest)
+    if (typeof fetch !== 'undefined') {
+        try {
+            const res = await fetch(url, {
+                headers,
+                referrer: referer || undefined,
+                referrerPolicy: referer ? 'unsafe-url' : 'no-referrer',
+                signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined
+            });
+            if (res.ok) return await res.text();
+        } catch (e) {}
+    }
+
+    try {
+        const res = await axios.get(url, { headers, timeout: 5000 });
+        if (res && res.data) {
+            return typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
+        }
+    } catch (e) {}
+
+    // 2. GAS Proxy fallback (only if valid GAS URL configured)
+    let gasUrl = (env && env.GAS_PROXY_URL) || (env && env.KKPHIM_GAS_PROXY_URL) || (typeof process !== 'undefined' && process.env && process.env.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.KKPHIM_GAS_PROXY_URL);
+    if (gasUrl && !gasUrl.includes('ax3vcn3ha') && !gasUrl.includes('vercel-m3u8-proxy')) {
         try {
             const proxyTarget = `${gasUrl}?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer || 'https://upload18.org/')}`;
             const gasRes = await fetch(proxyTarget, {
-                signal: AbortSignal.timeout ? AbortSignal.timeout(2000) : undefined
+                signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined
             });
             if (gasRes.ok) return await gasRes.text();
         } catch (e) {}
     }
 
-    if (typeof fetch !== 'undefined') {
-        const headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-        };
-        if (referer) {
-            headers['Referer'] = referer;
-        }
-        const fetchOpts = {
-            headers,
-            referrer: referer || undefined,
-            referrerPolicy: referer ? 'unsafe-url' : 'no-referrer',
-            signal: AbortSignal.timeout ? AbortSignal.timeout(3000) : undefined
-        };
-        const res = await fetch(url, fetchOpts);
-        if (!res.ok) {
-            throw new Error(`Fetch failed status ${res.status} for ${url}`);
-        }
-        return await res.text();
-    } else {
-        const headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        };
-        if (referer) {
-            headers['Referer'] = referer;
-        }
-        const res = await axios.get(url, { headers, timeout: 3000 });
-        return typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
-    }
+    throw new Error(`Failed to fetch text from ${url}`);
 }
 
 async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.dev') {
@@ -251,9 +249,17 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
     }
 }
 
-async function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', directUrl = null, env = {}) {
-    const hostBase = host.includes('://') ? host : `https://${host}`;
-    const cacheKey = `avdb:m3u8:${slug}:${host}`;
+/**
+ * Build a rewritten AVDB media playlist.
+ *
+ * IMPORTANT: helvid.com tokens are bound to the IP (`i=` param, /64 for IPv6, /24 for IPv4) and UA family
+ * of whoever loaded the upload18 embed page. Segments therefore MUST be fetched by the same machine that
+ * minted the playlist, otherwise helvid answers 404.
+ *  - segmentMode 'edge'   : minted by the Cloudflare Worker -> segments proxied directly by the Worker (0 Render bandwidth)
+ *  - segmentMode 'render' : minted by Render -> segments go Worker -> Render (?stream=1) so the IP matches
+ */
+async function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', directUrl = null, env = {}, segmentMode = 'edge') {
+    const cacheKey = `avdb:m3u8:${slug}:${host}:${segmentMode}`;
     const cached = cache.get(cacheKey);
     if (cached) return cached;
 
@@ -268,18 +274,9 @@ async function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', d
         }
     }
 
-    // 2. Fallback: extract from 18plusok
-    if (!content) {
-        try {
-            const extRes = await axios.get(`https://18plusok.vercel.app/eyJoaWRlRnJvbUhvbWUiOnRydWV9/stream/movie/avdb:${encodeURIComponent(slug)}.json`, { timeout: 3000 });
-            if (extRes.data?.streams?.[0]?.url) {
-                content = await fetchText(extRes.data.streams[0].url, 'https://upload18.org/', env);
-            }
-        } catch (e) {}
-    }
-
-    // 3. Fallback: embed HTML scraping
-    if (!content) {
+    // 2. Embed HTML scraping (directly from upload18.com / upload18.org) - mints a token for THIS machine's IP
+    if (!content || !content.includes('#EXTM3U')) {
+        content = null;
         const embedUrls = [
             `https://upload18.com/play/index/${slug}`,
             `https://upload18.org/play/index/${slug}`
@@ -291,48 +288,68 @@ async function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', d
                     const match = html.match(/"m3u8":\s*"([^"]+)"/);
                     if (match) {
                         const m3u8Url = JSON.parse(`"${match[1]}"`);
-                        content = await fetchText(m3u8Url, 'https://upload18.org/', env);
-                        if (content) break;
+                        const ref = url.includes('upload18.com') ? 'https://upload18.com/' : 'https://upload18.org/';
+                        const text = await fetchText(m3u8Url, ref, env);
+                        if (text && text.includes('#EXTM3U')) {
+                            content = text;
+                            break;
+                        }
                     }
                 }
             } catch (e) {}
         }
     }
 
+    // 3. Slug is a movie code / numeric id instead of an embed hash -> resolve embed hash via API and retry
     if (!content) {
-        const fallbackTarget = directUrl || `https://upload18.org/play/index/${slug}`;
-        return `#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=3000000\n${fallbackTarget}\n`;
+        try {
+            const cleanSlug = slug.replace(/^avdb:/, '');
+            const isNum = /^\d+$/.test(cleanSlug);
+            const queryParam = isNum ? `ids=${encodeURIComponent(cleanSlug)}` : `wd=${encodeURIComponent(cleanSlug)}`;
+            const apiRes = await axios.get(`${BASE_URL}?ac=detail&${queryParam}`, {
+                timeout: 5000,
+                headers: { 'User-Agent': 'Mozilla/5.0' }
+            });
+            const apiItem = apiRes.data?.list?.[0];
+            if (apiItem?.episodes?.server_data) {
+                const firstEp = Object.values(apiItem.episodes.server_data)[0];
+                if (firstEp?.link_embed) {
+                    const embedHash = firstEp.link_embed.split('/').pop();
+                    if (embedHash && embedHash !== slug) {
+                        return await getM3u8(embedHash, host, directUrl, env, segmentMode);
+                    }
+                }
+            }
+        } catch (e) {}
     }
 
-    let rewrittenContent = content;
-    if (typeof content === 'string') {
-        const edgeHost = host && !host.includes('onrender.com') ? host : ((typeof process !== 'undefined' && process.env && process.env.CF_HOST) || 'hophimaddon.hophim-4g6qbubt.workers.dev');
-        const edgeBase = edgeHost.includes('://') ? edgeHost : `https://${edgeHost}`;
-        const segmentBase = `${edgeBase}/avdb/segment.ts`;
-        const separator = segmentBase.includes('?') ? '&' : '?';
+    if (!content) {
+        throw new Error(`Could not mint AVDB playlist for ${slug}`);
+    }
 
-        const lines = content.split('\n');
-        const rewritten = [];
-        for (const line of lines) {
-            const trimmed = line.trim();
-            // Filter out canary line
-            if (trimmed.startsWith('#U18-CANARY:')) {
-                continue;
-            }
-            if (trimmed.startsWith('/s/')) {
-                rewritten.push(`${segmentBase}${separator}url=${encodeURIComponent(`https://helvid.com${trimmed}`)}`);
-            } else if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-                rewritten.push(`${segmentBase}${separator}url=${encodeURIComponent(trimmed)}`);
-            } else {
-                rewritten.push(line);
-            }
+    const edgeHost = host && !host.includes('onrender.com') ? host : ((typeof process !== 'undefined' && process.env && process.env.CF_HOST) || 'hophimaddon.hophim-4g6qbubt.workers.dev');
+    const edgeBase = edgeHost.includes('://') ? edgeHost : `https://${edgeHost}`;
+    const segmentBase = segmentMode === 'render'
+        ? `${edgeBase}/avdb/segment.ts?via=render&url=`
+        : `${edgeBase}/avdb/segment.ts?url=`;
+
+    const rewritten = [];
+    for (const line of content.split('\n')) {
+        const trimmed = line.trim();
+        // Filter out canary line
+        if (trimmed.startsWith('#U18-CANARY:')) continue;
+        if (trimmed.startsWith('/s/')) {
+            rewritten.push(segmentBase + encodeURIComponent(`https://helvid.com${trimmed}`));
+        } else if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+            rewritten.push(segmentBase + encodeURIComponent(trimmed));
+        } else {
+            rewritten.push(line);
         }
-        rewrittenContent = rewritten.join('\n');
     }
+    const rewrittenContent = rewritten.join('\n');
 
-    if (rewrittenContent) {
-        cache.set(cacheKey, rewrittenContent, 900); // 15 min cache
-    }
+    // helvid tokens expire after ~1h -> keep cache well below that
+    cache.set(cacheKey, rewrittenContent, 900);
     return rewrittenContent;
 }
 
