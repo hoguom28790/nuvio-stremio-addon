@@ -239,7 +239,11 @@ export default {
             try {
                 const renderRes = await fetch(renderUrl, {
                     headers: { 'User-Agent': 'Mozilla/5.0' },
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(9000) : undefined
+                    cf: {
+                        cacheEverything: true,
+                        cacheTtl: 1800
+                    },
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(18000) : undefined
                 });
                 if (renderRes.ok) {
                     const renderText = await renderRes.text();
@@ -248,7 +252,8 @@ export default {
                             headers: {
                                 ...CORS_HEADERS,
                                 'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
-                                'Cache-Control': 'max-age=900, stale-while-revalidate=1800, public'
+                                'Cache-Control': 'public, max-age=1800, s-maxage=1800, stale-while-revalidate=3600',
+                                'CDN-Cache-Control': 'public, max-age=1800'
                             }
                         });
                     }
@@ -264,7 +269,8 @@ export default {
                     headers: {
                         ...CORS_HEADERS,
                         'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
-                        'Cache-Control': 'max-age=900, stale-while-revalidate=1800, public'
+                        'Cache-Control': 'public, max-age=1800, s-maxage=1800, stale-while-revalidate=3600',
+                        'CDN-Cache-Control': 'public, max-age=1800'
                     }
                 });
             } catch (err) {

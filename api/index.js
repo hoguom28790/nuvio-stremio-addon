@@ -127,7 +127,7 @@ app.get('/javhd/stream/:slug/:quality.m3u8', async (req, res) => {
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', '*');
-        res.setHeader('Cache-Control', 'max-age=900, stale-while-revalidate=1800, public');
+        res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800, stale-while-revalidate=3600');
         res.send(playlist);
     } catch (err) {
         console.error('[JavHD M3U8 Error]:', err.message);

@@ -641,31 +641,45 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
         'User-Agent': USER_AGENT
     };
 
-    // 1. Thử tải trực tiếp theo danh sách candidate qualities
-    for (const targetM3u8Url of candidateUrls) {
+    async function fetchSingleM3u8(targetUrl, headers, timeoutMs = 2500) {
+        if (typeof process !== 'undefined' && process.versions && process.versions.node) {
+            try {
+                const res = await client.get(targetUrl, { headers, timeout: timeoutMs });
+                if (res && res.data && String(res.data).includes('#EXTM3U')) {
+                    return { url: targetUrl, content: String(res.data) };
+                }
+            } catch (e) {}
+        }
         if (typeof fetch !== 'undefined') {
             try {
-                const res = await fetch(targetM3u8Url, {
-                    headers: fetchHeaders,
+                const res = await fetch(targetUrl, {
+                    headers,
                     referrer: `${BASE_URL}/`,
                     referrerPolicy: 'unsafe-url',
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(3500) : undefined
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined
                 });
                 if (res.ok) {
                     const text = await res.text();
                     if (text && text.includes('#EXTM3U')) {
-                        content = text;
-                        break;
+                        return { url: targetUrl, content: text };
                     }
                 }
             } catch (e) {}
-        } else {
+        }
+        throw new Error('Failed to fetch M3U8 from ' + targetUrl);
+    }
+
+    // 1. Concurrent race across candidate qualities (fastest response wins in ~200-300ms)
+    try {
+        const winning = await Promise.any(candidateUrls.map(u => fetchSingleM3u8(u, fetchHeaders, 2500)));
+        content = winning.content;
+    } catch (raceErr) {
+        // Fallback to sequential retry if race timed out
+        for (const targetM3u8Url of candidateUrls) {
             try {
-                const m3u8Res = await client.get(targetM3u8Url, { headers: fetchHeaders, timeout: 3500 });
-                if (m3u8Res && m3u8Res.data && String(m3u8Res.data).includes('#EXTM3U')) {
-                    content = m3u8Res.data;
-                    break;
-                }
+                const item = await fetchSingleM3u8(targetM3u8Url, fetchHeaders, 2000);
+                content = item.content;
+                break;
             } catch (e) {}
         }
     }
@@ -724,24 +738,9 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
                 subTargetUrl = baseDir + selectedSub;
             }
             try {
-                if (typeof fetch !== 'undefined') {
-                    const subRes = await fetch(subTargetUrl, {
-                        headers: fetchHeaders,
-                        referrer: `${BASE_URL}/`,
-                        referrerPolicy: 'unsafe-url',
-                        signal: AbortSignal.timeout ? AbortSignal.timeout(3500) : undefined
-                    });
-                    if (subRes.ok) {
-                        const subText = await subRes.text();
-                        if (subText && subText.includes('#EXTM3U')) {
-                            content = subText;
-                        }
-                    }
-                } else {
-                    const subRes = await client.get(subTargetUrl, { headers: fetchHeaders, timeout: 3500 });
-                    if (subRes && subRes.data && String(subRes.data).includes('#EXTM3U')) {
-                        content = subRes.data;
-                    }
+                const item = await fetchSingleM3u8(subTargetUrl, fetchHeaders, 2500);
+                if (item && item.content && item.content.includes('#EXTM3U')) {
+                    content = item.content;
                 }
             } catch (errSub) {}
         }
