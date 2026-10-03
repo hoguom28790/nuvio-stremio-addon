@@ -333,31 +333,57 @@ function parseMovieCards(html) {
     return metas;
 }
 
+const WINDOW = 24; // items returned per Stremio request (MissAV pages hold ~12)
+
+function pageUrl(basePath, page) {
+    return page > 1 ? `${BASE_URL}/en${basePath}?page=${page}` : `${BASE_URL}/en${basePath}`;
+}
+
+async function loadPage(url, cacheKey) {
+    const cached = cache.get(cacheKey);
+    if (cached && cached.length > 0) return cached;
+    const html = await fetchPage(url);
+    const items = html ? parseMovieCards(html) : [];
+    if (items.length > 0) cache.set(cacheKey, items, 600);
+    return items;
+}
+
+/**
+ * Stateless pagination: Stremio's `skip` = items already loaded. Site pages hold P items (measured from page 1),
+ * so fetch every site page covering [skip, skip+WINDOW) in parallel and slice exactly. The old `skip/12` mapping
+ * re-served the same page whenever a page parsed to fewer than 12 cards, so the list stopped growing at ~20.
+ */
+async function getWindow(urlFor, keyFor, skip) {
+    const first = await loadPage(urlFor(1), keyFor(1));
+    if (first.length === 0) return [];
+    const size = first.length;
+    const fromPage = Math.floor(skip / size) + 1;
+    const toPage = Math.floor((skip + WINDOW - 1) / size) + 1;
+    const pages = [];
+    for (let pg = fromPage; pg <= toPage; pg++) pages.push(pg);
+    const loaded = await Promise.all(pages.map(pg =>
+        pg === 1 ? first : loadPage(urlFor(pg), keyFor(pg)).catch(() => [])));
+    const seen = new Set();
+    const all = [];
+    for (const list of loaded) for (const m of list) if (!seen.has(m.id)) { seen.add(m.id); all.push(m); }
+    const offset = skip - (fromPage - 1) * size;
+    return all.slice(offset, offset + WINDOW);
+}
+
 /**
  * Get catalog movies for MissAV with live search and pagination
  */
 async function getCatalog(catalogId, type, extra = {}) {
     try {
         const skip = parseInt(extra.skip, 10) || 0;
-        const page = Math.floor(skip / 12) + 1;
 
         // 1. Search query
         if (extra.search) {
-            const query = extra.search.trim();
-            const cacheKey = `missav:search:${encodeURIComponent(query)}:${page}`;
-            const cached = cache.get(cacheKey);
-            if (cached) return cached;
-
-            const searchUrl = `${BASE_URL}/en/search/${encodeURIComponent(query)}?page=${page}`;
-            const html = await fetchPage(searchUrl);
-            if (html) {
-                const items = parseMovieCards(html);
-                if (items && items.length > 0) {
-                    cache.set(cacheKey, items, 600);
-                    return items;
-                }
-            }
-            return [];
+            const query = encodeURIComponent(extra.search.trim());
+            return await getWindow(
+                pg => `${BASE_URL}/en/search/${query}${pg > 1 ? `?page=${pg}` : ''}`,
+                pg => `missav:search:${query}:${pg}`,
+                skip);
         }
 
         // 2. Genre or Catalog Browsing
@@ -366,37 +392,25 @@ async function getCatalog(catalogId, type, extra = {}) {
             targetPath = GENRE_MAP[extra.genre];
         }
 
-        const targetUrl = page > 1 
-            ? `${BASE_URL}/en${targetPath}?page=${page}`
-            : `${BASE_URL}/en${targetPath}`;
-
-        const cacheKey = `missav:catalog:${targetUrl}`;
-        const cached = cache.get(cacheKey);
-        if (cached && cached.length > 0) return cached;
-
-        const html = await fetchPage(targetUrl);
-        if (html) {
-            const items = parseMovieCards(html);
-            if (items && items.length > 0) {
-                cache.set(cacheKey, items, 600);
-                return items;
-            }
-        }
+        const items = await getWindow(
+            pg => pageUrl(targetPath, pg),
+            pg => `missav:catalog:${pageUrl(targetPath, pg)}`,
+            skip);
+        if (items.length > 0) return items;
 
         // 3. Fallback: Delegate to Render if local fetch was blocked by Cloudflare Turnstile
         if (typeof fetch !== 'undefined') {
             try {
-                const renderCatUrl = `https://nuvio-stremio-addon-1.onrender.com/catalog/${type}/${catalogId}.json${extra.genre ? `?genre=${encodeURIComponent(extra.genre)}` : ''}`;
+                const extraPath = [extra.genre ? `genre=${encodeURIComponent(extra.genre)}` : '', skip ? `skip=${skip}` : '']
+                    .filter(Boolean).join('&');
+                const renderCatUrl = `https://nuvio-stremio-addon-1.onrender.com/catalog/${type}/${catalogId}${extraPath ? '/' + extraPath : ''}.json`;
                 const rRes = await fetch(renderCatUrl, {
                     headers: { 'User-Agent': 'Mozilla/5.0' },
                     signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined
                 });
                 if (rRes.ok) {
                     const rData = await rRes.json();
-                    if (rData && rData.metas && rData.metas.length > 0) {
-                        cache.set(cacheKey, rData.metas, 600);
-                        return rData.metas;
-                    }
+                    if (rData && rData.metas && rData.metas.length > 0) return rData.metas;
                 }
             } catch (rErr) {}
         }
