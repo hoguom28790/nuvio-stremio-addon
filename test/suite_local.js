@@ -50,7 +50,14 @@ async function runLocalSuite() {
             });
             assert.strictEqual(r.status, 200);
             assert(r.data.includes('#EXTM3U'), 'Must include #EXTM3U');
-            assert(r.data.includes('clean.m3u8?url=') || r.data.includes('3000kb/hls/index.m3u8') || r.data.includes(targetUrl), 'Must contain rewritten clean URL or target url');
+            // Master playlists are flattened to the best variant's cleaned media playlist (segments direct from CDN)
+            const segs = r.data.split('\n').filter(l => l && !l.startsWith('#'));
+            if (r.data.includes('#EXTINF')) {
+                assert(!segs.some(s => /convertv\d*\/|\/v\d+\/.*segment_|segment_\d{4}/i.test(s)), 'Contains ad segments!');
+                assert(segs.every(s => s.startsWith('https://s2.phim1280.tv/')), 'Segments must point directly to CDN');
+            } else {
+                assert(r.data.includes('clean.m3u8?url=') || r.data.includes(targetUrl), 'Must contain rewritten clean URL or target url');
+            }
         });
 
         // 4. Bandwidth Protection: /javhd/segment.ts redirects 302 to CF Worker

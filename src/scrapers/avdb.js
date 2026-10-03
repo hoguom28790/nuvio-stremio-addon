@@ -213,7 +213,7 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
         streams.push({
             name: `🛡️ [Proxy Edge] AVDB • ${typeName}`,
             title: `${item.name || item.movie_code}\n🛡️ Luồng Qua Cloudflare Edge (Hỗ trợ 100% Stremio Web & Mọi Thiết Bị)`,
-            url: `${hostBase}/avdb/stream/${encodeURIComponent(slug)}.m3u8`,
+            url: `${hostBase}/avdb/stream/${encodeURIComponent(slug)}.m3u8${item.id ? `?id=${encodeURIComponent(item.id)}` : ''}`,
             behaviorHints: {
                 notWebReady: false,
                 bingeGroup: `avdb-proxy-${slug}`
@@ -222,10 +222,8 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
 
         // Stream 2: Luồng VIP CDN Trực Tiếp từ 18plusok (Hỗ trợ proxyHeaders cho Stremio App, Android TV)
         try {
-            const extUrl = `https://18plusok.vercel.app/eyJoaWRlRnJvbUhvbWUiOnRydWV9/stream/movie/avdb:${encodeURIComponent(item.id || rawId)}.json`;
-            const extRes = await axios.get(extUrl, { timeout: 3500 });
-            if (extRes.data?.streams?.[0]?.url) {
-                const s0 = extRes.data.streams[0];
+            const s0 = await fetchMirrorStream(item.id || rawId);
+            if (s0) {
                 streams.push({
                     name: `⚡ [VIP Direct CDN] AVDB • ${typeName}`,
                     title: `${item.name || item.movie_code}\n⚡ Luồng Trực Tiếp VIP CDN (Direct Helvid) • Nhanh & Mượt`,
@@ -248,6 +246,20 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
     } catch (err) {
         console.error(`[AVDB Stream Error] ${id}:`, err.message);
         return [];
+    }
+}
+
+// Ready-made helvid playlist from the 18plusok mirror (~1.5s, numeric AVDB id only). Much faster than minting via
+// the upload18 embed page, which refuses Cloudflare IPs and answers Render slowly.
+async function fetchMirrorStream(avdbId) {
+    if (!avdbId || !/^\d+$/.test(String(avdbId))) return null;
+    try {
+        const extUrl = `https://18plusok.vercel.app/eyJoaWRlRnJvbUhvbWUiOnRydWV9/stream/movie/avdb:${encodeURIComponent(avdbId)}.json`;
+        const extRes = await axios.get(extUrl, { timeout: 3500 });
+        const s0 = extRes.data?.streams?.[0];
+        return s0 && s0.url ? s0 : null;
+    } catch (e) {
+        return null;
     }
 }
 
@@ -347,6 +359,15 @@ async function getM3u8Impl(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev
         const trimmed = line.trim();
         // Filter out canary line
         if (trimmed.startsWith('#U18-CANARY:')) continue;
+        // fMP4 init segment: must go through the same segment route as the media segments (helvid has no CORS
+        // and needs the upload18 Referer)
+        if (trimmed.startsWith('#EXT-X-MAP:')) {
+            rewritten.push(trimmed.replace(/URI="([^"]+)"/, (m, uri) => {
+                const abs = uri.startsWith('/') ? `https://helvid.com${uri}` : uri;
+                return `URI="${segmentBase}${encodeURIComponent(abs)}"`;
+            }));
+            continue;
+        }
         if (trimmed.startsWith('/s/')) {
             rewritten.push(segmentBase + encodeURIComponent(`https://helvid.com${trimmed}`));
         } else if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
@@ -367,5 +388,6 @@ module.exports = {
     getMeta,
     getStream,
     getM3u8,
+    fetchMirrorStream,
     TYPE_MAPPING
 };

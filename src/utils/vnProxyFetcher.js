@@ -149,7 +149,7 @@ async function fetchM3u8ViaVnProxy(targetUrl) {
 
     try {
         const result = await Promise.any(
-            uniqueProxies.slice(0, 6).map(p => fetchWithProxy(targetUrl, p.host, p.port, 2000))
+            uniqueProxies.slice(0, 6).map(p => fetchWithProxy(targetUrl, p.host, p.port, 5000))
         );
         if (result && result.includes('#EXTM3U')) {
             return result;

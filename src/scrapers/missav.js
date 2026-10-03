@@ -612,6 +612,10 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
             });
         }
 
+        // surrit.com refuses both Cloudflare and Render IPs, so only the direct CDN streams (Referer via proxyHeaders,
+        // honoured by Android TV / Stremio & Nuvio apps) are reliably playable -> list them first.
+        streams.sort((a, b) => Number(b.name.includes('VIP Direct')) - Number(a.name.includes('VIP Direct')));
+
         if (streams.length > 0) {
             cache.set(cacheKey, streams, 1800);
         }

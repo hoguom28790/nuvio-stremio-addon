@@ -226,63 +226,100 @@ function processCleanM3u8(content, targetUrl, host = '') {
     return cleanM3u8(content, targetUrl);
 }
 
-async function getCleanM3u8(targetUrl, host = 'localhost') {
-    const hostBase = host ? (host.includes('://') ? host : `https://${host}`) : '';
-    const cacheKey = `kkphim:clean:${targetUrl}`;
-    const cached = cache.get(cacheKey);
-    if (cached) return cached;
+// Pick the highest-bandwidth variant of a master playlist (absolute URL), or null for a media playlist
+function pickBestVariant(content, baseUrl) {
+    if (!content.includes('#EXT-X-STREAM-INF')) return null;
+    const lines = content.split(/\r?\n/);
+    let best = null;
+    let bestBw = -1;
+    for (let i = 0; i < lines.length; i++) {
+        if (!lines[i].startsWith('#EXT-X-STREAM-INF')) continue;
+        const next = (lines[i + 1] || '').trim();
+        if (!next || next.startsWith('#')) continue;
+        const bw = parseInt((lines[i].match(/BANDWIDTH=(\d+)/) || [])[1] || '0', 10);
+        if (bw > bestBw) { bestBw = bw; best = new URL(next, baseUrl).toString(); }
+    }
+    return best;
+}
 
-    try {
-        const fetchHeaders = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Referer': 'https://player.phimapi.com/',
-            'Origin': 'https://player.phimapi.com'
-        };
-
-        let content = '';
-        if (typeof fetch === 'function') {
-            try {
-                const res = await fetch(targetUrl, {
-                    headers: fetchHeaders,
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(1500) : undefined
-                });
-                if (res.ok) {
-                    const txt = await res.text();
-                    if (typeof txt === 'string' && txt.includes('#EXTM3U')) {
-                        content = txt;
-                    }
+// Direct fetch first; the KKPhim-family CDNs geo-block non-VN IPs (404), so fall back to a Vietnam proxy:
+// `opts.fetchText` on Cloudflare Workers (raw sockets), the Node proxy pool on Render.
+async function fetchPlaylistText(targetUrl, fetchHeaders, opts = {}) {
+    let content = '';
+    if (typeof fetch === 'function') {
+        try {
+            const res = await fetch(targetUrl, {
+                headers: fetchHeaders,
+                signal: AbortSignal.timeout ? AbortSignal.timeout(1500) : undefined
+            });
+            if (res.ok) {
+                const txt = await res.text();
+                if (typeof txt === 'string' && txt.includes('#EXTM3U')) {
+                    content = txt;
                 }
-            } catch (e) {}
+            }
+        } catch (e) {}
+    } else {
+        try {
+            const res = await axios.get(targetUrl, {
+                headers: fetchHeaders,
+                timeout: 1500
+            });
+            if (res.data && typeof res.data === 'string' && res.data.includes('#EXTM3U')) {
+                content = res.data;
+            }
+        } catch (e) {}
+    }
+
+    // If direct fetch failed (e.g. 404 geo-block on cloud servers), try Vietnam proxy pool
+    if (!content || !content.includes('#EXTM3U')) {
+        if (typeof opts.fetchText === 'function') {
+            try {
+                content = await opts.fetchText(targetUrl, { headers: fetchHeaders });
+            } catch (proxyErr) {}
         } else {
-            try {
-                const res = await axios.get(targetUrl, {
-                    headers: fetchHeaders,
-                    timeout: 1500
-                });
-                if (res.data && typeof res.data === 'string' && res.data.includes('#EXTM3U')) {
-                    content = res.data;
-                }
-            } catch (e) {}
-        }
-
-        // If direct fetch failed (e.g. 404 geo-block on cloud servers), try Vietnam proxy pool
-        if (!content || !content.includes('#EXTM3U')) {
             const fetcher = getVnProxyFetcher();
             if (fetcher && typeof fetcher.fetchM3u8ViaVnProxy === 'function') {
                 try {
                     content = await fetcher.fetchM3u8ViaVnProxy(targetUrl);
-                } catch (proxyErr) {
-                    // Fast fallback
-                }
+                } catch (proxyErr) {}
             }
         }
+    }
+    return typeof content === 'string' && content.includes('#EXTM3U') ? content : '';
+}
 
-        if (typeof content !== 'string' || !content.includes('#EXTM3U')) {
+async function getCleanM3u8(targetUrl, host = 'localhost', opts = {}) {
+    const cacheKey = `kkphim:clean:${targetUrl}`;
+    const cached = cache.get(cacheKey);
+    if (cached) return cached;
+
+    const fetchHeaders = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://player.phimapi.com/',
+        'Origin': 'https://player.phimapi.com'
+    };
+
+    try {
+        let content = await fetchPlaylistText(targetUrl, fetchHeaders, opts);
+        if (!content) {
             // Immediate fallback to Virtual Master Playlist (HTTP 200) for client-side cleaning
             return `#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=3000000\n${targetUrl}\n`;
         }
 
-        const cleaned = processCleanM3u8(content, targetUrl, host);
+        // Master playlist: resolve the best variant now and return its cleaned media playlist directly,
+        // saving the player a round trip (and a second geo-blocked fetch).
+        let mediaUrl = targetUrl;
+        const variantUrl = pickBestVariant(content, targetUrl);
+        if (variantUrl) {
+            const variant = await fetchPlaylistText(variantUrl, fetchHeaders, opts);
+            if (variant.includes('#EXTINF')) {
+                content = variant;
+                mediaUrl = variantUrl;
+            }
+        }
+
+        const cleaned = processCleanM3u8(content, mediaUrl, host);
         if (cleaned) {
             cache.set(cacheKey, cleaned, 7200);
             return cleaned;

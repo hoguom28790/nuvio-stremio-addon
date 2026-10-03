@@ -591,7 +591,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
 /**
  * Proxy M3U8 content and unwrap segments (100% flat media playlist matching VLXX)
  */
-async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbubt.workers.dev', env = {}) {
+async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbubt.workers.dev', env = {}, opts = {}) {
     await ensureStaticCatalog();
     const hostBase = host.includes('://') ? host : `https://${host}`;
     const cacheKey = `javhd:m3u8:${slug}:${quality}:${host}`;
@@ -678,10 +678,22 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
         content = '';
     }
 
-    // 2. Nếu fetch trực tiếp không thành công -> Dùng GAS / Proxy Resolver
+    // 2. tiktokcdn.top refuses Cloudflare IPs (403 challenge) -> fetch the playlist text via the Vietnam proxy pool
+    if ((!content || !content.includes('#EXTM3U')) && typeof opts.fetchText === 'function') {
+        for (const targetM3u8Url of [candidateUrls[0], masterUrl]) {
+            try {
+                content = await opts.fetchText(targetM3u8Url, { headers: fetchHeaders });
+                if (content && content.includes('#EXTM3U')) break;
+            } catch (e) {
+                content = '';
+            }
+        }
+    }
+
+    // 3. Nếu vẫn không thành công -> Dùng GAS / Proxy Resolver (vercel-m3u8-proxy is dead: 403/404)
     if (!content || !content.includes('#EXTM3U')) {
         const gasUrl = (env && env.GAS_PROXY_URL) || (env && env.KKPHIM_GAS_PROXY_URL) || (typeof process !== 'undefined' && process.env && process.env.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.KKPHIM_GAS_PROXY_URL);
-        if (gasUrl) {
+        if (gasUrl && !gasUrl.includes('vercel-m3u8-proxy')) {
             for (const targetM3u8Url of candidateUrls) {
                 try {
                     const proxyTarget = `${gasUrl}?url=${encodeURIComponent(targetM3u8Url)}&referer=${encodeURIComponent(BASE_URL + '/')}`;
@@ -700,7 +712,7 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
         }
     }
 
-    // 3. Nếu content nhận được là Master Playlist (#EXT-X-STREAM-INF), lấy sub-variant thích hợp và fetch media playlist
+    // 4. Nếu content nhận được là Master Playlist (#EXT-X-STREAM-INF), lấy sub-variant thích hợp và fetch media playlist
     if (content && content.includes('#EXT-X-STREAM-INF')) {
         const lines = content.split('\n');
         let selectedSub = '';
@@ -736,7 +748,14 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
                 if (item && item.content && item.content.includes('#EXTM3U')) {
                     content = item.content;
                 }
-            } catch (errSub) {}
+            } catch (errSub) {
+                if (typeof opts.fetchText === 'function') {
+                    try {
+                        const viaProxy = await opts.fetchText(subTargetUrl, { headers: fetchHeaders });
+                        if (viaProxy && viaProxy.includes('#EXTM3U')) content = viaProxy;
+                    } catch (e) {}
+                }
+            }
         }
     }
 
@@ -744,7 +763,7 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
         throw new Error('Could not retrieve JavHD stream playlist');
     }
 
-    // 4. Chuẩn hóa media playlist giống hệt VLXX: Rewrite TẤT CẢ các segment URL sang Cloudflare Edge unwrapper
+    // 5. Chuẩn hóa media playlist giống hệt VLXX: Rewrite TẤT CẢ các segment URL sang Cloudflare Edge unwrapper
     const edgeHost = host && !host.includes('onrender.com') ? host : ((typeof process !== 'undefined' && process.env && process.env.CF_HOST) || 'hophimaddon.hophim-4g6qbubt.workers.dev');
     const edgeBase = edgeHost.includes('://') ? edgeHost : `https://${edgeHost}`;
     const segmentBase = `${edgeBase}/javhd/segment.ts`;

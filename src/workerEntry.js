@@ -7,6 +7,42 @@ const vlxx = require('./scrapers/vlxx');
 const avdb = require('./scrapers/avdb');
 const missav = require('./scrapers/missav');
 const kkphim = require('./scrapers/kkphim');
+import { vnFetchText } from './utils/vnSocketFetch';
+
+const VN_FETCH = { fetchText: vnFetchText };
+
+// Edge cache for generated playlists (Workers do not cache their own responses automatically)
+async function edgeCached(request, ctx, ttlSeconds, build) {
+    const cache = typeof caches !== 'undefined' ? caches.default : null;
+    const key = new Request(request.url, { method: 'GET' });
+    if (cache) {
+        const hit = await cache.match(key);
+        if (hit) return hit;
+    }
+    const res = await build();
+    if (cache && res && res.status === 200 && res.headers.get('X-Cacheable') === '1') {
+        const headers = new Headers(res.headers);
+        headers.delete('X-Cacheable');
+        headers.set('Cache-Control', `public, max-age=${ttlSeconds}, s-maxage=${ttlSeconds}`);
+        const body = await res.text();
+        const out = new Response(body, { status: 200, headers });
+        const put = cache.put(key, out.clone());
+        if (ctx && ctx.waitUntil) ctx.waitUntil(put); else await put;
+        return out;
+    }
+    return res;
+}
+
+function playlistResponse(text, ttlSeconds) {
+    return new Response(text, {
+        headers: {
+            ...CORS_HEADERS,
+            'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+            'Cache-Control': `public, max-age=${ttlSeconds}, s-maxage=${ttlSeconds}`,
+            'X-Cacheable': '1'
+        }
+    });
+}
 
 function parseConfig(configParam) {
     if (!configParam) return {};
@@ -329,48 +365,32 @@ export default {
             const [, slug, quality] = javhdMatch;
             const resolveHost = host;
 
-            // 1. Delegate to Render (Render can bypass tiktokcdn.top 403 blocks)
-            const renderUrl = `https://nuvio-stremio-addon-1.onrender.com/javhd/stream/${slug}/${quality}.m3u8?cfhost=${encodeURIComponent(resolveHost)}`;
-            try {
-                const renderRes = await fetch(renderUrl, {
-                    headers: { 'User-Agent': 'Mozilla/5.0' },
-                    cf: {
-                        cacheEverything: true,
-                        cacheTtl: 1800
-                    },
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(18000) : undefined
-                });
-                if (renderRes.ok) {
-                    const renderText = await renderRes.text();
-                    if (renderText && renderText.includes('#EXTM3U')) {
-                        return new Response(renderText, {
-                            headers: {
-                                ...CORS_HEADERS,
-                                'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
-                                'Cache-Control': 'public, max-age=1800, s-maxage=1800, stale-while-revalidate=3600',
-                                'CDN-Cache-Control': 'public, max-age=1800'
-                            }
-                        });
-                    }
+            // Signed tiktokcdn segment URLs expire ~2h after issue -> keep the playlist cache short
+            return edgeCached(request, ctx, 600, async () => {
+                // 1. Local resolution: tiktokcdn.top refuses Cloudflare IPs, so the playlist text goes through the VN proxy (~0.4s)
+                try {
+                    const playlist = await javhd.getM3u8(slug, quality, resolveHost, env, VN_FETCH);
+                    if (playlist && playlist.includes('#EXTM3U')) return playlistResponse(playlist, 600);
+                } catch (err) {
+                    console.warn('[JavHD Local M3U8 Error]:', err.message);
                 }
-            } catch (renderErr) {
-                console.warn('[JavHD Render Delegation Error]:', renderErr.message);
-            }
 
-            // 2. Fallback to local javhd.getM3u8
-            try {
-                const playlist = await javhd.getM3u8(slug, quality, resolveHost, env);
-                return new Response(playlist, {
-                    headers: {
-                        ...CORS_HEADERS,
-                        'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
-                        'Cache-Control': 'public, max-age=1800, s-maxage=1800, stale-while-revalidate=3600',
-                        'CDN-Cache-Control': 'public, max-age=1800'
+                // 2. Fallback: delegate to Render (slow, ~20s)
+                const renderUrl = `${RENDER_BASE}/javhd/stream/${slug}/${quality}.m3u8?cfhost=${encodeURIComponent(resolveHost)}`;
+                try {
+                    const renderRes = await fetch(renderUrl, {
+                        headers: { 'User-Agent': 'Mozilla/5.0' },
+                        signal: AbortSignal.timeout ? AbortSignal.timeout(25000) : undefined
+                    });
+                    if (renderRes.ok) {
+                        const renderText = await renderRes.text();
+                        if (renderText && renderText.includes('#EXTM3U')) return playlistResponse(renderText, 600);
                     }
-                });
-            } catch (err) {
-                return new Response('Error generating playlist: ' + err.message, { status: 500, headers: CORS_HEADERS });
-            }
+                } catch (renderErr) {
+                    console.warn('[JavHD Render Delegation Error]:', renderErr.message);
+                }
+                return new Response('Error generating playlist: Could not retrieve JavHD stream playlist', { status: 502, headers: CORS_HEADERS });
+            });
         }
 
         // 7. VLXX M3U8 Stream
@@ -444,49 +464,33 @@ export default {
         if (avdbMatch) {
             const slug = decodeURIComponent(avdbMatch[1]);
             const resolveHost = host;
+            const avdbId = url.searchParams.get('id');
 
-            // 1. Delegate to Render (Render can bypass upload18.org Cloudflare bot protection)
-            const renderUrl = `https://nuvio-stremio-addon-1.onrender.com/avdb/stream/${encodeURIComponent(slug)}.m3u8?cfhost=${encodeURIComponent(resolveHost)}`;
-            try {
-                const renderRes = await fetch(renderUrl, {
-                    headers: { 'User-Agent': 'Mozilla/5.0' },
-                    cf: {
-                        cacheEverything: true,
-                        cacheTtl: 1800
-                    },
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined
-                });
-                if (renderRes.ok) {
-                    const renderText = await renderRes.text();
-                    if (renderText && renderText.includes('#EXTM3U')) {
-                        return new Response(renderText, {
-                            headers: {
-                                ...CORS_HEADERS,
-                                'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
-                                'Cache-Control': 'public, max-age=1800, s-maxage=1800, stale-while-revalidate=3600',
-                                'CDN-Cache-Control': 'public, max-age=1800'
-                            }
-                        });
+            // helvid refuses Cloudflare IPs entirely -> the playlist (and its segments, via=render) come from Render.
+            // helvid tokens last ~2h -> short edge cache.
+            return edgeCached(request, ctx, 600, async () => {
+                const renderUrl = `${RENDER_BASE}/avdb/stream/${encodeURIComponent(slug)}.m3u8?cfhost=${encodeURIComponent(resolveHost)}${avdbId ? `&id=${encodeURIComponent(avdbId)}` : ''}`;
+                try {
+                    const renderRes = await fetch(renderUrl, {
+                        headers: { 'User-Agent': 'Mozilla/5.0' },
+                        signal: AbortSignal.timeout ? AbortSignal.timeout(28000) : undefined
+                    });
+                    if (renderRes.ok) {
+                        const renderText = await renderRes.text();
+                        if (renderText && renderText.includes('#EXTM3U')) return playlistResponse(renderText, 600);
                     }
+                } catch (renderErr) {
+                    console.warn('[AVDB Render Delegation Error]:', renderErr.message);
                 }
-            } catch (renderErr) {
-                console.warn('[AVDB Render Delegation Error]:', renderErr.message);
-            }
 
-            // 2. Fallback to local avdb.getM3u8
-            try {
-                const playlist = await avdb.getM3u8(slug, resolveHost, null, env);
-                return new Response(playlist, {
-                    headers: {
-                        ...CORS_HEADERS,
-                        'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
-                        'Cache-Control': 'public, max-age=1800, s-maxage=1800, stale-while-revalidate=3600',
-                        'CDN-Cache-Control': 'public, max-age=1800'
-                    }
-                });
-            } catch (err) {
-                return new Response('Error generating playlist: ' + err.message, { status: 500, headers: CORS_HEADERS });
-            }
+                // Fallback: local mint (works only if upload18/helvid stop blocking Cloudflare)
+                try {
+                    const playlist = await avdb.getM3u8(slug, resolveHost, null, env);
+                    return playlistResponse(playlist, 600);
+                } catch (err) {
+                    return new Response('Error generating playlist: ' + err.message, { status: 502, headers: CORS_HEADERS });
+                }
+            });
         }
 
         // 8d. MissAV M3U8 Stream
@@ -544,21 +548,21 @@ export default {
             const targetUrl = url.searchParams.get('url');
             if (!targetUrl) return new Response('Missing url query parameter', { status: 400, headers: CORS_HEADERS });
 
-            // 1. Try local cleaning (Master playlist fast-path runs instantly in 0ms with HTTP 200!)
-            try {
-                const playlist = await kkphim.getCleanM3u8(targetUrl, host);
-                if (playlist && playlist.includes('#EXTM3U')) {
-                    return new Response(playlist, {
-                        headers: {
-                            ...CORS_HEADERS,
-                            'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
-                            'Cache-Control': 'public, max-age=7200, s-maxage=14400'
-                        }
-                    });
+            // 1. Clean at the edge. The CDNs geo-block non-VN IPs, so the playlist TEXT is fetched through the VN proxy
+            //    pool; segments stay direct CDN -> client. Only a really cleaned playlist is edge-cached (6h, VOD).
+            const cleanedRes = await edgeCached(request, ctx, 21600, async () => {
+                try {
+                    const playlist = await kkphim.getCleanM3u8(targetUrl, host, VN_FETCH);
+                    // cleaned media playlist, or a master whose variants were rewritten to /kkphim/clean.m3u8
+                    if (playlist && (playlist.includes('#EXTINF') || playlist.includes('/kkphim/clean.m3u8?url='))) {
+                        return playlistResponse(playlist, 21600);
+                    }
+                } catch (err) {
+                    console.warn('[KKPhim Clean M3U8 Local Error]:', err.message);
                 }
-            } catch (err) {
-                console.warn('[KKPhim Clean M3U8 Local Error]:', err.message);
-            }
+                return null;
+            });
+            if (cleanedRes) return cleanedRes;
 
             // 2. Delegate to Render (Render can bypass Vietnam CDN geo-blocking on s5.phim1280.tv / a.kvp726.com)
             const renderCleanUrl = `https://nuvio-stremio-addon-1.onrender.com/kkphim/clean.m3u8?url=${encodeURIComponent(targetUrl)}&cfhost=${encodeURIComponent(host)}`;

@@ -308,7 +308,9 @@ app.get('/avdb/stream/:slug.m3u8', async (req, res) => {
     const cfHost = req.query.cfhost || process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
     setCors(res);
     try {
-        const playlist = await avdb.getM3u8(slug, cfHost, null, {}, 'render');
+        // Fast path: ready-made helvid URL from the mirror (numeric id), else mint through the upload18 embed
+        const mirror = req.query.id ? await avdb.fetchMirrorStream(req.query.id) : null;
+        const playlist = await avdb.getM3u8(slug, cfHost, mirror ? mirror.url : null, {}, 'render');
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=600');
         res.send(playlist);
