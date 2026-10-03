@@ -81,7 +81,7 @@ builder.defineCatalogHandler(async ({ type, id, extra = {}, config = {} }) => {
         }
 
         if (id.startsWith('javhd-') && isSourceEnabled('javhd', config)) {
-            return { metas: await javhd.getCatalog(id, type, extra) };
+            return { metas: await javhd.getCatalog(id, type, extra, config.host) };
         }
 
         if (id.startsWith('vlxx-') && isSourceEnabled('vlxx', config)) {
@@ -138,7 +138,7 @@ builder.defineMetaHandler(async ({ type, id, config = {} }) => {
             if (meta) return { meta };
         }
         if (id.startsWith('javhd:')) {
-            const meta = await javhd.getMeta(type, id);
+            const meta = await javhd.getMeta(type, id, config.host);
             if (meta) return { meta };
         }
         if (id.startsWith('vlxx:')) {

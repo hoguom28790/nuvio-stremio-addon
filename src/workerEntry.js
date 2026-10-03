@@ -181,7 +181,36 @@ export default {
 
         // 4. JavHD Segment Unwrapper (Direct Cloudflare Edge streaming with PNG-header unwrapping)
         if (pathname === '/javhd/segment.ts') {
-            return handleSegmentProxy(url.searchParams.get('url'), 'https://javhdz.bz/');
+            return handleSegmentProxy(url.searchParams.get('url'), 'https://javhdz.wtf/');
+        }
+
+        // 4b. JavHD Poster Proxy (Edge cached with 7 days TTL, CORS enabled, bypasses ISP blocks)
+        if (pathname.startsWith('/javhd/poster/')) {
+            const filename = pathname.replace('/javhd/poster/', '');
+            const targetUrl = `https://javhdz.wtf/data/${filename}`;
+            try {
+                const upstream = await fetch(targetUrl, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                        'Referer': 'https://javhdz.wtf/'
+                    },
+                    cf: {
+                        cacheEverything: true,
+                        cacheTtl: 604800
+                    }
+                });
+                if (upstream.ok) {
+                    return new Response(upstream.body, {
+                        headers: {
+                            ...CORS_HEADERS,
+                            'Content-Type': upstream.headers.get('content-type') || 'image/jpeg',
+                            'Cache-Control': 'public, max-age=604800, immutable',
+                            'CDN-Cache-Control': 'public, max-age=604800'
+                        }
+                    });
+                }
+            } catch (err) {}
+            return Response.redirect(targetUrl, 302);
         }
 
         // 5. VLXX Segment Unwrapper
@@ -210,7 +239,7 @@ export default {
             try {
                 const renderRes = await fetch(renderUrl, {
                     headers: { 'User-Agent': 'Mozilla/5.0' },
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(2500) : undefined
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(9000) : undefined
                 });
                 if (renderRes.ok) {
                     const renderText = await renderRes.text();
@@ -219,7 +248,7 @@ export default {
                             headers: {
                                 ...CORS_HEADERS,
                                 'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
-                                'Cache-Control': 'max-age=600, stale-while-revalidate=1200, public'
+                                'Cache-Control': 'max-age=900, stale-while-revalidate=1800, public'
                             }
                         });
                     }
@@ -235,7 +264,7 @@ export default {
                     headers: {
                         ...CORS_HEADERS,
                         'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
-                        'Cache-Control': 'max-age=600, stale-while-revalidate=1200, public'
+                        'Cache-Control': 'max-age=900, stale-while-revalidate=1800, public'
                     }
                 });
             } catch (err) {

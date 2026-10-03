@@ -100,11 +100,23 @@ async function runLocalSuite() {
             assert(r.data.includes('#EXTM3U'), 'Must include #EXTM3U');
         });
 
-        // 9. JavHD M3U8 endpoint
-        await testCase('9. /javhd/stream/toi-da-so-bim-chi-gai-tsubasa-mai-4017/1080.m3u8 returns 200 OK with #EXTM3U', async () => {
+        // 9. JavHD M3U8 endpoint (Must return 200 flat media playlist with unwrapped segments, NO master playlist)
+        await testCase('9. /javhd/stream/toi-da-so-bim-chi-gai-tsubasa-mai-4017/1080.m3u8 returns flat media playlist with 0 #EXT-X-STREAM-INF', async () => {
             const r = await axios.get(`${BASE}/javhd/stream/toi-da-so-bim-chi-gai-tsubasa-mai-4017/1080.m3u8`, { timeout: 10000 });
             assert.strictEqual(r.status, 200);
             assert(r.data.includes('#EXTM3U'), 'Must include #EXTM3U');
+            assert(!r.data.includes('#EXT-X-STREAM-INF'), 'Must be a flat media playlist without master recursion');
+            assert(r.data.includes('/javhd/segment.ts?url='), 'Must rewrite segments to edge unwrapper');
+        });
+
+        // 9b. JavHD Poster endpoint redirect (0 bandwidth on Render)
+        await testCase('9b. /javhd/poster/SONE-480-2026-01.jpg redirects 302 to CF Worker', async () => {
+            const r = await axios.get(`${BASE}/javhd/poster/SONE-480-2026-01.jpg`, {
+                maxRedirects: 0,
+                validateStatus: (status) => status === 302
+            });
+            assert.strictEqual(r.status, 302);
+            assert(r.headers.location.includes('/javhd/poster/SONE-480-2026-01.jpg'), 'Must redirect to CF Worker poster endpoint');
         });
 
         // 10. AVDB M3U8 endpoint
@@ -121,6 +133,17 @@ async function runLocalSuite() {
             assert(Array.isArray(r.data.streams) && r.data.streams.length > 0, 'Must return streams');
             const vip = r.data.streams.find(s => s.name.includes('VIP Direct CDN'));
             assert(vip, 'Must have VIP Direct CDN stream');
+        });
+
+        // 12. Stremio catalog endpoint for JavHD (verifying clean posters without wsrv.nl)
+        await testCase('12. Stremio catalog endpoint /catalog/movie/javhd-latest.json has clean posters', async () => {
+            const r = await axios.get(`${BASE}/catalog/movie/javhd-latest.json`, { timeout: 10000 });
+            assert.strictEqual(r.status, 200);
+            assert(Array.isArray(r.data.metas) && r.data.metas.length > 0, 'Must return metas');
+            const first = r.data.metas[0];
+            assert(!first.poster.includes('wsrv.nl'), 'Must not use wsrv.nl');
+            assert(!first.poster.includes('javhdz.bz'), 'Must not use dead javhdz.bz');
+            assert(first.poster.includes('/javhd/poster/') || first.poster.includes('javhdz.wtf'), 'Must use live or edge poster URL');
         });
 
     } finally {

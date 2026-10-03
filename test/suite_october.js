@@ -71,12 +71,15 @@ async function runTests() {
     });
 
     // 4. JavHD Catalog & Metadata
-    await testCase('4. JavHD Catalog & Metadata resolution', async () => {
-        const cat = await javhd.getCatalog('javhd-latest', 'movie', {});
+    await testCase('4. JavHD Catalog & Metadata resolution (verifying valid poster URLs, no wsrv.nl or dead domains)', async () => {
+        const cat = await javhd.getCatalog('javhd-latest', 'movie', {}, CF_HOST);
         assert(Array.isArray(cat) && cat.length > 0, 'Empty catalog');
         const first = cat[0];
         assert(first.id.startsWith('javhd:'), 'Invalid ID format');
         assert(first.name, 'Missing name');
+        assert(!first.poster.includes('wsrv.nl'), 'Must not use wsrv.nl');
+        assert(!first.poster.includes('javhdz.bz'), 'Must not use dead javhdz.bz');
+        assert(first.poster.includes('/javhd/poster/') || first.poster.includes('javhdz.wtf'), 'Must use live or edge poster URL');
     });
 
     // 5. JavHD M3U8 on Render (verifying segment URLs route to CF Worker, 0 video proxy)
@@ -84,9 +87,10 @@ async function runTests() {
         const slug = 'toi-da-so-bim-chi-gai-tsubasa-mai-4017';
         const res = await axios.get(`${RENDER_BASE}/javhd/stream/${slug}/1080.m3u8?cfhost=${CF_HOST}`, { timeout: 30000 });
         assert(res.data.includes('#EXTM3U'), 'Invalid M3U8');
+        assert(res.data.includes('segment.ts?url='), 'Must rewrite segments to CF Worker edge');
         const lines = res.data.split('\n');
-        const segLines = lines.filter(l => l.includes('sf16-ads-format-sign.tiktokcdn.com') || l.includes('segment.ts') || l.includes('#EXT-X-STREAM-INF'));
-        assert(segLines.length > 0, 'No segment lines or variant streams found');
+        const segLines = lines.filter(l => l.includes('segment.ts'));
+        assert(segLines.length > 0, 'No segment lines found');
         console.log(`\n     Sample segment URL: ${segLines[0].slice(0, 90)}...`);
     });
 

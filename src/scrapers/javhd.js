@@ -1,7 +1,7 @@
 const axios = require('axios');
 const cache = require('../utils/cache');
 
-const BASE_URL = 'https://javhdz.bz';
+const BASE_URL = 'https://javhdz.wtf';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 const client = axios.create({
@@ -91,7 +91,30 @@ async function ensureStaticCatalog() {
     return cachedCatalog || [];
 }
 
-// Genre to URL mapping on javhdz.bz
+/**
+ * Format poster URL cleanly (replaces dead javhdz.bz, strips wsrv.nl, supports Edge CDN route)
+ */
+function formatPoster(poster, host) {
+    if (!poster) return '';
+    let clean = String(poster).replace(/https?:\/\/wsrv\.nl\/\?url=/g, '').replace(/javhdz\.bz/g, 'javhdz.wtf');
+    try { clean = decodeURIComponent(clean); } catch (e) {}
+    if (clean.startsWith('//')) clean = 'https:' + clean;
+    else if (clean.startsWith('/')) clean = `${BASE_URL}${clean}`;
+    else if (!clean.startsWith('http')) clean = `${BASE_URL}/${clean}`;
+
+    // If host provided and it contains /data/, route through edge poster proxy for 100% reliability
+    if (host && clean.includes('javhdz.wtf/data/')) {
+        const edgeHost = host && !host.includes('onrender.com') ? host : ((typeof process !== 'undefined' && process.env && process.env.CF_HOST) || 'hophimaddon.hophim-4g6qbubt.workers.dev');
+        const edgeBase = edgeHost.includes('://') ? edgeHost : `https://${edgeHost}`;
+        const parts = clean.split('/data/');
+        if (parts[1]) {
+            return `${edgeBase}/javhd/poster/${parts[1]}`;
+        }
+    }
+    return clean;
+}
+
+// Genre to URL mapping on javhdz.wtf
 const GENRE_MAP = {
     'Tất Cả': '/video/',
     'Mới Cập Nhật': '/video/',
@@ -115,7 +138,7 @@ const GENRE_MAP = {
 };
 
 // Parse HTML page containing movie cards
-function parseMovieCards(html) {
+function parseMovieCards(html, host = '') {
     const metas = [];
     const seenSlugs = new Set();
 
@@ -138,16 +161,7 @@ function parseMovieCards(html) {
         let poster = '';
         const imgMatch = fullCard.match(/(?:data-src|src)="([^"]+)"/i);
         if (imgMatch && imgMatch[1]) {
-            poster = imgMatch[1].trim();
-            if (poster.startsWith('//')) {
-                poster = 'https:' + poster;
-            } else if (poster.startsWith('/')) {
-                poster = BASE_URL + poster;
-            } else if (!poster.startsWith('http')) {
-                poster = `${BASE_URL}/${poster}`;
-            }
-            // Proxy qua wsrv.nl để lách nhà mạng VN chặn javhdz.bz
-            poster = `https://wsrv.nl/?url=${encodeURIComponent(poster)}`;
+            poster = formatPoster(imgMatch[1].trim(), host);
         }
 
         let subBadge = '';
@@ -226,7 +240,7 @@ async function fetchPage(targetUrl) {
 /**
  * Get catalog movies for JavHD with live search and infinite pagination
  */
-async function getCatalog(catalogId, type, extra = {}) {
+async function getCatalog(catalogId, type, extra = {}, host = '') {
     try {
         await ensureStaticCatalog();
         const skip = parseInt(extra.skip, 10) || 0;
@@ -235,21 +249,21 @@ async function getCatalog(catalogId, type, extra = {}) {
         // 1. LIVE SEARCH: Searches entire JavHD library + static catalog
         if (extra.search) {
             const query = extra.search.trim();
-            const cacheKey = `javhd:search:${encodeURIComponent(query)}:${page}`;
+            const cacheKey = `javhd:search:${encodeURIComponent(query)}:${page}:${host}`;
             const cached = cache.get(cacheKey);
             if (cached) return cached;
 
             const searchMetas = [];
             const seenSlugs = new Set();
 
-            // Live search on javhdz.bz
+            // Live search on javhdz.wtf
             try {
                 const searchUrl = page > 1 
                     ? `${BASE_URL}/search/${encodeURIComponent(query)}/page/${page}/`
                     : `${BASE_URL}/search/${encodeURIComponent(query)}/`;
                 const html = await fetchPage(searchUrl);
                 if (html) {
-                    const liveItems = parseMovieCards(html);
+                    const liveItems = parseMovieCards(html, host);
                     for (const item of liveItems) {
                         if (!seenSlugs.has(item.id)) {
                             seenSlugs.add(item.id);
@@ -276,7 +290,7 @@ async function getCatalog(catalogId, type, extra = {}) {
                             id: m.id,
                             type: 'movie',
                             name: m.name,
-                            poster: m.poster,
+                            poster: formatPoster(m.poster, host),
                             posterShape: 'poster',
                             description: m.description
                         });
@@ -317,15 +331,15 @@ async function getCatalog(catalogId, type, extra = {}) {
             }
         }
 
-        const cacheKey = `javhd:catalog:${targetUrl}`;
+        const cacheKey = `javhd:catalog:${targetUrl}:${host}`;
         const cached = cache.get(cacheKey);
         if (cached && cached.length > 0) return cached;
 
-        // Try live fetch from javhdz.bz
+        // Try live fetch from javhdz.wtf
         try {
             const html = await fetchPage(targetUrl);
             if (html) {
-                const liveItems = parseMovieCards(html);
+                const liveItems = parseMovieCards(html, host);
                 if (liveItems && liveItems.length > 0) {
                     cache.set(cacheKey, liveItems, 600);
                     return liveItems;
@@ -367,7 +381,7 @@ async function getCatalog(catalogId, type, extra = {}) {
                     id: m.id,
                     type: 'movie',
                     name: m.name,
-                    poster: m.poster && !m.poster.includes('wsrv.nl') ? `https://wsrv.nl/?url=${encodeURIComponent(m.poster)}` : m.poster,
+                    poster: formatPoster(m.poster, host),
                     posterShape: 'poster',
                     description: m.description
                 }));
@@ -384,7 +398,7 @@ async function getCatalog(catalogId, type, extra = {}) {
 /**
  * Get movie metadata from single page or static catalog
  */
-async function getMeta(type, id) {
+async function getMeta(type, id, host = '') {
     try {
         await ensureStaticCatalog();
         const cleanId = id.replace(/^javhd:/, '').replace(/\.json$/, '');
@@ -392,8 +406,8 @@ async function getMeta(type, id) {
 
         if (slugMap && slugMap.has(slug)) {
             const item = slugMap.get(slug);
-            const proxyPoster = item.poster && !item.poster.includes('wsrv.nl') ? `https://wsrv.nl/?url=${encodeURIComponent(item.poster)}` : item.poster;
-            const proxyBg = item.background && !item.background.includes('wsrv.nl') ? `https://wsrv.nl/?url=${encodeURIComponent(item.background)}` : (proxyPoster || '');
+            const proxyPoster = formatPoster(item.poster, host);
+            const proxyBg = formatPoster(item.background || item.poster, host);
             return {
                 id: `javhd:${slug}`,
                 type: 'movie',
@@ -410,7 +424,7 @@ async function getMeta(type, id) {
             };
         }
 
-        const cacheKey = `javhd:meta:${slug}`;
+        const cacheKey = `javhd:meta:${slug}:${host}`;
         const cached = cache.get(cacheKey);
         if (cached) return cached;
 
@@ -431,15 +445,7 @@ async function getMeta(type, id) {
         let poster = '';
         const ogImage = html.match(/property="og:image"\s+content="([^"]+)"/i);
         if (ogImage && ogImage[1]) {
-            poster = ogImage[1].trim();
-            if (poster.startsWith('//')) {
-                poster = 'https:' + poster;
-            } else if (poster.startsWith('/')) {
-                poster = BASE_URL + poster;
-            } else if (!poster.startsWith('http')) {
-                poster = `${BASE_URL}/${poster}`;
-            }
-            poster = `https://wsrv.nl/?url=${encodeURIComponent(poster)}`;
+            poster = formatPoster(ogImage[1].trim(), host);
         }
 
         let description = '';
@@ -549,9 +555,20 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
             }
         });
 
-        // Stream 2: VIP CDN trực tiếp (Tốc độ tối đa, không qua Cloudflare Edge)
+        // Stream 2: Luồng 720p HD Clean qua Cloudflare Edge (Dự phòng & mượt mà trên kết nối yếu)
         streams.push({
-            name: '⚡ JavHD [VIP Direct CDN]',
+            name: '⚡ JavHD [720p HD]',
+            title: `[HD 720p] ${title}\n⚡ Độ Phân Giải 720p • Tối Ưu Băng Thông & Tua Nhanh`,
+            url: `${currentHost}/javhd/stream/${slug}/720.m3u8`,
+            behaviorHints: {
+                notWebReady: false,
+                bingeGroup: 'javhd-720'
+            }
+        });
+
+        // Stream 3: VIP CDN trực tiếp (Tốc độ tối đa, tương thích trình phát hỗ trợ proxyHeaders)
+        streams.push({
+            name: '🔞 JavHD [VIP Direct CDN]',
             title: `[Full HD 1080p] ${title}\n⚡ Luồng Trực Tiếp CDN Gốc • Nhanh & Mượt`,
             url: masterUrl,
             behaviorHints: {
@@ -572,7 +589,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
 }
 
 /**
- * Proxy M3U8 content and unwrap segments
+ * Proxy M3U8 content and unwrap segments (100% flat media playlist matching VLXX)
  */
 async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbubt.workers.dev', env = {}) {
     await ensureStaticCatalog();
@@ -602,7 +619,6 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
 
     const qStr = String(quality).toLowerCase();
     const candidateUrls = [];
-    let isMaster = false;
 
     if (qStr.includes('720')) {
         candidateUrls.push(masterUrl.replace('-playlist.m3u8', '-720.m3u8'));
@@ -612,9 +628,6 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
         candidateUrls.push(masterUrl.replace('-playlist.m3u8', '-480.m3u8'));
         candidateUrls.push(masterUrl.replace('-playlist.m3u8', '-720.m3u8'));
         candidateUrls.push(masterUrl);
-    } else if (qStr.includes('master') || qStr.includes('auto') || qStr.includes('playlist')) {
-        candidateUrls.push(masterUrl);
-        isMaster = true;
     } else {
         candidateUrls.push(masterUrl.replace('-playlist.m3u8', '-1080.m3u8'));
         candidateUrls.push(masterUrl.replace('-playlist.m3u8', '-720.m3u8'));
@@ -630,14 +643,13 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
 
     // 1. Thử tải trực tiếp theo danh sách candidate qualities
     for (const targetM3u8Url of candidateUrls) {
-        if (targetM3u8Url === masterUrl) isMaster = true;
         if (typeof fetch !== 'undefined') {
             try {
                 const res = await fetch(targetM3u8Url, {
                     headers: fetchHeaders,
                     referrer: `${BASE_URL}/`,
                     referrerPolicy: 'unsafe-url',
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(2000) : undefined
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(3500) : undefined
                 });
                 if (res.ok) {
                     const text = await res.text();
@@ -649,7 +661,7 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
             } catch (e) {}
         } else {
             try {
-                const m3u8Res = await client.get(targetM3u8Url, { headers: fetchHeaders, timeout: 2000 });
+                const m3u8Res = await client.get(targetM3u8Url, { headers: fetchHeaders, timeout: 3500 });
                 if (m3u8Res && m3u8Res.data && String(m3u8Res.data).includes('#EXTM3U')) {
                     content = m3u8Res.data;
                     break;
@@ -658,7 +670,7 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
         }
     }
 
-    // 2. Nếu fetch trực tiếp bị 403 (do Cloudflare Worker IP bị CDN chặn) -> Dùng Google Apps Script Resolver
+    // 2. Nếu fetch trực tiếp không thành công -> Dùng GAS / Proxy Resolver
     if (!content || !content.includes('#EXTM3U')) {
         const gasUrl = (env && env.GAS_PROXY_URL) || (env && env.KKPHIM_GAS_PROXY_URL) || (typeof process !== 'undefined' && process.env && process.env.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.GAS_PROXY_URL) || (typeof globalThis !== 'undefined' && globalThis.KKPHIM_GAS_PROXY_URL);
         if (gasUrl) {
@@ -666,7 +678,7 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
                 try {
                     const proxyTarget = `${gasUrl}?url=${encodeURIComponent(targetM3u8Url)}&referer=${encodeURIComponent(BASE_URL + '/')}`;
                     const gasRes = await fetch(proxyTarget, {
-                        signal: AbortSignal.timeout ? AbortSignal.timeout(2000) : undefined
+                        signal: AbortSignal.timeout ? AbortSignal.timeout(3500) : undefined
                     });
                     if (gasRes.ok) {
                         const text = await gasRes.text();
@@ -680,37 +692,84 @@ async function getM3u8(slug, quality = '1080', host = 'hophimaddon.hophim-4g6qbu
         }
     }
 
-    if (!content || !content.includes('#EXTM3U')) {
-        const fallbackTarget = candidateUrls[0] || masterUrl;
-        return `#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=3000000\n${fallbackTarget}\n`;
-    }
-
-    if (typeof content === 'string') {
-        if (isMaster) {
-            content = content.replace(/javhd-\d+-(\d+)\.m3u8/g, (match, p1) => {
-                return `${hostBase}/javhd/stream/${slug}/${p1}.m3u8`;
-            });
-        } else {
-            const edgeHost = host && !host.includes('onrender.com') ? host : ((typeof process !== 'undefined' && process.env && process.env.CF_HOST) || 'hophimaddon.hophim-4g6qbubt.workers.dev');
-            const edgeBase = edgeHost.includes('://') ? edgeHost : `https://${edgeHost}`;
-            const segmentBase = `${edgeBase}/javhd/segment.ts`;
-            const separator = segmentBase.includes('?') ? '&' : '?';
-            const lines = content.split('\n');
-            const rewritten = lines.map(line => {
-                const trimmed = line.trim();
-                if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-                    return `${segmentBase}${separator}url=${encodeURIComponent(trimmed)}`;
+    // 3. Nếu content nhận được là Master Playlist (#EXT-X-STREAM-INF), lấy sub-variant thích hợp và fetch media playlist
+    if (content && content.includes('#EXT-X-STREAM-INF')) {
+        const lines = content.split('\n');
+        let selectedSub = '';
+        for (let i = 0; i < lines.length; i++) {
+            const l = lines[i].trim();
+            if (l.startsWith('#EXT-X-STREAM-INF')) {
+                const nextLine = (lines[i + 1] || '').trim();
+                if (nextLine && !nextLine.startsWith('#')) {
+                    if (qStr.includes('720') && nextLine.includes('720')) {
+                        selectedSub = nextLine;
+                        break;
+                    } else if (qStr.includes('480') && nextLine.includes('480')) {
+                        selectedSub = nextLine;
+                        break;
+                    } else if (nextLine.includes('1080')) {
+                        selectedSub = nextLine;
+                        break;
+                    } else if (!selectedSub) {
+                        selectedSub = nextLine;
+                    }
                 }
-                return line;
-            });
-            content = rewritten.join('\n');
+            }
+        }
+
+        if (selectedSub) {
+            let subTargetUrl = selectedSub;
+            if (!subTargetUrl.startsWith('http')) {
+                const baseDir = masterUrl.substring(0, masterUrl.lastIndexOf('/') + 1);
+                subTargetUrl = baseDir + selectedSub;
+            }
+            try {
+                if (typeof fetch !== 'undefined') {
+                    const subRes = await fetch(subTargetUrl, {
+                        headers: fetchHeaders,
+                        referrer: `${BASE_URL}/`,
+                        referrerPolicy: 'unsafe-url',
+                        signal: AbortSignal.timeout ? AbortSignal.timeout(3500) : undefined
+                    });
+                    if (subRes.ok) {
+                        const subText = await subRes.text();
+                        if (subText && subText.includes('#EXTM3U')) {
+                            content = subText;
+                        }
+                    }
+                } else {
+                    const subRes = await client.get(subTargetUrl, { headers: fetchHeaders, timeout: 3500 });
+                    if (subRes && subRes.data && String(subRes.data).includes('#EXTM3U')) {
+                        content = subRes.data;
+                    }
+                }
+            } catch (errSub) {}
         }
     }
 
-    if (content) {
-        cache.set(cacheKey, content, 900);
+    if (!content || !content.includes('#EXTM3U')) {
+        throw new Error('Could not retrieve JavHD stream playlist');
     }
-    return content;
+
+    // 4. Chuẩn hóa media playlist giống hệt VLXX: Rewrite TẤT CẢ các segment URL sang Cloudflare Edge unwrapper
+    const edgeHost = host && !host.includes('onrender.com') ? host : ((typeof process !== 'undefined' && process.env && process.env.CF_HOST) || 'hophimaddon.hophim-4g6qbubt.workers.dev');
+    const edgeBase = edgeHost.includes('://') ? edgeHost : `https://${edgeHost}`;
+    const segmentBase = `${edgeBase}/javhd/segment.ts`;
+    const separator = segmentBase.includes('?') ? '&' : '?';
+
+    const lines = content.split('\n');
+    const rewritten = lines.map(line => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+            return `${segmentBase}${separator}url=${encodeURIComponent(trimmed)}`;
+        }
+        return line;
+    }).join('\n');
+
+    if (rewritten) {
+        cache.set(cacheKey, rewritten, 1800);
+    }
+    return rewritten;
 }
 
 module.exports = {

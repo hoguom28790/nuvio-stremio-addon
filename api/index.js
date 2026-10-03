@@ -127,12 +127,21 @@ app.get('/javhd/stream/:slug/:quality.m3u8', async (req, res) => {
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', '*');
-        res.setHeader('Cache-Control', 'max-age=600, stale-while-revalidate=1200, public');
+        res.setHeader('Cache-Control', 'max-age=900, stale-while-revalidate=1800, public');
         res.send(playlist);
     } catch (err) {
         console.error('[JavHD M3U8 Error]:', err.message);
         res.status(500).send('Error generating playlist');
     }
+});
+
+// JavHD Poster Proxy: Redirect 302 to Cloudflare Worker edge (0 bandwidth on Render)
+app.get('/javhd/poster/:name', (req, res) => {
+    const cfHost = process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    return res.redirect(302, `https://${cfHost}/javhd/poster/${encodeURIComponent(req.params.name)}`);
 });
 
 // JavHD Segment Unwrapper: Redirect 302 to Cloudflare Worker edge to conserve Render bandwidth
