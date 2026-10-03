@@ -104,8 +104,9 @@ async function handleResource(req, res, config) {
 // HentaiZ HLS M3U8 Stream Delivery Route
 app.get('/hentaiz/stream/:videoId/:quality.m3u8', async (req, res) => {
     const { videoId, quality } = req.params;
+    const cfHost = req.query.cfhost || process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
     try {
-        const playlist = await hentaiz.getM3u8(videoId, quality);
+        const playlist = await hentaiz.getM3u8(videoId, quality, cfHost);
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
@@ -114,9 +115,62 @@ app.get('/hentaiz/stream/:videoId/:quality.m3u8', async (req, res) => {
         res.send(playlist);
     } catch (err) {
         console.error('[HentaiZ M3U8 Error]:', err.message);
+        res.setHeader('Access-Control-Allow-Origin', '*');
         res.status(500).send('Error generating playlist');
     }
 });
+
+// HentaiZ Segment Route
+// - ?stream=1 (Cloudflare Worker fallback when the edge IP is blocked by c1.animez.top): fetch here, return only the TS payload
+// - otherwise: 302 to the Cloudflare Worker edge (0 Render bandwidth)
+app.get('/hentaiz/segment.ts', async (req, res) => {
+    const rawUrl = req.query.url;
+    if (!rawUrl) return res.status(400).send('Missing url');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    if (req.query.stream !== '1') {
+        const cfHost = process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
+        const qsExtra = req.query.o !== undefined && req.query.l !== undefined ? `&o=${req.query.o}&l=${req.query.l}` : '';
+        return res.redirect(302, `https://${cfHost}/hentaiz/segment.ts?url=${encodeURIComponent(rawUrl)}${qsExtra}`);
+    }
+    let u;
+    try { u = new URL(rawUrl); } catch (e) { return res.status(400).send('Bad url'); }
+    if (!(u.hostname === 'animez.top' || u.hostname.endsWith('.animez.top'))) {
+        return res.status(403).send('Host not allowed');
+    }
+    try {
+        const up = await axios.get(rawUrl, {
+            responseType: 'arraybuffer',
+            timeout: 20000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'Referer': 'https://x.haiten.org/',
+                'Origin': 'https://x.haiten.org'
+            }
+        });
+        const buf = Buffer.from(up.data);
+        let start = 0;
+        let end = buf.length;
+        if (req.query.o !== undefined && req.query.l !== undefined) {
+            start = parseInt(req.query.o, 10);
+            end = Math.min(buf.length, start + parseInt(req.query.l, 10));
+        } else {
+            const iend = buf.indexOf(Buffer.from('IEND'));
+            if (iend >= 0) start = iend + 8;
+        }
+        if (!(start < end) || buf[start] !== 0x47) {
+            return res.status(502).send('Unexpected segment payload');
+        }
+        res.setHeader('Content-Type', 'video/mp2t');
+        res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400, immutable');
+        res.send(buf.subarray(start, end));
+    } catch (err) {
+        const status = err.response && err.response.status ? err.response.status : 502;
+        res.status(status).send('Upstream error: ' + (err.message || status));
+    }
+});
+
 
 // JavHD HLS M3U8 Stream Delivery Route
 app.get('/javhd/stream/:slug/:quality.m3u8', async (req, res) => {

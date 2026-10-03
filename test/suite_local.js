@@ -184,6 +184,23 @@ async function runLocalSuite() {
             assert(segRes.data.length > 1000, 'Segment body must be non-empty video chunk');
         });
 
+        // 15. HentaiZ master + variant playlists must only reference the Worker (CORS + Referer) and carry no BYTERANGE
+        await testCase('15. HentaiZ master/variant playlists route via Worker (no direct CDN, no BYTERANGE)', async () => {
+            const vid = 'c3dc551e-36e9-4685-961c-e2ce25cf6e7c';
+            const m = await axios.get(`${BASE}/hentaiz/stream/${vid}/master.m3u8?cfhost=edge.example.dev`, { timeout: 15000 });
+            assert.strictEqual(m.headers['access-control-allow-origin'], '*');
+            assert(m.data.includes('#EXT-X-STREAM-INF'), 'master must list variants');
+            assert(!m.data.includes('animez.top'), 'master must not point at the raw CDN');
+            const variantLine = m.data.split('\n').map(s => s.trim()).filter(l => l.startsWith('https://')).pop();
+            assert(variantLine.startsWith('https://edge.example.dev/hentaiz/stream/'), 'variant must point at the Worker');
+            const v = await axios.get(variantLine.replace('https://edge.example.dev', BASE), { timeout: 15000 });
+            assert(!v.data.includes('#EXT-X-BYTERANGE'), 'BYTERANGE must be resolved at the edge');
+            assert(!v.data.includes('https://c1.animez.top'), 'segments must not point at the raw CDN');
+            const segs = v.data.split('\n').filter(l => l.includes('/hentaiz/segment.ts'));
+            assert(segs.length > 0, 'must have worker segment URLs');
+            assert(/[?&]o=\d+&l=\d+/.test(segs[0]), 'segment must carry offset/length');
+        });
+
     } finally {
         server.close();
     }

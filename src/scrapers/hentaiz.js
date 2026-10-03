@@ -812,15 +812,14 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
             });
         }
 
-        // 3. Server Reconstructed Stream (Backup route)
-        streams.push({
-            name: '🔞 HentaiZ [Dự phòng]',
-            title: `[Server Proxy] ${cleanTitle}\n⚡ Tuyến dự phòng định tuyến máy chủ`,
+        // 3. Cloudflare Edge Proxy (CORS + haiten.org Referer) - FIRST so Stremio Web / Nuvio Web pick a playable stream
+        streams.unshift({
+            name: '🛡️ HentaiZ [Edge Proxy]',
+            title: `[Auto 480p-1080p] ${cleanTitle}\n🛡️ Qua Cloudflare Edge • Chạy mọi nền tảng (Stremio Web, Nuvio Web, TV)`,
             url: `${hostBase}/hentaiz/stream/${videoId}/master.m3u8`,
             behaviorHints: {
                 notWebReady: false,
-                bingeGroup: 'hentaiz-proxy',
-                proxyHeaders: proxyHeaders
+                bingeGroup: 'hentaiz-proxy'
             }
         });
 
@@ -836,8 +835,14 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
 
 /**
  * 4. GET RECONSTRUCTED M3U8 CONTENT
+ *
+ * c1.animez.top refuses requests without a haiten.org Referer and sends no CORS headers, so browser players
+ * (Stremio Web / Nuvio Web) can never use its URLs directly. Everything is therefore routed through the
+ * Cloudflare Worker (`host`):
+ *  - master  -> variants point at /hentaiz/stream/:videoId/:q.m3u8
+ *  - variant -> every PNG-wrapped segment points at /hentaiz/segment.ts (o/l = byte offset/length of the TS payload)
  */
-async function getM3u8(videoId, quality) {
+async function getM3u8(videoId, quality, host = 'hophimaddon.hophim-4g6qbubt.workers.dev') {
     const streamMap = getCachedStreams();
     let streamData = streamMap[videoId];
 
@@ -851,15 +856,23 @@ async function getM3u8(videoId, quality) {
 
     const { defaultM3u8, segmentDomains = ['https://c1.animez.top'] } = streamData;
     const cdnDomain = segmentDomains[0] || 'https://c1.animez.top';
+    const edgeBase = host.includes('://') ? host : `https://${host}`;
 
     if (quality === 'master') {
-        let master = defaultM3u8.master;
-        // Rewrite variant paths to absolute CDN URLs so EVERY variant works!
-        const variantMatches = [...master.matchAll(/([^\s\n]+\/playlist\.m3u8)/g)].map(m => m[1]);
-        variantMatches.forEach(match => {
-            master = master.replace(match, `${cdnDomain}/${videoId}/${match}`);
+        const infos = defaultM3u8.master.split('\n')
+            .map(l => l.trim())
+            .filter(l => l.startsWith('#EXT-X-STREAM-INF'));
+        const out = ['#EXTM3U', '#EXT-X-VERSION:6'];
+        const n = infos.length;
+        infos.forEach((inf, i) => {
+            const q = i === n - 1 ? '2' : String(i);
+            if (!defaultM3u8.playlists?.[q]) return;
+            out.push(inf, `${edgeBase}/hentaiz/stream/${videoId}/${q}.m3u8`);
         });
-        return master;
+        if (out.length === 2) {
+            out.push('#EXT-X-STREAM-INF:BANDWIDTH=4000000', `${edgeBase}/hentaiz/stream/${videoId}/2.m3u8`);
+        }
+        return out.join('\n') + '\n';
     }
 
     const rawPlaylist = defaultM3u8.playlists?.[quality] ||
@@ -882,19 +895,31 @@ async function getM3u8(videoId, quality) {
     const variantCode = variantPath.replace('playlist.m3u8', '').replace(/\/+$/, '');
 
     const lines = rawPlaylist.split('\n');
-    let segIdx = 0;
+    let pendingRange = null;
+    const out = [];
 
-    const rewrittenLines = lines.map(line => {
+    for (const line of lines) {
         const trimmed = line.trim();
+        const br = trimmed.match(/^#EXT-X-BYTERANGE:(\d+)(?:@(\d+))?/);
+        if (br) {
+            // Byte ranges are resolved by the edge segment route; otherwise hls.js would send Range requests
+            pendingRange = { l: br[1], o: br[2] };
+            continue;
+        }
         if (trimmed.endsWith('.png')) {
             const domain = segmentDomains[0] || cdnDomain;
             const segBase = trimmed.replace('.png', '');
-            return `${domain}/${videoId}/${variantCode}/${segBase}.png`;
+            const raw = `${domain}/${videoId}/${variantCode}/${segBase}.png`;
+            let u = `${edgeBase}/hentaiz/segment.ts?url=${encodeURIComponent(raw)}`;
+            if (pendingRange && pendingRange.o !== undefined) u += `&o=${pendingRange.o}&l=${pendingRange.l}`;
+            pendingRange = null;
+            out.push(u);
+            continue;
         }
-        return line;
-    });
+        out.push(line);
+    }
 
-    return rewrittenLines.join('\n');
+    return out.join('\n');
 }
 
 module.exports = {

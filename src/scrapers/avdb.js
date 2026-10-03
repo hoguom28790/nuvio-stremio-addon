@@ -130,7 +130,8 @@ async function getMeta(type, id) {
     }
 }
 
-async function fetchText(url, referer, env = {}) {
+async function fetchText(url, referer, env = {}, opts = {}) {
+    const timeoutMs = opts.timeout || 5000;
     const headers = {
         'User-Agent': USER_AGENT,
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
@@ -147,14 +148,15 @@ async function fetchText(url, referer, env = {}) {
                 headers,
                 referrer: referer || undefined,
                 referrerPolicy: referer ? 'unsafe-url' : 'no-referrer',
-                signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined
+                signal: AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined
             });
             if (res.ok) return await res.text();
         } catch (e) {}
+        if (opts.singleAttempt) throw new Error(`Failed to fetch text from ${url}`);
     }
 
     try {
-        const res = await axios.get(url, { headers, timeout: 5000 });
+        const res = await axios.get(url, { headers, timeout: timeoutMs });
         if (res && res.data) {
             return typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
         }
@@ -258,7 +260,16 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
  *  - segmentMode 'edge'   : minted by the Cloudflare Worker -> segments proxied directly by the Worker (0 Render bandwidth)
  *  - segmentMode 'render' : minted by Render -> segments go Worker -> Render (?stream=1) so the IP matches
  */
-async function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', directUrl = null, env = {}, segmentMode = 'edge') {
+const inflightM3u8 = new Map();
+function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', directUrl = null, env = {}, segmentMode = 'edge') {
+    const key = `${slug}|${host}|${segmentMode}|${directUrl || ''}`;
+    if (inflightM3u8.has(key)) return inflightM3u8.get(key);
+    const p = getM3u8Impl(slug, host, directUrl, env, segmentMode).finally(() => inflightM3u8.delete(key));
+    inflightM3u8.set(key, p);
+    return p;
+}
+
+async function getM3u8Impl(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', directUrl = null, env = {}, segmentMode = 'edge') {
     const cacheKey = `avdb:m3u8:${slug}:${host}:${segmentMode}`;
     const cached = cache.get(cacheKey);
     if (cached) return cached;
@@ -274,29 +285,27 @@ async function getM3u8(slug, host = 'hophimaddon.hophim-4g6qbubt.workers.dev', d
         }
     }
 
-    // 2. Embed HTML scraping (directly from upload18.com / upload18.org) - mints a token for THIS machine's IP
+    // 2. Embed HTML scraping (upload18.com / upload18.org raced in parallel) - mints a token for THIS machine's IP
     if (!content || !content.includes('#EXTM3U')) {
         content = null;
         const embedUrls = [
             `https://upload18.com/play/index/${slug}`,
             `https://upload18.org/play/index/${slug}`
         ];
-        for (const url of embedUrls) {
-            try {
-                const html = await fetchText(url, null, env);
-                if (html && html.includes('"m3u8"')) {
-                    const match = html.match(/"m3u8":\s*"([^"]+)"/);
-                    if (match) {
-                        const m3u8Url = JSON.parse(`"${match[1]}"`);
-                        const ref = url.includes('upload18.com') ? 'https://upload18.com/' : 'https://upload18.org/';
-                        const text = await fetchText(m3u8Url, ref, env);
-                        if (text && text.includes('#EXTM3U')) {
-                            content = text;
-                            break;
-                        }
-                    }
-                }
-            } catch (e) {}
+        const mint = async (url) => {
+            const html = await fetchText(url, null, env, { timeout: 8000, singleAttempt: true });
+            const match = html && html.match(/"m3u8":\s*"([^"]+)"/);
+            if (!match) throw new Error('no m3u8 in embed');
+            const m3u8Url = JSON.parse(`"${match[1]}"`);
+            const ref = url.includes('upload18.com') ? 'https://upload18.com/' : 'https://upload18.org/';
+            const text = await fetchText(m3u8Url, ref, env, { timeout: 8000, singleAttempt: true });
+            if (!text || !text.includes('#EXTM3U')) throw new Error('invalid playlist');
+            return text;
+        };
+        try {
+            content = await Promise.any(embedUrls.map(mint));
+        } catch (e) {
+            content = null;
         }
     }
 

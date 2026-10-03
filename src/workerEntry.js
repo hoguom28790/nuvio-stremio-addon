@@ -149,6 +149,8 @@ async function handleSegmentProxy(targetUrl, referer) {
     }
 }
 
+let lastRenderWarm = 0;
+
 export default {
     async fetch(request, env, ctx) {
         if (request.method === 'OPTIONS') {
@@ -158,6 +160,12 @@ export default {
         const url = new URL(request.url);
         const host = url.host;
         const pathname = url.pathname;
+
+        // Wake Render in the background while the user is just browsing (it sleeps on the free plan)
+        if (ctx && ctx.waitUntil && /\/(catalog|meta|stream)\//.test(pathname) && Date.now() - lastRenderWarm > 240000) {
+            lastRenderWarm = Date.now();
+            ctx.waitUntil(fetch(`${RENDER_BASE}/ping`, { headers: { 'User-Agent': 'Mozilla/5.0' } }).catch(() => {}));
+        }
 
         // 1. Static / Favicon / Logo
         // 0. Keepalive ping endpoint (used by GitHub Actions cron to prevent Render.com from sleeping)
@@ -264,6 +272,56 @@ export default {
             return proxyViaRender(`${RENDER_BASE}/missav/segment.ts?stream=1&url=${encodeURIComponent(rawUrl)}`);
         }
 
+        // 5e. HentaiZ Segment (PNG-wrapped TS on c1.animez.top: needs haiten.org Referer, no CORS upstream)
+        if (pathname === '/hentaiz/segment.ts') {
+            const rawUrl = url.searchParams.get('url');
+            if (!rawUrl) return new Response('Missing url parameter', { status: 400, headers: CORS_HEADERS });
+            let target;
+            try { target = new URL(rawUrl); } catch (e) { return new Response('Bad url', { status: 400, headers: CORS_HEADERS }); }
+            if (!(target.hostname === 'animez.top' || target.hostname.endsWith('.animez.top'))) {
+                return new Response('Host not allowed', { status: 403, headers: CORS_HEADERS });
+            }
+            const o = url.searchParams.get('o');
+            const l = url.searchParams.get('l');
+            const hasRange = o !== null && l !== null;
+            const tsHeaders = {
+                ...CORS_HEADERS,
+                'Content-Type': 'video/mp2t',
+                'Cache-Control': 'public, max-age=86400, s-maxage=86400, immutable'
+            };
+            try {
+                const upstream = await fetch(rawUrl, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                        'Referer': 'https://x.haiten.org/',
+                        'Origin': 'https://x.haiten.org'
+                    },
+                    cf: { cacheEverything: true, cacheTtlByStatus: { '200-299': 86400, '300-599': 0 } }
+                });
+                if (upstream.ok) {
+                    const buf = new Uint8Array(await upstream.arrayBuffer());
+                    let start = 0;
+                    let end = buf.length;
+                    if (hasRange) {
+                        start = parseInt(o, 10);
+                        end = Math.min(buf.length, start + parseInt(l, 10));
+                    } else {
+                        // No byte-range: skip the PNG wrapper (everything up to and including the IEND chunk CRC)
+                        for (let i = 0; i < buf.length - 8; i++) {
+                            if (buf[i] === 0x49 && buf[i + 1] === 0x45 && buf[i + 2] === 0x4e && buf[i + 3] === 0x44) { start = i + 8; break; }
+                        }
+                    }
+                    if (start < end && buf[start] === 0x47) {
+                        return new Response(buf.slice(start, end), { status: 200, headers: tsHeaders });
+                    }
+                }
+            } catch (e) {}
+            // Edge blocked / rate limited by c1.animez.top -> bridge through Render (different IP), cached at the edge
+            let renderUrl = `${RENDER_BASE}/hentaiz/segment.ts?stream=1&url=${encodeURIComponent(rawUrl)}`;
+            if (hasRange) renderUrl += `&o=${o}&l=${l}`;
+            return proxyViaRender(renderUrl);
+        }
+
 
         // 6. JavHD M3U8 Stream
         const javhdMatch = pathname.match(/^\/javhd\/stream\/([^/]+)\/([^/]+)\.m3u8$/);
@@ -368,7 +426,7 @@ export default {
         if (hentaizMatch) {
             const [, videoId, quality] = hentaizMatch;
             try {
-                const playlist = await hentaiz.getM3u8(videoId, quality);
+                const playlist = await hentaiz.getM3u8(videoId, quality, host);
                 return new Response(playlist, {
                     headers: {
                         ...CORS_HEADERS,
