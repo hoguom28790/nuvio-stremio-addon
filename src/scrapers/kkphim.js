@@ -144,62 +144,90 @@ async function getMeta(type, id) {
     }
 }
 
-function cleanM3u8(content, baseUrl) {
-    const lines = content.split(/\r?\n/);
-    const cleanedLines = [];
-    let currentTags = [];
-    let inAdBlock = false;
+const AD_URI_RE = /convertv\d*\/|\/v\d+\/.*segment_|segment_\d{4}/i;
+const HEADER_TAG_RE = /^#(EXTM3U|EXT-X-VERSION|EXT-X-TARGETDURATION|EXT-X-MEDIA-SEQUENCE|EXT-X-DISCONTINUITY-SEQUENCE|EXT-X-PLAYLIST-TYPE|EXT-X-ALLOW-CACHE|EXT-X-INDEPENDENT-SEGMENTS)/;
+const MAX_AD_BLOCK_SECONDS = 90;
 
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const trimmed = line.trim();
-        if (!trimmed) continue;
+function segmentDir(uri) {
+    const q = uri.split(/[?#]/)[0];
+    return q.slice(0, q.lastIndexOf('/') + 1);
+}
 
-        if (trimmed.startsWith('#')) {
-            currentTags.push(line);
-        } else {
-            // URI line - check for KKPhim / Ophim ad patterns
-            const isAd = /convertv\d*\/|\/v\d+\/.*segment_|segment_\d{4}/i.test(trimmed);
-            if (isAd) {
-                currentTags = [];
-                inAdBlock = true;
-            } else {
-                if (inAdBlock) {
-                    for (let k = currentTags.length - 1; k >= 0; k--) {
-                        const tag = currentTags[k].trim();
-                        if (tag.startsWith('#EXT-X-DISCONTINUITY') || tag.startsWith('#EXT-X-KEY:METHOD=NONE')) {
-                            currentTags.splice(k, 1);
-                        }
-                    }
-                    inAdBlock = false;
-                }
-
-                while (cleanedLines.length > 0 && cleanedLines[cleanedLines.length - 1].trim().startsWith('#EXT-X-DISCONTINUITY')) {
-                    cleanedLines.pop();
-                }
-
-                for (const tag of currentTags) {
-                    cleanedLines.push(tag);
-                }
-
-                // Convert relative segment paths to absolute URLs so client fetches directly from CDN
-                if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-                    const fullUrl = new URL(trimmed, baseUrl).toString();
-                    cleanedLines.push(fullUrl);
-                } else {
-                    cleanedLines.push(line);
-                }
-
-                currentTags = [];
-            }
+// Parse a media playlist into header tags, segment entries ({tags, uri, dur, disc, dir}) and trailing tags
+function parseMedia(content, baseUrl) {
+    const header = [];
+    const entries = [];
+    const tail = [];
+    let pending = [];
+    for (const raw of content.split(/\r?\n/)) {
+        const line = raw.trim();
+        if (!line) continue;
+        if (line.startsWith('#')) {
+            if (!entries.length && HEADER_TAG_RE.test(line)) header.push(raw);
+            else pending.push(raw);
+            continue;
         }
+        const uri = /^https?:\/\//i.test(line) ? line : new URL(line, baseUrl).toString();
+        const inf = pending.find(t => t.startsWith('#EXTINF'));
+        entries.push({
+            tags: pending,
+            uri,
+            dur: inf ? parseFloat(inf.slice(8)) || 0 : 0,
+            disc: pending.some(t => t.trim().startsWith('#EXT-X-DISCONTINUITY') && !t.trim().startsWith('#EXT-X-DISCONTINUITY-SEQUENCE')),
+            dir: segmentDir(uri)
+        });
+        pending = [];
     }
+    tail.push(...pending);
+    return { header, entries, tail };
+}
 
-    for (const tag of currentTags) {
-        cleanedLines.push(tag);
+// Mark ad entries: URL pattern match, plus structural detection of short DISCONTINUITY-bounded blocks that live in a
+// different directory/host than the main feature (ad URLs change between providers, the structure does not).
+function markAds(entries) {
+    const blocks = [];
+    entries.forEach((e, i) => {
+        if (e.disc || !blocks.length) blocks.push({ from: i, to: i });
+        else blocks[blocks.length - 1].to = i;
+    });
+    for (const e of entries) e.ad = AD_URI_RE.test(e.uri);
+    if (blocks.length < 2) return;
+
+    const dirTime = new Map();
+    for (const e of entries) if (!e.ad) dirTime.set(e.dir, (dirTime.get(e.dir) || 0) + (e.dur || 1));
+    let mainDir = null, mainTime = 0;
+    for (const [d, t] of dirTime) if (t > mainTime) { mainDir = d; mainTime = t; }
+
+    for (const b of blocks) {
+        const slice = entries.slice(b.from, b.to + 1);
+        if (slice.every(e => e.ad)) continue;
+        const dur = slice.reduce((n, e) => n + (e.dur || 1), 0);
+        const foreign = slice.every(e => e.dir !== mainDir);
+        if (foreign && dur <= MAX_AD_BLOCK_SECONDS && dur < mainTime * 0.2) slice.forEach(e => { e.ad = true; });
     }
+}
 
-    return cleanedLines.join('\n');
+function cleanM3u8(content, baseUrl) {
+    const { header, entries, tail } = parseMedia(content, baseUrl);
+    markAds(entries);
+
+    const out = [...header];
+    let afterAd = false;
+    for (const e of entries) {
+        if (e.ad) { afterAd = true; continue; }
+        let tags = e.tags;
+        if (afterAd) {
+            tags = tags.filter(t => {
+                const x = t.trim();
+                if (x.startsWith('#EXT-X-DISCONTINUITY-SEQUENCE')) return true;
+                return !x.startsWith('#EXT-X-DISCONTINUITY') && !x.startsWith('#EXT-X-KEY:METHOD=NONE');
+            });
+            afterAd = false;
+        }
+        out.push(...tags, e.uri);
+    }
+    out.push(...tail);
+    return out.join('\n');
 }
 
 function processCleanM3u8(content, targetUrl, host = '') {
@@ -226,67 +254,54 @@ function processCleanM3u8(content, targetUrl, host = '') {
     return cleanM3u8(content, targetUrl);
 }
 
-// Pick the highest-bandwidth variant of a master playlist (absolute URL), or null for a media playlist
-function pickBestVariant(content, baseUrl) {
-    if (!content.includes('#EXT-X-STREAM-INF')) return null;
+// Absolute URLs of every variant in a master playlist ([] for a media playlist)
+function listVariants(content, baseUrl) {
+    if (!content.includes('#EXT-X-STREAM-INF')) return [];
     const lines = content.split(/\r?\n/);
-    let best = null;
-    let bestBw = -1;
+    const out = [];
     for (let i = 0; i < lines.length; i++) {
         if (!lines[i].startsWith('#EXT-X-STREAM-INF')) continue;
         const next = (lines[i + 1] || '').trim();
-        if (!next || next.startsWith('#')) continue;
-        const bw = parseInt((lines[i].match(/BANDWIDTH=(\d+)/) || [])[1] || '0', 10);
-        if (bw > bestBw) { bestBw = bw; best = new URL(next, baseUrl).toString(); }
+        if (next && !next.startsWith('#')) out.push(new URL(next, baseUrl).toString());
     }
-    return best;
+    return out;
 }
 
-// Direct fetch first; the KKPhim-family CDNs geo-block non-VN IPs (404), so fall back to a Vietnam proxy:
-// `opts.fetchText` on Cloudflare Workers (raw sockets), the Node proxy pool on Render.
+// Race a direct fetch against the Vietnam proxy: the KKPhim-family CDNs geo-block non-VN IPs (404), so on cloud hosts
+// direct usually loses, but where it works it wins instantly. Running them in parallel avoids paying the direct
+// timeout before the proxy even starts. `opts.fetchText` = Workers raw sockets; otherwise the Node proxy pool (Render).
 async function fetchPlaylistText(targetUrl, fetchHeaders, opts = {}) {
-    let content = '';
-    if (typeof fetch === 'function') {
-        try {
+    const valid = t => typeof t === 'string' && t.includes('#EXTM3U');
+    const must = t => { if (!valid(t)) throw new Error('not m3u8'); return t; };
+
+    const direct = async () => {
+        if (typeof fetch === 'function') {
             const res = await fetch(targetUrl, {
                 headers: fetchHeaders,
-                signal: AbortSignal.timeout ? AbortSignal.timeout(1500) : undefined
+                signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined
             });
-            if (res.ok) {
-                const txt = await res.text();
-                if (typeof txt === 'string' && txt.includes('#EXTM3U')) {
-                    content = txt;
-                }
-            }
-        } catch (e) {}
-    } else {
-        try {
-            const res = await axios.get(targetUrl, {
-                headers: fetchHeaders,
-                timeout: 1500
-            });
-            if (res.data && typeof res.data === 'string' && res.data.includes('#EXTM3U')) {
-                content = res.data;
-            }
-        } catch (e) {}
-    }
-
-    // If direct fetch failed (e.g. 404 geo-block on cloud servers), try Vietnam proxy pool
-    if (!content || !content.includes('#EXTM3U')) {
-        if (typeof opts.fetchText === 'function') {
-            try {
-                content = await opts.fetchText(targetUrl, { headers: fetchHeaders });
-            } catch (proxyErr) {}
-        } else {
-            const fetcher = getVnProxyFetcher();
-            if (fetcher && typeof fetcher.fetchM3u8ViaVnProxy === 'function') {
-                try {
-                    content = await fetcher.fetchM3u8ViaVnProxy(targetUrl);
-                } catch (proxyErr) {}
-            }
+            if (!res.ok) throw new Error('direct ' + res.status);
+            return must(await res.text());
         }
+        const res = await axios.get(targetUrl, { headers: fetchHeaders, timeout: 4000, responseType: 'text' });
+        return must(res.data);
+    };
+
+    const viaProxy = async () => {
+        if (typeof opts.fetchText === 'function') {
+            return must(await opts.fetchText(targetUrl, { headers: fetchHeaders }));
+        }
+        const fetcher = getVnProxyFetcher();
+        if (!fetcher || typeof fetcher.fetchM3u8ViaVnProxy !== 'function') throw new Error('no proxy');
+        return must(await fetcher.fetchM3u8ViaVnProxy(targetUrl));
+    };
+
+    try {
+        return await Promise.any([direct(), viaProxy()]);
+    } catch (e) {
+        // one more proxy round (proxies are free/flaky) before giving up
+        try { return await viaProxy(); } catch (e2) { return ''; }
     }
-    return typeof content === 'string' && content.includes('#EXTM3U') ? content : '';
 }
 
 async function getCleanM3u8(targetUrl, host = 'localhost', opts = {}) {
@@ -307,15 +322,16 @@ async function getCleanM3u8(targetUrl, host = 'localhost', opts = {}) {
             return `#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=3000000\n${targetUrl}\n`;
         }
 
-        // Master playlist: resolve the best variant now and return its cleaned media playlist directly,
-        // saving the player a round trip (and a second geo-blocked fetch).
+        // Master playlist with a single variant: return its cleaned media playlist directly (saves a round trip).
+        // With several variants keep the master (variants rewritten to /kkphim/clean.m3u8) so the player's ABR can
+        // start low and seeking does not always pull the heaviest 1080p segments.
         let mediaUrl = targetUrl;
-        const variantUrl = pickBestVariant(content, targetUrl);
-        if (variantUrl) {
-            const variant = await fetchPlaylistText(variantUrl, fetchHeaders, opts);
+        const variants = listVariants(content, targetUrl);
+        if (variants.length === 1) {
+            const variant = await fetchPlaylistText(variants[0], fetchHeaders, opts);
             if (variant.includes('#EXTINF')) {
                 content = variant;
-                mediaUrl = variantUrl;
+                mediaUrl = variants[0];
             }
         }
 
@@ -382,7 +398,7 @@ async function getStream(id, type, host = '') {
     }
 }
 
-module.exports = { getCatalog, getMeta, getStream, getCleanM3u8, cleanM3u8, processCleanM3u8, formatPoster };
+module.exports = { listVariants, getCatalog, getMeta, getStream, getCleanM3u8, cleanM3u8, processCleanM3u8, formatPoster };
 
 
 
