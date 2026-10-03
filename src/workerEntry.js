@@ -611,6 +611,36 @@ export default {
             }
         }
 
+        // 8d. KKPhim diagnostics: shows which stage (direct / VN proxy) works for a playlist URL and how many ads are cut
+        if (pathname === '/kkphim/debug') {
+            const targetUrl = url.searchParams.get('url');
+            if (!targetUrl) return new Response('Missing url query parameter', { status: 400, headers: CORS_HEADERS });
+            const hdrs = { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://player.phimapi.com/', 'Origin': 'https://player.phimapi.com' };
+            const report = { url: targetUrl, isWorker: IS_CF_WORKER };
+            const t0 = Date.now();
+            try {
+                const r = await fetch(targetUrl, { headers: hdrs, signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined });
+                const txt = await r.text();
+                report.direct = { status: r.status, m3u8: txt.includes('#EXTM3U'), ms: Date.now() - t0 };
+            } catch (e) { report.direct = { error: e.message, ms: Date.now() - t0 }; }
+            const t1 = Date.now();
+            let raw = '';
+            try {
+                raw = IS_CF_WORKER ? await vnFetchText(targetUrl, { headers: hdrs }) : '';
+                report.vnProxy = { ok: !!raw, ms: Date.now() - t1 };
+            } catch (e) { report.vnProxy = { error: e.message, ms: Date.now() - t1 }; }
+            if (raw) {
+                report.isMaster = raw.includes('#EXT-X-STREAM-INF');
+                if (!report.isMaster) {
+                    const before = raw.split('\n').filter(l => l.trim() && !l.startsWith('#')).length;
+                    const cleaned = kkphim.cleanM3u8(raw, targetUrl);
+                    const after = cleaned.split('\n').filter(l => l.trim() && !l.startsWith('#')).length;
+                    report.segments = { before, after, removed: before - after };
+                }
+            }
+            return new Response(JSON.stringify(report, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+        }
+
         // 8e. KKPhim Clean M3U8 Stream (Filter out 15:00 and 3:00 SSAI ads with auto-fallback)
         if (pathname === '/kkphim/clean.m3u8') {
             const targetUrl = url.searchParams.get('url');
@@ -623,6 +653,11 @@ export default {
                     const playlist = await kkphim.getCleanM3u8(targetUrl, host, VN_FETCH);
                     // cleaned media playlist, or a master whose variants were rewritten to /kkphim/clean.m3u8
                     if (playlist && (playlist.includes('#EXTINF') || playlist.includes('/kkphim/clean.m3u8?url='))) {
+                        // Master: warm the cleaned variant playlists so the player's next request is an edge-cache hit
+                        if (!playlist.includes('#EXTINF') && ctx && ctx.waitUntil && IS_CF_WORKER) {
+                            playlist.split('\n').filter(l => l.includes('/kkphim/clean.m3u8?url=')).slice(0, 4)
+                                .forEach(l => ctx.waitUntil(fetch(l.trim()).then(r => r.arrayBuffer()).catch(() => {})));
+                        }
                         return playlistResponse(playlist, 21600);
                     }
                 } catch (err) {
@@ -828,6 +863,12 @@ export default {
                 } catch (rErr) {
                     console.warn('[Render Resource Delegation Error]:', rErr.message);
                 }
+            }
+
+            // KKPhim: warm the "Lọc QC" playlists while the user is still picking a stream
+            if (resource === 'stream' && IS_CF_WORKER && ctx && ctx.waitUntil && resp && Array.isArray(resp.streams)) {
+                resp.streams.filter(st => st && st.url && st.url.includes('/kkphim/clean.m3u8?url=')).slice(0, 2)
+                    .forEach(st => ctx.waitUntil(fetch(st.url).then(r => r.arrayBuffer()).catch(() => {})));
             }
 
             const defaultFallback = resource === 'stream' ? { streams: [] } : resource === 'meta' ? { meta: null } : { metas: [] };
