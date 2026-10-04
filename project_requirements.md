@@ -13,7 +13,7 @@ Tài liệu này tổng hợp toàn bộ các yêu cầu khắt khe, ràng buộ
 - **Vấn đề Geo-blocking của KKPhim / NguồnC:** CDN của nguồn phim (ví dụ: `s5.phim1280.tv`) chặn toàn bộ IP ngoài lãnh thổ Việt Nam. Do Cloudflare Workers và Google Apps Script (GAS) đều dùng IP quốc tế, việc fetch trực tiếp M3U8 từ các nền tảng này sẽ bị lỗi 404. Khi giải quyết vấn đề này, chỉ được phép sử dụng Proxy trung gian cho các file TEXT cực nhẹ (M3U8) chứ tuyệt đối không proxy video.
 
 ## 3. Quy Tắc Lọc Quảng Cáo (Ad-Filtering)
-> **CẬP NHẬT 2026-10-04:** Theo yêu cầu của chủ dự án, stream "Lọc QC" của KKPhim đã bị TẮT (không ổn định). KKPhim chỉ trả luồng CDN trực tiếp. Endpoint `/kkphim/clean.m3u8` vẫn còn trong code nhưng không còn được stream nào trỏ tới. Các quy tắc bên dưới chỉ áp dụng nếu bật lại.
+> **CẬP NHẬT 2026-10-04 (2):** Stream "Lọc QC" của KKPhim được BẬT LẠI (đặt trước) vì `/kkphim/debug` xác nhận bộ lọc nhận diện đúng khối QC phút 3:00 (`convertv8/`) và 15:00 (`/v8/<hash>/segment_NNNN.ts`). Luồng CDN gốc vẫn được trả ngay sau đó làm dự phòng nếu lọc không ổn định. Khi NguonC chỉ có `embed` (StreamC được bảo vệ, không phát được trong app) addon dùng bản KKPhim khớp IMDb/TMDB/năm.
 
 - Việc lọc quảng cáo (đặc biệt là quảng cáo phút 3:00 và 15:00 của KKPhim/Ophim) là **Ưu tiên Hàng đầu**.
 - **Trên Nuvio Web:** Lọc quảng cáo sẽ được thực hiện trực tiếp ở phía trình duyệt (Client-side) thông qua `CleanPlaylistLoader` tích hợp trong Hls.js (`multiThreadedPreloader.js`). Backend Cloudflare chỉ cần trả về *Virtual Master Playlist (Mã 200 OK)* thay vì *302 Redirect* để tránh lỗi CORS Preflight (OPTIONS 405) từ CDN chặn trình duyệt.

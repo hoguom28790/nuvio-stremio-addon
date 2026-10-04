@@ -139,7 +139,16 @@ async function getMeta(prefix, type, id) {
 }
 
 /** Direct CDN HLS streams, one per server that has the requested episode. */
-async function getStream(prefix, brand, id, type) {
+// Base URL of this addon for the ad-filter endpoint (config.host has no protocol on the Worker)
+function hostBase(host) {
+    if (!host) return '';
+    if (host.includes('://')) return host;
+    return `${/^(localhost|127\.|\[::1\])/.test(host) ? 'http' : 'https'}://${host}`;
+}
+
+// `opts.cleanHost`: when set (KKPhim), every server also gets a "[Lọc QC]" stream that cuts the SSAI ad blocks
+// (3:00 / 15:00) out of the playlist; the unfiltered CDN link stays as a fallback.
+async function getStream(prefix, brand, id, type, opts = {}) {
     try {
         const parts = id.slice(id.indexOf(':') + 1).split(':');
         const slug = parts[0];
@@ -153,6 +162,15 @@ async function getStream(prefix, brand, id, type) {
         for (const server of episodes) {
             const item = findEpisode(server.server_data || [], targetEp);
             if (!item || !item.link_m3u8) continue;
+            const base = hostBase(opts.cleanHost);
+            if (base) {
+                streams.push({
+                    name: `🛡️ [CDN] ${brand} • ${server.server_name || 'VIP'} [Lọc QC]`,
+                    title: `${movieName}${targetEp && item.name ? ` - Tập ${item.name}` : ''}\n🛡️ Đã cắt quảng cáo 3:00 & 15:00`,
+                    url: `${base}/kkphim/clean.m3u8?url=${encodeURIComponent(item.link_m3u8)}`,
+                    behaviorHints: { notWebReady: false }
+                });
+            }
             streams.push({
                 name: `⚡ [CDN] ${brand} • ${server.server_name || 'VIP'}`,
                 title: `${movieName}${targetEp && item.name ? ` - Tập ${item.name}` : ''}\n⚡ CDN HLS trực tiếp`,

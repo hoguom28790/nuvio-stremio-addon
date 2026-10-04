@@ -39,11 +39,13 @@ async function runTests() {
     });
 
     // 2. KKPhim Stream Generation
-    await testCase('2. KKPhim stream list generation (direct CDN, ad filter disabled)', async () => {
+    await testCase('2. KKPhim stream list generation (ad-filter stream first, direct CDN fallback)', async () => {
         const streams = await kkphim.getStream('kkphim:cuoc-chien-sinh-tu', 'movie', CF_HOST);
         assert(Array.isArray(streams) && streams.length > 0, 'No streams returned');
-        assert(streams.every(s => !s.name.includes('Lọc QC')), 'Ad-filter stream is disabled');
-        assert(streams.every(s => /^https?:\/\//.test(s.url) && !s.url.includes('/kkphim/clean.m3u8')), 'Direct CDN url expected');
+        assert(/\[Lọc QC\]/.test(streams[0].name) && streams[0].url.includes('/kkphim/clean.m3u8?url='), 'Ad-filter stream expected first');
+        assert(streams.some(s => /^https?:\/\//.test(s.url) && !s.url.includes('/kkphim/clean.m3u8')), 'Direct CDN fallback expected');
+        const noHost = await kkphim.getStream('kkphim:cuoc-chien-sinh-tu', 'movie');
+        assert(noHost.every(s => !s.url.includes('/kkphim/clean.m3u8')), 'Without host only direct CDN links');
     });
 
     // 3. KKPhim SSAI Ad Filtering on Render

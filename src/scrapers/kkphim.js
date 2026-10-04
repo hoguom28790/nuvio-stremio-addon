@@ -27,9 +27,9 @@ function getMeta(type, id) {
     return phimapi.getMeta('kkphim', type, id);
 }
 
-// `host` is accepted for backwards compatibility (the ad-filter stream that used it is disabled)
-function getStream(id, type) {
-    return phimapi.getStream('kkphim', 'KKPhim', id, type);
+// With `host` each server also gets a "[Lọc QC]" stream served by /kkphim/clean.m3u8 (SSAI ad blocks cut out)
+function getStream(id, type, host) {
+    return phimapi.getStream('kkphim', 'KKPhim', id, type, { cleanHost: host });
 }
 
 const AD_URI_RE = /convertv\d*\/|\/v\d+\/.*segment_|segment_\d{4}/i;
