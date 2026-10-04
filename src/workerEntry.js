@@ -8,7 +8,6 @@ const avdb = require('./scrapers/avdb');
 const missav = require('./scrapers/missav');
 const kkphim = require('./scrapers/kkphim');
 const vsmov = require('./scrapers/vsmov');
-const topxx = require('./scrapers/topxx');
 import { vnFetchText } from './utils/vnSocketFetch';
 
 // The same bundle also runs on Render (Dockerfile -> Node). There, raw sockets are unavailable (the Node proxy pool
@@ -672,18 +671,6 @@ export default {
                 });
             } catch (err) {
                 return new Response('Error generating playlist: ' + err.message, { status: 500, headers: CORS_HEADERS });
-            }
-        }
-
-        // 8c4. topxx.vip diagnostics: API item -> embed page -> playlist -> first segment (read-only investigation)
-        if (pathname === '/topxx/debug') {
-            const code = url.searchParams.get('code');
-            if (!code) return new Response('Missing code query parameter', { status: 400, headers: CORS_HEADERS });
-            try {
-                const report = await topxx.debugStream(code);
-                return new Response(JSON.stringify(report, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
-            } catch (e) {
-                return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
             }
         }
 
