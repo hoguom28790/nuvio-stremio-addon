@@ -1,13 +1,23 @@
 const reference = require('../Reference.json');
 
 // Filter out tv/sports catalogs and legacy vsmov
+const nguoncLanguages = ["Ngôn ngữ: Vietsub", "Ngôn ngữ: Thuyết minh", "Ngôn ngữ: Lồng tiếng"];
+
 const filteredCatalogs = reference.catalogs.filter(c => 
     c.type !== 'tv' && 
     c.id !== 'streamfree-live' && 
     c.id !== 'sports-live' && 
     !c.id.startsWith('vsmov') &&
     !/^(hh3d|yan|stp|clbpx)-/.test(c.id)
-);
+).map(c => {
+    if (!c.id.startsWith('nguonc-')) return c;
+    // NguonC /films/ngon-ngu/{slug} filter: add language options after the category entries
+    return Object.assign({}, c, {
+        extra: c.extra.map(e => e.name === 'genre'
+            ? Object.assign({}, e, { options: [...e.options.slice(0, 6), ...nguoncLanguages, ...e.options.slice(6)] })
+            : e)
+    });
+});
 
 const hentaizGenres = [
     "Tất Cả",
