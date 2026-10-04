@@ -278,7 +278,6 @@ async function getStream(id, type) {
         if (!movie || !Array.isArray(movie.episodes)) return [];
 
         const streams = [];
-        const embeds = [];
         for (const server of movie.episodes) {
             const item = findEpisode(server.items || [], targetEp);
             if (!item) continue;
@@ -290,7 +289,6 @@ async function getStream(id, type) {
             if (!m3u8 && item.embed) {
                 m3u8 = await resolveEmbed(item.embed);
                 fromEmbed = !!m3u8;
-                if (!m3u8) embeds.push({ label, epTitle, url: item.embed });
             }
             if (!m3u8) continue;
 
@@ -307,14 +305,6 @@ async function getStream(id, type) {
             }
             streams.push(stream);
         }
-
-        // NguonC's own player (StreamC) is protected against embedding/automation, so it cannot be played inside
-        // Stremio. Offer it as an external link (opens NguonC's player in the browser, no KKPhim ads).
-        const external = embeds.map(e => ({
-            name: `🌐 NguonC • ${e.label}`,
-            title: `${e.epTitle}\nMở trình phát NguonC trên trình duyệt (không quảng cáo KKPhim)`,
-            externalUrl: e.url
-        }));
 
         // Same film on KKPhim (matched by IMDb/TMDB/year, never "first result") as an in-app option; it carries ads.
         const direct = [];
@@ -333,7 +323,7 @@ async function getStream(id, type) {
             }
         }
 
-        streams.push(...external, ...direct);
+        streams.push(...direct);
         return streams;
     } catch (err) {
         console.error('[NguonC Stream Error]:', err.message);
