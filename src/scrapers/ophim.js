@@ -4,7 +4,7 @@ const axios = require('axios');
  * Generic scraper for sources using the Ophim API structure
  * @param {string} slug - The movie/series slug
  * @param {string} baseUrl - Base URL of the API (e.g., https://phimapi.com)
- * @param {string} sourceName - Name of the source (e.g., "KKPhim", "NguonC")
+ * @param {string} sourceName - Name of the source (e.g., "KKPhim")
  * @returns {Promise<Array>} Array of Stremio stream objects
  */
 async function scrapeOphimApi(slug, baseUrl, sourceName) {

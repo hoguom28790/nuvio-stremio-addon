@@ -1,7 +1,6 @@
 const manifest = require('./manifest');
 
 const kkphim = require('./scrapers/kkphim');
-const nguonc = require('./scrapers/nguonc');
 const vsmov = require('./scrapers/vsmov');
 
 const hentaiz = require('./scrapers/hentaiz');
@@ -63,9 +62,6 @@ builder.defineCatalogHandler(async ({ type, id, extra = {}, config = {} }) => {
         if (id === 'kkphim-movie' && isSourceEnabled('kkphim', config)) return { metas: await kkphim.getCatalog('movie', extra) };
         if (id === 'kkphim-series' && isSourceEnabled('kkphim', config)) return { metas: await kkphim.getCatalog('series', extra) };
 
-        if (id === 'nguonc-movie' && isSourceEnabled('nguonc', config)) return { metas: await nguonc.getCatalog('movie', extra) };
-        if (id === 'nguonc-series' && isSourceEnabled('nguonc', config)) return { metas: await nguonc.getCatalog('series', extra) };
-
         if (id === 'vsmov-movie' && isSourceEnabled('vsmov', config)) return { metas: await vsmov.getCatalog('movie', extra) };
         if (id === 'vsmov-series' && isSourceEnabled('vsmov', config)) return { metas: await vsmov.getCatalog('series', extra) };
 
@@ -104,10 +100,6 @@ builder.defineMetaHandler(async ({ type, id, config = {} }) => {
     try {
         if (id.startsWith('kkphim:') && isSourceEnabled('kkphim', config)) {
             const meta = await kkphim.getMeta(type, id);
-            if (meta) return { meta };
-        }
-        if (id.startsWith('nguonc:') && isSourceEnabled('nguonc', config)) {
-            const meta = await nguonc.getMeta(type, id);
             if (meta) return { meta };
         }
         if (id.startsWith('vsmov:') && isSourceEnabled('vsmov', config)) {
@@ -160,8 +152,6 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
     try {
         if (id.startsWith('kkphim:') && isSourceEnabled('kkphim', config)) {
             streams = await kkphim.getStream(id, type, config.host);
-        } else if (id.startsWith('nguonc:') && isSourceEnabled('nguonc', config)) {
-            streams = await nguonc.getStream(id, type, config.host);
         } else if (id.startsWith('vsmov:') && isSourceEnabled('vsmov', config)) {
             streams = await vsmov.getStream(id, type, config.host);
         } else if (id.startsWith('hentaiz:')) {

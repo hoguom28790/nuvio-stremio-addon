@@ -5,7 +5,6 @@ const javhd = require('../src/scrapers/javhd');
 const avdb = require('../src/scrapers/avdb');
 const vlxx = require('../src/scrapers/vlxx');
 const hentaiz = require('../src/scrapers/hentaiz');
-const nguonc = require('../src/scrapers/nguonc');
 const missav = require('../src/scrapers/missav');
 
 const RENDER_BASE = 'https://nuvio-stremio-addon-1.onrender.com';
@@ -143,14 +142,6 @@ async function runTests() {
     await testCase('10. HentaiZ Catalog & Stream resolution', async () => {
         const cat = await hentaiz.getCatalog('series', {});
         assert(Array.isArray(cat) && cat.length > 0, 'HentaiZ catalog empty');
-    });
-
-    // 11. NguonC Stream Generation
-    await testCase('11. NguonC Catalog & Stream generation', async () => {
-        const cat = await nguonc.getCatalog('movie', {});
-        assert(Array.isArray(cat) && cat.length > 0, 'NguonC catalog empty');
-        const streams = await nguonc.getStream(cat[0].id, 'movie', CF_HOST);
-        assert(Array.isArray(streams) && streams.length > 0, 'NguonC streams empty');
     });
 
     // 12. MissAV Catalog, Stream & M3U8

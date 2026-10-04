@@ -17,7 +17,7 @@ async function testAllScrapers() {
     // 2. Test Catalogs
     const catalogsToTest = [
         { id: 'kkphim-movie', type: 'movie' },
-        { id: 'nguonc-movie', type: 'movie' },
+        { id: 'vsmov-movie', type: 'movie' },
         { id: 'vsmov-movie', type: 'movie' },
         { id: 'missav-movie', type: 'movie' }
     ];
@@ -38,15 +38,15 @@ async function testAllScrapers() {
 
     // 3. Test Config Filtering on Manifest
     console.log('[3] Testing Config Manifest Filtering:');
-    const customConfig = { sources: ['kkphim', 'vsmov'], prefCdn: true, prefProxy: false };
+    const customConfig = { sources: ['kkphim', 'hentaiz'], prefCdn: true, prefProxy: false };
     const filteredManifest = getManifest(customConfig);
     console.log(`  ✓ Filtered Catalogs count (only kkphim & vsmov): ${filteredManifest.catalogs.length}`);
     const catalogIds = filteredManifest.catalogs.map(c => c.id).join(', ');
     console.log(`  ✓ Catalogs present: ${catalogIds}`);
 
     // Test Config Filtering on Catalog Handler
-    const blockedCatalog = await addon.get('catalog', 'movie', 'nguonc-movie', {}, customConfig);
-    console.log(`  ✓ Disabled source (nguonc) returns: ${blockedCatalog.metas.length} items (expected: 0)`);
+    const blockedCatalog = await addon.get('catalog', 'movie', 'vsmov-movie', {}, customConfig);
+    console.log(`  ✓ Disabled source (vsmov) returns: ${blockedCatalog.metas.length} items (expected: 0)`);
     const allowedCatalog = await addon.get('catalog', 'movie', 'kkphim-movie', {}, customConfig);
     console.log(`  ✓ Enabled source (kkphim) returns: ${allowedCatalog.metas.length} items`);
     console.log('');
@@ -55,7 +55,7 @@ async function testAllScrapers() {
     console.log('[4] Testing Stream Handlers:');
     const streamsToTest = [
         { id: 'kkphim:biet-doi-danh-thue-4', type: 'movie' },
-        { id: 'nguonc:khach', type: 'movie' },
+        { id: 'vsmov:mau-se-phai-do', type: 'movie' },
         { id: 'missav:siro-5719', type: 'movie' }
     ];
     for (const s of streamsToTest) {

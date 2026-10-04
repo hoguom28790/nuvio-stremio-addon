@@ -7,7 +7,6 @@ const vlxx = require('./scrapers/vlxx');
 const avdb = require('./scrapers/avdb');
 const missav = require('./scrapers/missav');
 const kkphim = require('./scrapers/kkphim');
-const nguoncScraper = require('./scrapers/nguonc');
 const vsmov = require('./scrapers/vsmov');
 import { vnFetchText } from './utils/vnSocketFetch';
 
@@ -16,7 +15,6 @@ import { vnFetchText } from './utils/vnSocketFetch';
 // navigator.userAgent is the reliable check: nodejs_compat also defines process.versions.node on Workers.
 const IS_CF_WORKER = typeof navigator !== 'undefined' && navigator.userAgent === 'Cloudflare-Workers';
 const VN_FETCH = IS_CF_WORKER ? { fetchText: vnFetchText } : {};
-if (IS_CF_WORKER) nguoncScraper.setVnFetchText(vnFetchText);
 
 // Edge cache for generated playlists (Workers do not cache their own responses automatically)
 async function edgeCached(request, ctx, ttlSeconds, build) {
@@ -673,18 +671,6 @@ export default {
                 });
             } catch (err) {
                 return new Response('Error generating playlist: ' + err.message, { status: 500, headers: CORS_HEADERS });
-            }
-        }
-
-        // 8c. NguonC diagnostics: what each StreamC embed page returns to this server (direct vs VN proxy)
-        if (pathname === '/nguonc/debug') {
-            const slug = url.searchParams.get('slug');
-            if (!slug) return new Response('Missing slug query parameter', { status: 400, headers: CORS_HEADERS });
-            try {
-                const report = await nguoncScraper.debugEmbeds(slug);
-                return new Response(JSON.stringify(report, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
-            } catch (e) {
-                return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
             }
         }
 
