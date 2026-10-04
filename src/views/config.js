@@ -1,5 +1,5 @@
 function renderConfigPage(host, initialConfig = {}) {
-    const defaultSources = ['kkphim', 'hh3d', 'yan', 'stp', 'clbpx', 'nguonc'];
+    const defaultSources = ['kkphim', 'nguonc'];
     const activeSources = Array.isArray(initialConfig.sources) ? initialConfig.sources : defaultSources;
     const prefCdnChecked = initialConfig.prefCdn !== false ? 'checked' : '';
     const prefProxyChecked = initialConfig.prefProxy !== false ? 'checked' : '';
@@ -704,22 +704,6 @@ function renderConfigPage(host, initialConfig = {}) {
       <label class="${sourceClass('kkphim')}">
         <input type="checkbox" name="source" value="kkphim" ${sourceChecked('kkphim')} onchange="updateUI()">
         <span>⚡ KKPhim (Phim Lẻ & Bộ)</span>
-      </label>
-      <label class="${sourceClass('hh3d')}">
-        <input type="checkbox" name="source" value="hh3d" ${sourceChecked('hh3d')} onchange="updateUI()">
-        <span>⚡ Hoạt Hình 3D (HH3D)</span>
-      </label>
-      <label class="${sourceClass('yan')}">
-        <input type="checkbox" name="source" value="yan" ${sourceChecked('yan')} onchange="updateUI()">
-        <span>⚡ YanHH3D (3D & Anime)</span>
-      </label>
-      <label class="${sourceClass('stp')}">
-        <input type="checkbox" name="source" value="stp" ${sourceChecked('stp')} onchange="updateUI()">
-        <span>⚡ Siêu Tầm Phim (STP)</span>
-      </label>
-      <label class="${sourceClass('clbpx')}">
-        <input type="checkbox" name="source" value="clbpx" ${sourceChecked('clbpx')} onchange="updateUI()">
-        <span>⚡ CLB Phim Xưa (Kinh Điển)</span>
       </label>
       <label class="${sourceClass('nguonc')}">
         <input type="checkbox" name="source" value="nguonc" ${sourceChecked('nguonc')} onchange="updateUI()">

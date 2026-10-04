@@ -5,7 +5,8 @@ const filteredCatalogs = reference.catalogs.filter(c =>
     c.type !== 'tv' && 
     c.id !== 'streamfree-live' && 
     c.id !== 'sports-live' && 
-    !c.id.startsWith('vsmov')
+    !c.id.startsWith('vsmov') &&
+    !/^(hh3d|yan|stp|clbpx)-/.test(c.id)
 );
 
 const hentaizGenres = [
@@ -235,13 +236,13 @@ const missavCatalogs = [
 
 const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs, ...missavCatalogs];
 const allCatalogs = [...filteredCatalogs, ...adultCatalogs];
-const allPrefixes = ["tt", "nguonc:", "stp:", "hh3d:", "clbpx:", "yan:", "kkphim:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "missav:"];
+const allPrefixes = ["tt", "nguonc:", "kkphim:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "missav:"];
 
 const baseManifest = {
     id: "org.hophim.stremio",
     version: "1.4.5",
     name: "Hồ Phim",
-    description: "Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ NguonC, Siêu Tầm Phim, Hoạt Hình 3D, CLB Phim Xưa, YanHH3D, KKPhim",
+    description: "Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ KKPhim, NguonC",
     logo: "https://raw.githubusercontent.com/hoguom28790/nuvio-stremio-addon/master/logo.png",
     resources: [
         "catalog",

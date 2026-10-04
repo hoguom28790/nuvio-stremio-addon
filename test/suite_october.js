@@ -39,12 +39,11 @@ async function runTests() {
     });
 
     // 2. KKPhim Stream Generation
-    await testCase('2. KKPhim stream list generation with Clean M3U8 URL', async () => {
+    await testCase('2. KKPhim stream list generation (direct CDN, ad filter disabled)', async () => {
         const streams = await kkphim.getStream('kkphim:cuoc-chien-sinh-tu', 'movie', CF_HOST);
         assert(Array.isArray(streams) && streams.length > 0, 'No streams returned');
-        const cleanStream = streams.find(s => s.name && s.name.includes('Lọc QC'));
-        assert(cleanStream, 'Missing Clean M3U8 stream');
-        assert(cleanStream.url.includes('/kkphim/clean.m3u8?url='), 'Invalid clean M3U8 url');
+        assert(streams.every(s => !s.name.includes('Lọc QC')), 'Ad-filter stream is disabled');
+        assert(streams.every(s => /^https?:\/\//.test(s.url) && !s.url.includes('/kkphim/clean.m3u8')), 'Direct CDN url expected');
     });
 
     // 3. KKPhim SSAI Ad Filtering on Render

@@ -13,12 +13,15 @@ Tài liệu này tổng hợp toàn bộ các yêu cầu khắt khe, ràng buộ
 - **Vấn đề Geo-blocking của KKPhim / NguồnC:** CDN của nguồn phim (ví dụ: `s5.phim1280.tv`) chặn toàn bộ IP ngoài lãnh thổ Việt Nam. Do Cloudflare Workers và Google Apps Script (GAS) đều dùng IP quốc tế, việc fetch trực tiếp M3U8 từ các nền tảng này sẽ bị lỗi 404. Khi giải quyết vấn đề này, chỉ được phép sử dụng Proxy trung gian cho các file TEXT cực nhẹ (M3U8) chứ tuyệt đối không proxy video.
 
 ## 3. Quy Tắc Lọc Quảng Cáo (Ad-Filtering)
+> **CẬP NHẬT 2026-10-04:** Theo yêu cầu của chủ dự án, stream "Lọc QC" của KKPhim đã bị TẮT (không ổn định). KKPhim chỉ trả luồng CDN trực tiếp. Endpoint `/kkphim/clean.m3u8` vẫn còn trong code nhưng không còn được stream nào trỏ tới. Các quy tắc bên dưới chỉ áp dụng nếu bật lại.
+
 - Việc lọc quảng cáo (đặc biệt là quảng cáo phút 3:00 và 15:00 của KKPhim/Ophim) là **Ưu tiên Hàng đầu**.
 - **Trên Nuvio Web:** Lọc quảng cáo sẽ được thực hiện trực tiếp ở phía trình duyệt (Client-side) thông qua `CleanPlaylistLoader` tích hợp trong Hls.js (`multiThreadedPreloader.js`). Backend Cloudflare chỉ cần trả về *Virtual Master Playlist (Mã 200 OK)* thay vì *302 Redirect* để tránh lỗi CORS Preflight (OPTIONS 405) từ CDN chặn trình duyệt.
 - **Trên Android TV & Stremio Web:** Các client này (ExoPlayer) không có khả năng lọc quảng cáo nội bộ. Mọi thao tác loại bỏ quảng cáo bắt buộc phải diễn ra tại Server-side trước khi truyền file M3U8 hoàn chỉnh về thiết bị. (Cần giải pháp vượt Geo-blocking tối ưu dung lượng).
 - Thuật toán Regex nhận diện QC hiện tại: `/convertv\d*\/|\/v\d+\/.*segment_|segment_\d{4}/i` (Phải luôn giữ liên kết #EXT-X-DISCONTINUITY chặt chẽ).
 
 ## 4. Các Nguồn Phim Tích Hợp
+- Nguồn đang hỗ trợ cho phim thường: KKPhim (client `src/scrapers/phimapi.js`) và NguonC (API riêng `phim.nguonc.com`, link m3u8 của chính nó). CLBPX, HH3D, YAN, STP đã bị XÓA (2026-10-04) vì cùng dữ liệu `phimapi.com` với KKPhim.
 - Hệ thống cần hỗ trợ bóc tách M3U8 và bypass các phương thức chống trộm link (nếu có) từ các nguồn: KKPhim, NguonC, Ophim, Hentaiz, JavHD, VLXX, AVDB.
 - Khi làm việc với phim người lớn (JavHD/VLXX), lưu ý xử lý Unwrapper (cắt header PNG rác 95-byte) trực tiếp qua Cloudflare Edge.
 

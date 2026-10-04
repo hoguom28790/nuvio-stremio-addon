@@ -19,10 +19,6 @@ async function testAllScrapers() {
         { id: 'kkphim-movie', type: 'movie' },
         { id: 'nguonc-movie', type: 'movie' },
         { id: 'vsmov-movie', type: 'movie' },
-        { id: 'hh3d-movie', type: 'movie' },
-        { id: 'clbpx-movie', type: 'movie' },
-        { id: 'stp-movie', type: 'movie' },
-        { id: 'yan-movie', type: 'movie' },
         { id: 'missav-movie', type: 'movie' }
     ];
 
