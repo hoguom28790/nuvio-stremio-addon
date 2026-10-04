@@ -657,6 +657,15 @@ export default {
                             report.variant = { url: vUrl, ok: !!vText };
                             if (vText) {
                                 report.layout = kkphim.describeBlocks(vText, vUrl);
+                                // what the player gets vs. the original: tag kinds, first lines, relative URIs in tags
+                                const tagKinds = {};
+                                vText.split(/\r?\n/).forEach(l => { if (l.startsWith('#')) { const k = l.split(/[:,]/)[0]; tagKinds[k] = (tagKinds[k] || 0) + 1; } });
+                                const cleanedText = kkphim.cleanM3u8(vText, vUrl);
+                                report.tagKinds = tagKinds;
+                                report.tagUriLines = [...new Set(vText.split(/\r?\n/).filter(l => l.startsWith('#') && l.includes('URI=')))].slice(0, 6);
+                                report.rawHead = vText.split(/\r?\n/).slice(0, 14);
+                                report.cleanedHead = cleanedText.split(/\r?\n/).slice(0, 14);
+                                report.cleanedSegments = cleanedText.split(/\r?\n/).filter(l => l && !l.startsWith('#')).length;
                                 if (url.searchParams.get('raw') === '1') report.variantText = vText.slice(0, 20000);
                             }
                         } catch (e) { report.variant = { url: vUrl, error: e.message }; }
