@@ -171,31 +171,83 @@ async function getMeta(type, id) {
 const M3U8_RE = /https?:(?:\\?\/){2}(?:[^"'\s<>\\]|\\\/)+?\.m3u8(?:[^"'\s<>\\]|\\\/)*/i;
 const NGUONC_REFERER = 'https://phim.nguonc.com/';
 
+// Workers only: raw-socket fetch through the Vietnam proxy pool (set from workerEntry). StreamC may geo-block cloud IPs.
+let vnFetchText = null;
+function setVnFetchText(fn) { vnFetchText = typeof fn === 'function' ? fn : null; }
+
+const EMBED_HEADERS = { Referer: NGUONC_REFERER, 'User-Agent': 'Mozilla/5.0', Accept: 'text/html,*/*' };
+
+function extractM3u8(html) {
+    const m = typeof html === 'string' && html.match(M3U8_RE);
+    return m ? m[0].replace(/\\\//g, '/').replace(/&amp;/g, '&') : null;
+}
+
+/** Fetch an embed page directly, then through the VN proxy; returns every attempt for diagnostics. */
+async function fetchEmbedPage(embedUrl) {
+    const attempts = [];
+    try {
+        const res = await axios.get(embedUrl, { timeout: 8000, responseType: 'text', headers: EMBED_HEADERS });
+        const html = typeof res.data === 'string' ? res.data : JSON.stringify(res.data || '');
+        attempts.push({ via: 'direct', status: res.status, html });
+        if (extractM3u8(html)) return attempts;
+    } catch (err) {
+        attempts.push({ via: 'direct', status: err.response ? err.response.status : 0, error: err.message, html: '' });
+    }
+    if (vnFetchText) {
+        try {
+            const html = await vnFetchText(embedUrl, { headers: EMBED_HEADERS, tls: true, timeoutMs: 8000, validate: t => !!t });
+            attempts.push({ via: 'vn-proxy', status: 200, html });
+        } catch (err) {
+            attempts.push({ via: 'vn-proxy', status: 0, error: err.message, html: '' });
+        }
+    }
+    return attempts;
+}
+
 /**
- * The detail API often returns only an `embed` page (streamc.xyz/embed.php?hash=...)
- * and no usable `m3u8`. Read that page and pull the HLS playlist URL out of it.
+ * The detail API only returns an `embed` page (streamc.xyz/embed.php?hash=...), no `m3u8`.
+ * Read that page and pull the HLS playlist URL out of it.
  */
 async function resolveEmbed(embedUrl) {
     if (!/^https?:\/\//i.test(embedUrl || '')) return null;
     const cacheKey = `nguonc:embed:${embedUrl}`;
     const cached = cache.get(cacheKey);
     if (cached) return cached;
-    try {
-        const res = await axios.get(embedUrl, {
-            timeout: 8000,
-            responseType: 'text',
-            headers: { Referer: NGUONC_REFERER, 'User-Agent': 'Mozilla/5.0', Accept: 'text/html,*/*' }
-        });
-        const html = typeof res.data === 'string' ? res.data : JSON.stringify(res.data || '');
-        const m = html.match(M3U8_RE);
-        if (!m) return null;
-        const url = m[0].replace(/\\\//g, '/').replace(/&amp;/g, '&');
-        cache.set(cacheKey, url, 1800);
-        return url;
-    } catch (err) {
-        console.error('[NguonC Embed Error]:', err.message);
-        return null;
+    for (const a of await fetchEmbedPage(embedUrl)) {
+        const url = extractM3u8(a.html);
+        if (url) {
+            cache.set(cacheKey, url, 1800);
+            return url;
+        }
     }
+    return null;
+}
+
+/** Diagnostics for /nguonc/debug: what the server actually receives from each embed page. */
+async function debugEmbeds(slug) {
+    const res = await axios.get(`${BASE_URL}/film/${slug}`, HTTP_OPTS);
+    const movie = res.data && res.data.movie;
+    const report = { slug, hasVnProxy: !!vnFetchText, servers: [] };
+    for (const server of (movie && movie.episodes) || []) {
+        for (const item of (server.items || []).slice(0, 1)) {
+            const entry = { server: server.server_name, ep: item.name, embed: item.embed || null, m3u8Field: item.m3u8 || null, attempts: [] };
+            if (item.embed) {
+                for (const a of await fetchEmbedPage(item.embed)) {
+                    const html = a.html || '';
+                    const idx = html.search(/m3u8|\.mp4|"file"|sources?\s*[:=]/i);
+                    entry.attempts.push({
+                        via: a.via, status: a.status, error: a.error, length: html.length,
+                        m3u8: extractM3u8(html),
+                        scripts: (html.match(/<script[^>]+src=["'][^"']+/gi) || []).map(x => x.replace(/^.*src=["']/i, '')).slice(0, 10),
+                        urls: [...new Set((html.match(/https?:(?:\\?\/){2}[^"'\s<>\\)]+/g) || []).map(u => u.replace(/\\\//g, '/')))].slice(0, 25),
+                        snippet: html.slice(Math.max(0, idx < 0 ? 0 : idx - 300), (idx < 0 ? 0 : idx) + 700)
+                    });
+                }
+            }
+            report.servers.push(entry);
+        }
+    }
+    return report;
 }
 
 /** Find the KKPhim slug of the same film; null when no candidate is a confident match. */
@@ -291,4 +343,4 @@ async function getStream(id, type) {
     }
 }
 
-module.exports = { getCatalog, getMeta, getStream, matchImdb };
+module.exports = { getCatalog, getMeta, getStream, matchImdb, setVnFetchText, debugEmbeds };
