@@ -21,7 +21,7 @@ Tài liệu này tổng hợp toàn bộ các yêu cầu khắt khe, ràng buộ
 - Thuật toán Regex nhận diện QC hiện tại: `/convertv\d*\/|\/v\d+\/.*segment_|segment_\d{4}/i` (Phải luôn giữ liên kết #EXT-X-DISCONTINUITY chặt chẽ).
 
 ## 4. Các Nguồn Phim Tích Hợp
-- KKPhim, CLBPX, HH3D/YAN/STP dùng chung client `src/scrapers/phimapi.js` (không gọi chéo qua scraper KKPhim). NguonC dùng API riêng `phim.nguonc.com` và link m3u8 của chính nó.
+- Nguồn đang hỗ trợ cho phim thường: KKPhim (client `src/scrapers/phimapi.js`) và NguonC (API riêng `phim.nguonc.com`, link m3u8 của chính nó). CLBPX, HH3D, YAN, STP đã bị XÓA (2026-10-04) vì cùng dữ liệu `phimapi.com` với KKPhim.
 - Hệ thống cần hỗ trợ bóc tách M3U8 và bypass các phương thức chống trộm link (nếu có) từ các nguồn: KKPhim, NguonC, Ophim, Hentaiz, JavHD, VLXX, AVDB.
 - Khi làm việc với phim người lớn (JavHD/VLXX), lưu ý xử lý Unwrapper (cắt header PNG rác 95-byte) trực tiếp qua Cloudflare Edge.
 

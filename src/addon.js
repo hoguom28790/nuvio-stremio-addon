@@ -3,8 +3,6 @@ const manifest = require('./manifest');
 const kkphim = require('./scrapers/kkphim');
 const nguonc = require('./scrapers/nguonc');
 
-const animation = require('./scrapers/animation');
-const clbpx = require('./scrapers/clbpx');
 const hentaiz = require('./scrapers/hentaiz');
 const javhd = require('./scrapers/javhd');
 const vlxx = require('./scrapers/vlxx');
@@ -67,15 +65,6 @@ builder.defineCatalogHandler(async ({ type, id, extra = {}, config = {} }) => {
         if (id === 'nguonc-movie' && isSourceEnabled('nguonc', config)) return { metas: await nguonc.getCatalog('movie', extra) };
         if (id === 'nguonc-series' && isSourceEnabled('nguonc', config)) return { metas: await nguonc.getCatalog('series', extra) };
 
-        if (id === 'hh3d-movie' && isSourceEnabled('hh3d', config)) return { metas: await animation.getCatalog('hh3d-movie', 'movie', extra) };
-        if (id === 'hh3d-series' && isSourceEnabled('hh3d', config)) return { metas: await animation.getCatalog('hh3d-series', 'series', extra) };
-
-        if (id === 'yan-movie' && isSourceEnabled('yan', config)) return { metas: await animation.getCatalog('yan-movie', 'movie', extra) };
-        if (id === 'stp-movie' && isSourceEnabled('stp', config)) return { metas: await animation.getCatalog('stp-movie', 'movie', extra) };
-
-        if (id === 'clbpx-movie' && isSourceEnabled('clbpx', config)) return { metas: await clbpx.getCatalog('movie', extra) };
-        if (id === 'clbpx-series' && isSourceEnabled('clbpx', config)) return { metas: await clbpx.getCatalog('series', extra) };
-
         if ((id === 'hentaiz-anime' || id === 'hentaiz-movie') && isSourceEnabled('hentaiz', config)) {
             return { metas: await hentaiz.getCatalog(type, extra) };
         }
@@ -115,22 +104,6 @@ builder.defineMetaHandler(async ({ type, id, config = {} }) => {
         }
         if (id.startsWith('nguonc:') && isSourceEnabled('nguonc', config)) {
             const meta = await nguonc.getMeta(type, id);
-            if (meta) return { meta };
-        }
-        if (id.startsWith('hh3d:') && isSourceEnabled('hh3d', config)) {
-            const meta = await animation.getMeta('hh3d', type, id);
-            if (meta) return { meta };
-        }
-        if (id.startsWith('yan:') && isSourceEnabled('yan', config)) {
-            const meta = await animation.getMeta('yan', type, id);
-            if (meta) return { meta };
-        }
-        if (id.startsWith('stp:') && isSourceEnabled('stp', config)) {
-            const meta = await animation.getMeta('stp', type, id);
-            if (meta) return { meta };
-        }
-        if (id.startsWith('clbpx:') && isSourceEnabled('clbpx', config)) {
-            const meta = await clbpx.getMeta(type, id);
             if (meta) return { meta };
         }
         if (id.startsWith('hentaiz:')) {
@@ -181,14 +154,6 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
             streams = await kkphim.getStream(id, type, config.host);
         } else if (id.startsWith('nguonc:') && isSourceEnabled('nguonc', config)) {
             streams = await nguonc.getStream(id, type, config.host);
-        } else if (id.startsWith('hh3d:') && isSourceEnabled('hh3d', config)) {
-            streams = await animation.getStream('hh3d', id, type);
-        } else if (id.startsWith('yan:') && isSourceEnabled('yan', config)) {
-            streams = await animation.getStream('yan', id, type);
-        } else if (id.startsWith('stp:') && isSourceEnabled('stp', config)) {
-            streams = await animation.getStream('stp', id, type);
-        } else if (id.startsWith('clbpx:') && isSourceEnabled('clbpx', config)) {
-            streams = await clbpx.getStream(id, type);
         } else if (id.startsWith('hentaiz:')) {
             streams = await hentaiz.getStream(id, type, config.host);
         } else if (id.startsWith('javhd:')) {
