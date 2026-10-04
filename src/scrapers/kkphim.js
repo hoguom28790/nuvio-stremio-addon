@@ -122,11 +122,21 @@ function describeBlocks(content, baseUrl) {
     };
 }
 
+// The playlist is re-served from this addon's host, so every URI inside tags (KEY, MAP, MEDIA, ...) must be
+// absolute too; a relative one would resolve against the addon host and 404 (player: "Video is not supported").
+function absolutizeTagUris(line, baseUrl) {
+    if (!line || line[0] !== '#' || !line.includes('URI="')) return line;
+    return line.replace(/URI="([^"]*)"/g, (m, uri) => {
+        if (!uri || /^(?:[a-z][a-z0-9+.-]*:)/i.test(uri)) return m;
+        try { return `URI="${new URL(uri, baseUrl).toString()}"`; } catch (e) { return m; }
+    });
+}
+
 function cleanM3u8(content, baseUrl) {
     const { header, entries, tail } = parseMedia(content, baseUrl);
     markAds(entries);
 
-    const out = [...header];
+    const out = header.map(t => absolutizeTagUris(t, baseUrl));
     let afterAd = false;
     for (const e of entries) {
         if (e.ad) { afterAd = true; continue; }
@@ -139,9 +149,9 @@ function cleanM3u8(content, baseUrl) {
             });
             afterAd = false;
         }
-        out.push(...tags, e.uri);
+        out.push(...tags.map(t => absolutizeTagUris(t, baseUrl)), e.uri);
     }
-    out.push(...tail);
+    out.push(...tail.map(t => absolutizeTagUris(t, baseUrl)));
     return out.join('\n');
 }
 
@@ -160,7 +170,7 @@ function processCleanM3u8(content, targetUrl, host = '') {
                 const absoluteSubUrl = new URL(trimmed, targetUrl).toString();
                 return `${hostBase}/kkphim/clean.m3u8?url=${encodeURIComponent(absoluteSubUrl)}`;
             }
-            return line;
+            return absolutizeTagUris(line, targetUrl);
         });
         return rewritten.join('\n');
     }
