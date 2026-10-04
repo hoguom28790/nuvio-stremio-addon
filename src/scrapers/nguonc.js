@@ -2,6 +2,8 @@ const axios = require('axios');
 const cache = require('../utils/cache');
 const { parseFilter } = require('../utils/filterHelper');
 const { findEpisode } = require('../utils/episodeHelper');
+const kkphim = require('./kkphim');
+const phimapi = require('./phimapi');
 
 
 const BASE_URL = 'https://phim.nguonc.com/api';
@@ -166,6 +168,59 @@ async function getMeta(type, id) {
 
 }
 
+const M3U8_RE = /https?:(?:\\?\/){2}(?:[^"'\s<>\\]|\\\/)+?\.m3u8(?:[^"'\s<>\\]|\\\/)*/i;
+const NGUONC_REFERER = 'https://phim.nguonc.com/';
+
+/**
+ * The detail API often returns only an `embed` page (streamc.xyz/embed.php?hash=...)
+ * and no usable `m3u8`. Read that page and pull the HLS playlist URL out of it.
+ */
+async function resolveEmbed(embedUrl) {
+    if (!/^https?:\/\//i.test(embedUrl || '')) return null;
+    const cacheKey = `nguonc:embed:${embedUrl}`;
+    const cached = cache.get(cacheKey);
+    if (cached) return cached;
+    try {
+        const res = await axios.get(embedUrl, {
+            timeout: 8000,
+            responseType: 'text',
+            headers: { Referer: NGUONC_REFERER, 'User-Agent': 'Mozilla/5.0', Accept: 'text/html,*/*' }
+        });
+        const html = typeof res.data === 'string' ? res.data : JSON.stringify(res.data || '');
+        const m = html.match(M3U8_RE);
+        if (!m) return null;
+        const url = m[0].replace(/\\\//g, '/').replace(/&amp;/g, '&');
+        cache.set(cacheKey, url, 1800);
+        return url;
+    } catch (err) {
+        console.error('[NguonC Embed Error]:', err.message);
+        return null;
+    }
+}
+
+/** Find the KKPhim slug of the same film; null when no candidate is a confident match. */
+async function findKkphimSlug(movie) {
+    const wantImdb = movie.imdb && movie.imdb.id;
+    const wantTmdb = movie.tmdb && movie.tmdb.id;
+    const wantYear = parseInt(movie.year, 10) || 0;
+    for (const q of [movie.original_name, movie.name].filter(Boolean)) {
+        const results = await kkphim.getCatalog('movie', { search: q });
+        const details = await Promise.all((results || []).slice(0, 5).map(r => {
+            const slug = r.id.replace('kkphim:', '').split(':')[0];
+            return axios.get(`${phimapi.BASE_URL}/phim/${slug}`, HTTP_OPTS)
+                .then(res => ({ slug, movie: res.data && res.data.movie })).catch(() => null);
+        }));
+        const cands = details.filter(d => d && d.movie);
+        const hit = cands.find(d => wantImdb && d.movie.imdb && d.movie.imdb.id === wantImdb)
+            || cands.find(d => wantTmdb && d.movie.tmdb && String(d.movie.tmdb.id) === String(wantTmdb)
+                && (!movie.tmdb.type || !d.movie.tmdb.type || d.movie.tmdb.type === movie.tmdb.type)
+                && (!movie.tmdb.season || !d.movie.tmdb.season || d.movie.tmdb.season === movie.tmdb.season))
+            || cands.find(d => wantYear && parseInt(d.movie.year, 10) === wantYear);
+        if (hit) return hit.slug;
+    }
+    return null;
+}
+
 async function getStream(id, type) {
     try {
         const parts = id.replace('nguonc:', '').split(':');
@@ -177,17 +232,57 @@ async function getStream(id, type) {
         if (!movie || !Array.isArray(movie.episodes)) return [];
 
         const streams = [];
+        const embeds = [];
         for (const server of movie.episodes) {
             const item = findEpisode(server.items || [], targetEp);
-            // NguonC's own HLS link; `embed` pages are not playable in Stremio/Nuvio
-            const m3u8 = item && (item.m3u8 || (/\.m3u8(\?|$)/i.test(item.embed || '') ? item.embed : ''));
+            if (!item) continue;
+            const label = server.server_name || 'VIP';
+            const epTitle = `${movie.name || ''}${targetEp && item.name ? ` - Tập ${item.name}` : ''}`;
+
+            let m3u8 = item.m3u8 || (/\.m3u8(\?|$)/i.test(item.embed || '') ? item.embed : '');
+            let fromEmbed = false;
+            if (!m3u8 && item.embed) {
+                m3u8 = await resolveEmbed(item.embed);
+                fromEmbed = !!m3u8;
+                if (!m3u8) embeds.push({ label, epTitle, url: item.embed });
+            }
             if (!m3u8) continue;
-            streams.push({
-                name: `⚡ [CDN] NguonC • ${server.server_name || 'VIP'}`,
-                title: `${movie.name || ''}${targetEp && item.name ? ` - Tập ${item.name}` : ''}\n⚡ NguonC HLS trực tiếp`,
+
+            const stream = {
+                name: `⚡ [CDN] NguonC • ${label}`,
+                title: `${epTitle}\n⚡ NguonC HLS trực tiếp`,
                 url: m3u8,
                 behaviorHints: { notWebReady: false }
-            });
+            };
+            if (fromEmbed) {
+                const origin = new URL(item.embed).origin;
+                stream.behaviorHints.notWebReady = true;
+                stream.behaviorHints.proxyHeaders = { request: { Referer: `${origin}/`, Origin: origin } };
+            }
+            streams.push(stream);
+        }
+
+        // Fallback: the same film on KKPhim (matched by IMDb/TMDB/year, never "first result")
+        if (streams.length === 0) {
+            try {
+                const kkSlug = await findKkphimSlug(movie);
+                if (kkSlug) {
+                    const kkId = targetEp ? `kkphim:${kkSlug}:1:${targetEp}` : `kkphim:${kkSlug}`;
+                    const direct = await kkphim.getStream(kkId, type);
+                    direct.forEach(s => streams.push(Object.assign({}, s, { name: s.name.replace('KKPhim', 'NguonC (CDN HLS)') })));
+                }
+            } catch (e) {
+                console.error('[NguonC KKPhim Fallback Error]:', e.message);
+            }
+        }
+
+        // Last resort: let the user open NguonC's own player in a browser
+        if (streams.length === 0) {
+            embeds.forEach(e => streams.push({
+                name: `🌐 NguonC • ${e.label}`,
+                title: `${e.epTitle}\nMở trình phát NguonC trên trình duyệt`,
+                externalUrl: e.url
+            }));
         }
         return streams;
     } catch (err) {
