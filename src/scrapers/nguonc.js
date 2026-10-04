@@ -189,7 +189,7 @@ async function fetchEmbedPage(embedUrl) {
         const res = await axios.get(embedUrl, { timeout: 8000, responseType: 'text', headers: EMBED_HEADERS });
         const html = typeof res.data === 'string' ? res.data : JSON.stringify(res.data || '');
         attempts.push({ via: 'direct', status: res.status, html });
-        if (extractM3u8(html)) return attempts;
+        if (html) return attempts; // reachable directly; the VN proxy is only for geo-blocked hosts
     } catch (err) {
         attempts.push({ via: 'direct', status: err.response ? err.response.status : 0, error: err.message, html: '' });
     }
@@ -204,6 +204,42 @@ async function fetchEmbedPage(embedUrl) {
     return attempts;
 }
 
+/** The StreamC page ships a `stream-bootstrap` JSON whose `api` the player calls to obtain the playlist. */
+function readBootstrap(html) {
+    const m = typeof html === 'string' && html.match(/<script[^>]*id=["']stream-bootstrap["'][^>]*>([\s\S]*?)<\/script>/i);
+    if (!m) return null;
+    try { return JSON.parse(m[1]); } catch (e) { return null; }
+}
+
+/** Call the page's own API the way a browser player would (GET then POST); stops at the first reply holding an m3u8. */
+async function probeEmbedApi(embedUrl, html) {
+    const boot = readBootstrap(html);
+    const api = (boot && boot.api) || embedUrl;
+    const headers = Object.assign({}, EMBED_HEADERS, {
+        Accept: 'application/json, text/plain, */*',
+        Referer: embedUrl,
+        Origin: new URL(embedUrl).origin,
+        'X-Requested-With': 'XMLHttpRequest'
+    });
+    const variants = [
+        ['GET', () => axios.get(api, { timeout: 8000, headers })],
+        ['POST', () => axios.post(api, '', { timeout: 8000, headers: Object.assign({}, headers, { 'Content-Type': 'application/x-www-form-urlencoded' }) })],
+        ['POST-json', () => axios.post(api, '{}', { timeout: 8000, headers: Object.assign({}, headers, { 'Content-Type': 'application/json' }) })]
+    ];
+    const probes = [];
+    for (const [name, call] of variants) {
+        try {
+            const r = await call();
+            const body = typeof r.data === 'string' ? r.data : JSON.stringify(r.data || '');
+            probes.push({ name, status: r.status, length: body.length, m3u8: extractM3u8(body), body });
+            if (extractM3u8(body)) break;
+        } catch (err) {
+            probes.push({ name, status: err.response ? err.response.status : 0, error: err.message, body: '' });
+        }
+    }
+    return probes;
+}
+
 /**
  * The detail API only returns an `embed` page (streamc.xyz/embed.php?hash=...), no `m3u8`.
  * Read that page and pull the HLS playlist URL out of it.
@@ -213,11 +249,21 @@ async function resolveEmbed(embedUrl) {
     const cacheKey = `nguonc:embed:${embedUrl}`;
     const cached = cache.get(cacheKey);
     if (cached) return cached;
-    for (const a of await fetchEmbedPage(embedUrl)) {
+    const pages = await fetchEmbedPage(embedUrl);
+    for (const a of pages) {
         const url = extractM3u8(a.html);
         if (url) {
             cache.set(cacheKey, url, 1800);
             return url;
+        }
+    }
+    const page = pages.find(a => a.html);
+    if (page) {
+        for (const pr of await probeEmbedApi(embedUrl, page.html)) {
+            if (pr.m3u8) {
+                cache.set(cacheKey, pr.m3u8, 1800);
+                return pr.m3u8;
+            }
         }
     }
     return null;
@@ -235,13 +281,39 @@ async function debugEmbeds(slug) {
                 for (const a of await fetchEmbedPage(item.embed)) {
                     const html = a.html || '';
                     const idx = html.search(/m3u8|\.mp4|"file"|sources?\s*[:=]/i);
-                    entry.attempts.push({
+                    const att = {
                         via: a.via, status: a.status, error: a.error, length: html.length,
                         m3u8: extractM3u8(html),
-                        scripts: (html.match(/<script[^>]+src=["'][^"']+/gi) || []).map(x => x.replace(/^.*src=["']/i, '')).slice(0, 10),
                         urls: [...new Set((html.match(/https?:(?:\\?\/){2}[^"'\s<>\\)]+/g) || []).map(u => u.replace(/\\\//g, '/')))].slice(0, 25),
-                        snippet: html.slice(Math.max(0, idx < 0 ? 0 : idx - 300), (idx < 0 ? 0 : idx) + 700)
-                    });
+                        snippet: idx < 0 ? undefined : html.slice(Math.max(0, idx - 300), idx + 700)
+                    };
+                    if (html && !att.m3u8) {
+                        att.bootstrap = readBootstrap(html);
+                        att.htmlBody = html.slice(0, 7000);
+                        // JS assets: keep only the parts that talk to the network
+                        const assets = Object.values((att.bootstrap && att.bootstrap.assets) || {}).filter(u => /\.js(\?|$)/i.test(u));
+                        att.assets = [];
+                        for (const u of assets.slice(0, 4)) {
+                            try {
+                                const r = await axios.get(new URL(u, item.embed).href, { timeout: 8000, responseType: 'text', headers: EMBED_HEADERS });
+                                const js = typeof r.data === 'string' ? r.data : '';
+                                const parts = [];
+                                const re = /fetch\(|XMLHttpRequest|\.m3u8|jwplayer\(|setup\(|X-[A-Za-z-]+|\.api\b|method\s*:/g;
+                                let m;
+                                while ((m = re.exec(js)) && parts.length < 8) {
+                                    parts.push(js.slice(Math.max(0, m.index - 200), m.index + 400));
+                                    re.lastIndex = m.index + 400;
+                                }
+                                att.assets.push({ url: u, length: js.length, parts });
+                            } catch (err) {
+                                att.assets.push({ url: u, error: err.message });
+                            }
+                        }
+                        att.apiProbes = (await probeEmbedApi(item.embed, html)).map(pr => ({
+                            name: pr.name, status: pr.status, error: pr.error, length: pr.length, m3u8: pr.m3u8, body: (pr.body || '').slice(0, 1500)
+                        }));
+                    }
+                    entry.attempts.push(att);
                 }
             }
             report.servers.push(entry);
