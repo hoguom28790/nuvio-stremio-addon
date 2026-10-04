@@ -204,42 +204,6 @@ async function fetchEmbedPage(embedUrl) {
     return attempts;
 }
 
-/** The StreamC page ships a `stream-bootstrap` JSON whose `api` the player calls to obtain the playlist. */
-function readBootstrap(html) {
-    const m = typeof html === 'string' && html.match(/<script[^>]*id=["']stream-bootstrap["'][^>]*>([\s\S]*?)<\/script>/i);
-    if (!m) return null;
-    try { return JSON.parse(m[1]); } catch (e) { return null; }
-}
-
-/** Call the page's own API the way a browser player would (GET then POST); stops at the first reply holding an m3u8. */
-async function probeEmbedApi(embedUrl, html) {
-    const boot = readBootstrap(html);
-    const api = (boot && boot.api) || embedUrl;
-    const headers = Object.assign({}, EMBED_HEADERS, {
-        Accept: 'application/json, text/plain, */*',
-        Referer: embedUrl,
-        Origin: new URL(embedUrl).origin,
-        'X-Requested-With': 'XMLHttpRequest'
-    });
-    const variants = [
-        ['GET', () => axios.get(api, { timeout: 8000, headers })],
-        ['POST', () => axios.post(api, '', { timeout: 8000, headers: Object.assign({}, headers, { 'Content-Type': 'application/x-www-form-urlencoded' }) })],
-        ['POST-json', () => axios.post(api, '{}', { timeout: 8000, headers: Object.assign({}, headers, { 'Content-Type': 'application/json' }) })]
-    ];
-    const probes = [];
-    for (const [name, call] of variants) {
-        try {
-            const r = await call();
-            const body = typeof r.data === 'string' ? r.data : JSON.stringify(r.data || '');
-            probes.push({ name, status: r.status, length: body.length, m3u8: extractM3u8(body), body });
-            if (extractM3u8(body)) break;
-        } catch (err) {
-            probes.push({ name, status: err.response ? err.response.status : 0, error: err.message, body: '' });
-        }
-    }
-    return probes;
-}
-
 /**
  * The detail API only returns an `embed` page (streamc.xyz/embed.php?hash=...), no `m3u8`.
  * Read that page and pull the HLS playlist URL out of it.
@@ -257,15 +221,6 @@ async function resolveEmbed(embedUrl) {
             return url;
         }
     }
-    const page = pages.find(a => a.html);
-    if (page) {
-        for (const pr of await probeEmbedApi(embedUrl, page.html)) {
-            if (pr.m3u8) {
-                cache.set(cacheKey, pr.m3u8, 1800);
-                return pr.m3u8;
-            }
-        }
-    }
     return null;
 }
 
@@ -280,40 +235,7 @@ async function debugEmbeds(slug) {
             if (item.embed) {
                 for (const a of await fetchEmbedPage(item.embed)) {
                     const html = a.html || '';
-                    const idx = html.search(/m3u8|\.mp4|"file"|sources?\s*[:=]/i);
-                    const att = {
-                        via: a.via, status: a.status, error: a.error, length: html.length,
-                        m3u8: extractM3u8(html),
-                        urls: [...new Set((html.match(/https?:(?:\\?\/){2}[^"'\s<>\\)]+/g) || []).map(u => u.replace(/\\\//g, '/')))].slice(0, 25),
-                        snippet: idx < 0 ? undefined : html.slice(Math.max(0, idx - 300), idx + 700)
-                    };
-                    if (html && !att.m3u8) {
-                        att.bootstrap = readBootstrap(html);
-                        att.htmlBody = html.slice(0, 7000);
-                        // JS assets: keep only the parts that talk to the network
-                        const assets = Object.values((att.bootstrap && att.bootstrap.assets) || {}).filter(u => /\.js(\?|$)/i.test(u));
-                        att.assets = [];
-                        for (const u of assets.slice(0, 4)) {
-                            try {
-                                const r = await axios.get(new URL(u, item.embed).href, { timeout: 8000, responseType: 'text', headers: EMBED_HEADERS });
-                                const js = typeof r.data === 'string' ? r.data : '';
-                                const parts = [];
-                                const re = /fetch\(|XMLHttpRequest|\.m3u8|jwplayer\(|setup\(|X-[A-Za-z-]+|\.api\b|method\s*:/g;
-                                let m;
-                                while ((m = re.exec(js)) && parts.length < 8) {
-                                    parts.push(js.slice(Math.max(0, m.index - 200), m.index + 400));
-                                    re.lastIndex = m.index + 400;
-                                }
-                                att.assets.push({ url: u, length: js.length, parts });
-                            } catch (err) {
-                                att.assets.push({ url: u, error: err.message });
-                            }
-                        }
-                        att.apiProbes = (await probeEmbedApi(item.embed, html)).map(pr => ({
-                            name: pr.name, status: pr.status, error: pr.error, length: pr.length, m3u8: pr.m3u8, body: (pr.body || '').slice(0, 1500)
-                        }));
-                    }
-                    entry.attempts.push(att);
+                    entry.attempts.push({ via: a.via, status: a.status, error: a.error, length: html.length, m3u8: extractM3u8(html) });
                 }
             }
             report.servers.push(entry);
@@ -386,28 +308,32 @@ async function getStream(id, type) {
             streams.push(stream);
         }
 
-        // Fallback: the same film on KKPhim (matched by IMDb/TMDB/year, never "first result")
+        // NguonC's own player (StreamC) is protected against embedding/automation, so it cannot be played inside
+        // Stremio. Offer it as an external link (opens NguonC's player in the browser, no KKPhim ads).
+        const external = embeds.map(e => ({
+            name: `🌐 NguonC • ${e.label}`,
+            title: `${e.epTitle}\nMở trình phát NguonC trên trình duyệt (không quảng cáo KKPhim)`,
+            externalUrl: e.url
+        }));
+
+        // Same film on KKPhim (matched by IMDb/TMDB/year, never "first result") as an in-app option; it carries ads.
+        const direct = [];
         if (streams.length === 0) {
             try {
                 const kkSlug = await findKkphimSlug(movie);
                 if (kkSlug) {
                     const kkId = targetEp ? `kkphim:${kkSlug}:1:${targetEp}` : `kkphim:${kkSlug}`;
-                    const direct = await kkphim.getStream(kkId, type);
-                    direct.forEach(s => streams.push(Object.assign({}, s, { name: s.name.replace('KKPhim', 'NguonC (CDN HLS)') })));
+                    const kk = await kkphim.getStream(kkId, type);
+                    kk.forEach(s => direct.push(Object.assign({}, s, {
+                        name: s.name.replace('KKPhim', 'KKPhim (thay thế NguonC, có QC)')
+                    })));
                 }
             } catch (e) {
                 console.error('[NguonC KKPhim Fallback Error]:', e.message);
             }
         }
 
-        // Last resort: let the user open NguonC's own player in a browser
-        if (streams.length === 0) {
-            embeds.forEach(e => streams.push({
-                name: `🌐 NguonC • ${e.label}`,
-                title: `${e.epTitle}\nMở trình phát NguonC trên trình duyệt`,
-                externalUrl: e.url
-            }));
-        }
+        streams.push(...external, ...direct);
         return streams;
     } catch (err) {
         console.error('[NguonC Stream Error]:', err.message);
