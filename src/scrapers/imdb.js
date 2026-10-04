@@ -129,6 +129,7 @@ async function getStream(id, type, config = {}) {
                         : `nguonc:${bestMatch.slug}`;
                     const ncStreams = await nguonc.getStream(ncId, type, config.host);
                     ncStreams.forEach(s => {
+                        if (/KKPhim/.test(s.name)) return; // KKPhim is already searched above
                         if (s.name.includes('[CDN]') && prefCdn) {
                             cdnStreams.push(s);
                         } else if (prefProxy) {
