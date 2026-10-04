@@ -3,6 +3,7 @@ const cache = require('../utils/cache');
 const { parseFilter } = require('../utils/filterHelper');
 const { findEpisode } = require('../utils/episodeHelper');
 const kkphim = require('./kkphim');
+const phimapi = require('./phimapi');
 
 
 const BASE_URL = 'https://phim.nguonc.com/api';
@@ -197,6 +198,29 @@ async function resolveEmbed(embedUrl) {
     }
 }
 
+/** Find the KKPhim slug of the same film; null when no candidate is a confident match. */
+async function findKkphimSlug(movie) {
+    const wantImdb = movie.imdb && movie.imdb.id;
+    const wantTmdb = movie.tmdb && movie.tmdb.id;
+    const wantYear = parseInt(movie.year, 10) || 0;
+    for (const q of [movie.original_name, movie.name].filter(Boolean)) {
+        const results = await kkphim.getCatalog('movie', { search: q });
+        const details = await Promise.all((results || []).slice(0, 5).map(r => {
+            const slug = r.id.replace('kkphim:', '').split(':')[0];
+            return axios.get(`${phimapi.BASE_URL}/phim/${slug}`, HTTP_OPTS)
+                .then(res => ({ slug, movie: res.data && res.data.movie })).catch(() => null);
+        }));
+        const cands = details.filter(d => d && d.movie);
+        const hit = cands.find(d => wantImdb && d.movie.imdb && d.movie.imdb.id === wantImdb)
+            || cands.find(d => wantTmdb && d.movie.tmdb && String(d.movie.tmdb.id) === String(wantTmdb)
+                && (!movie.tmdb.type || !d.movie.tmdb.type || d.movie.tmdb.type === movie.tmdb.type)
+                && (!movie.tmdb.season || !d.movie.tmdb.season || d.movie.tmdb.season === movie.tmdb.season))
+            || cands.find(d => wantYear && parseInt(d.movie.year, 10) === wantYear);
+        if (hit) return hit.slug;
+    }
+    return null;
+}
+
 async function getStream(id, type) {
     try {
         const parts = id.replace('nguonc:', '').split(':');
@@ -238,17 +262,14 @@ async function getStream(id, type) {
             streams.push(stream);
         }
 
-        // Fallback: same title on KKPhim (previous behaviour, known to play)
+        // Fallback: the same film on KKPhim (matched by IMDb/TMDB/year, never "first result")
         if (streams.length === 0) {
             try {
-                for (const q of [movie.original_name, movie.name].filter(Boolean)) {
-                    const results = await kkphim.getCatalog(type, { search: q });
-                    if (!results || !results.length) continue;
-                    const kkSlug = results[0].id.replace('kkphim:', '').split(':')[0];
+                const kkSlug = await findKkphimSlug(movie);
+                if (kkSlug) {
                     const kkId = targetEp ? `kkphim:${kkSlug}:1:${targetEp}` : `kkphim:${kkSlug}`;
                     const direct = await kkphim.getStream(kkId, type);
                     direct.forEach(s => streams.push(Object.assign({}, s, { name: s.name.replace('KKPhim', 'NguonC (CDN HLS)') })));
-                    if (streams.length) break;
                 }
             } catch (e) {
                 console.error('[NguonC KKPhim Fallback Error]:', e.message);
