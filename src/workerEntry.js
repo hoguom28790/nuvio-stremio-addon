@@ -8,6 +8,7 @@ const avdb = require('./scrapers/avdb');
 const missav = require('./scrapers/missav');
 const kkphim = require('./scrapers/kkphim');
 const nguoncScraper = require('./scrapers/nguonc');
+const vsmov = require('./scrapers/vsmov');
 import { vnFetchText } from './utils/vnSocketFetch';
 
 // The same bundle also runs on Render (Dockerfile -> Node). There, raw sockets are unavailable (the Node proxy pool
@@ -619,6 +620,18 @@ export default {
             if (!slug) return new Response('Missing slug query parameter', { status: 400, headers: CORS_HEADERS });
             try {
                 const report = await nguoncScraper.debugEmbeds(slug);
+                return new Response(JSON.stringify(report, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+            } catch (e) {
+                return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+            }
+        }
+
+        // 8c2. VSMOV diagnostics: embed page -> signed master -> variant -> first segment (status, CORS, PNG wrapper?)
+        if (pathname === '/vsmov/debug') {
+            const slug = url.searchParams.get('slug');
+            if (!slug) return new Response('Missing slug query parameter', { status: 400, headers: CORS_HEADERS });
+            try {
+                const report = await vsmov.debugStream(slug);
                 return new Response(JSON.stringify(report, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
             } catch (e) {
                 return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
