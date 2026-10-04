@@ -16,6 +16,7 @@ import { vnFetchText } from './utils/vnSocketFetch';
 // navigator.userAgent is the reliable check: nodejs_compat also defines process.versions.node on Workers.
 const IS_CF_WORKER = typeof navigator !== 'undefined' && navigator.userAgent === 'Cloudflare-Workers';
 const VN_FETCH = IS_CF_WORKER ? { fetchText: vnFetchText } : {};
+if (IS_CF_WORKER) topxx.setVnFetchText(vnFetchText);
 
 // Edge cache for generated playlists (Workers do not cache their own responses automatically)
 async function edgeCached(request, ctx, ttlSeconds, build) {

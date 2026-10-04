@@ -19,6 +19,30 @@ async function probe(url, opts = {}) {
     }
 }
 
+// Workers only: raw-socket fetch through the Vietnam proxy pool (set from workerEntry)
+let vnFetchText = null;
+function setVnFetchText(fn) { vnFetchText = typeof fn === 'function' ? fn : null; }
+
+/** Fetch a page directly, then through the VN proxy; every attempt is reported (status, ms, error). */
+async function fetchPage(url, headers) {
+    const attempts = [];
+    let t0 = Date.now();
+    const direct = await probe(url, { responseType: 'text', headers, timeout: 6000 });
+    const dHtml = typeof direct.data === 'string' ? direct.data : '';
+    attempts.push({ via: 'direct', status: direct.status, ms: Date.now() - t0, error: direct.error, html: dHtml });
+    if (direct.status === 200 && dHtml) return attempts;
+    if (vnFetchText) {
+        t0 = Date.now();
+        try {
+            const html = await vnFetchText(url, { headers, tls: true, timeoutMs: 8000, validate: t => !!t });
+            attempts.push({ via: 'vn-proxy', status: 200, ms: Date.now() - t0, html });
+        } catch (err) {
+            attempts.push({ via: 'vn-proxy', status: 0, ms: Date.now() - t0, error: err.message, html: '' });
+        }
+    }
+    return attempts;
+}
+
 function analyze(html) {
     const text = typeof html === 'string' ? html : '';
     const kw = {};
@@ -47,14 +71,17 @@ async function debugStream(code) {
     report.item = { code: movie.code, duration: movie.duration, quality: movie.quality, source: source && { type: source.type, link: source.link } };
     if (!source || !source.link) return report;
 
-    const page = await probe(source.link, { responseType: 'text', headers: PAGE_HEADERS });
-    report.embed = Object.assign({ status: page.status, contentType: header(page, 'content-type'), error: page.error }, analyze(page.data));
+    const attempts = await fetchPage(source.link, PAGE_HEADERS);
+    const pageAttempt = attempts.find(a => a.html) || attempts[attempts.length - 1];
+    report.attempts = attempts.map(a => ({ via: a.via, status: a.status, ms: a.ms, error: a.error, length: (a.html || '').length }));
+    report.embed = analyze(pageAttempt.html);
     let playlistUrl = report.embed.m3u8[0] || null;
 
     if (!playlistUrl && report.embed.iframes.length) {
         const inner = new URL(report.embed.iframes[0], source.link).toString();
-        const ip = await probe(inner, { responseType: 'text', headers: Object.assign({}, PAGE_HEADERS, { Referer: source.link }) });
-        report.iframe = Object.assign({ url: inner, status: ip.status, error: ip.error }, analyze(ip.data));
+        const ia = await fetchPage(inner, Object.assign({}, PAGE_HEADERS, { Referer: source.link }));
+        const innerAttempt = ia.find(a => a.html) || ia[ia.length - 1];
+        report.iframe = Object.assign({ url: inner, via: innerAttempt.via, status: innerAttempt.status, error: innerAttempt.error }, analyze(innerAttempt.html));
         playlistUrl = report.iframe.m3u8[0] || null;
     }
     if (!playlistUrl) return report;
@@ -82,4 +109,4 @@ async function debugStream(code) {
     return report;
 }
 
-module.exports = { debugStream };
+module.exports = { debugStream, setVnFetchText };
