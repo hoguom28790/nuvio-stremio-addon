@@ -1,5 +1,5 @@
 function renderConfigPage(host, initialConfig = {}) {
-    const defaultSources = ['kkphim', 'nguonc'];
+    const defaultSources = ['kkphim', 'nguonc', 'vsmov'];
     const activeSources = Array.isArray(initialConfig.sources) ? initialConfig.sources : defaultSources;
     const prefCdnChecked = initialConfig.prefCdn !== false ? 'checked' : '';
     const prefProxyChecked = initialConfig.prefProxy !== false ? 'checked' : '';
@@ -708,6 +708,10 @@ function renderConfigPage(host, initialConfig = {}) {
       <label class="${sourceClass('nguonc')}">
         <input type="checkbox" name="source" value="nguonc" ${sourceChecked('nguonc')} onchange="updateUI()">
         <span>🛡️ NguonC (Phim Lẻ & Bộ)</span>
+      </label>
+      <label class="${sourceClass('vsmov')}">
+        <input type="checkbox" name="source" value="vsmov" ${sourceChecked('vsmov')} onchange="updateUI()">
+        <span>⚡ VSMOV (Phim Lẻ & Bộ)</span>
       </label>
     </div>
   </div>

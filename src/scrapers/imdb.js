@@ -1,6 +1,7 @@
 const axios = require('axios');
 const kkphim = require('./kkphim');
 const nguonc = require('./nguonc');
+const vsmov = require('./vsmov');
 
 const cache = require('../utils/cache');
 const { findBestSeasonMatch } = require('../utils/episodeHelper');
@@ -70,7 +71,7 @@ async function getStream(id, type, config = {}) {
         console.log(`[IMDb Resolver] Searching streams for: "${title}" (${imdbId}) Season: ${season}, Episode: ${episode}`);
 
         // Check enabled sources from config
-        const enabledSources = config.sources || ['kkphim', 'nguonc'];
+        const enabledSources = config.sources || ['kkphim', 'nguonc', 'vsmov'];
         const prefCdn = config.prefCdn !== false;
         const prefProxy = config.prefProxy !== false;
 
@@ -136,6 +137,22 @@ async function getStream(id, type, config = {}) {
                             proxyStreams.push(s);
                         }
                     });
+                }
+            } catch (e) {
+                // ignore
+            }
+        }
+
+        // 4. VSMOV (matched strictly by IMDb id; plays through the addon host, so it counts as a proxy stream)
+        if (enabledSources.includes('vsmov') && prefProxy) {
+            try {
+                const hits = vsmov.matchImdb(await vsmov.search(title, 10), imdbId);
+                const bestMatch = (type === 'series' && season) ? findBestSeasonMatch(hits, season) : hits[0];
+                if (bestMatch) {
+                    const vsId = (type === 'series' && episode)
+                        ? `vsmov:${bestMatch.slug}:${season}:${episode}`
+                        : `vsmov:${bestMatch.slug}`;
+                    proxyStreams.push(...await vsmov.getStream(vsId, type, config.host));
                 }
             } catch (e) {
                 // ignore
