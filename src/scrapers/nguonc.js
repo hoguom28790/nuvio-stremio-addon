@@ -2,6 +2,7 @@ const axios = require('axios');
 const cache = require('../utils/cache');
 const { parseFilter } = require('../utils/filterHelper');
 const { findEpisode } = require('../utils/episodeHelper');
+const phimapi = require('./phimapi');
 
 
 const BASE_URL = 'https://phim.nguonc.com/api';
@@ -146,6 +147,28 @@ async function getMeta(type, id) {
 
 }
 
+const norm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/[^a-z0-9]+/g, ' ').trim();
+
+// NguonC's own links are not always directly playable, so the same title is also looked up on phimapi.com.
+// Only an exact (normalised) title match is accepted - never "first search result".
+async function resolveFallback(movie, targetEp, type) {
+    const names = [movie.original_name, movie.name].filter(Boolean);
+    const wanted = new Set(names.map(norm));
+    for (const q of names) {
+        const metas = await phimapi.getCatalog('nguonc-fallback', type, { search: q });
+        for (const m of metas) {
+            const rawName = norm(m.name);
+            const origin = norm((m.description || '').split(' (')[0]);
+            if (!wanted.has(rawName) && !wanted.has(origin)) continue;
+            const slug = m.id.replace('nguonc-fallback:', '');
+            const id = targetEp ? `nguonc-fallback:${slug}:1:${targetEp}` : `nguonc-fallback:${slug}`;
+            const found = await phimapi.getStream('nguonc-fallback', 'NguonC', id, type);
+            if (found.length) return found;
+        }
+    }
+    return [];
+}
+
 async function getStream(id, type) {
     try {
         const parts = id.replace('nguonc:', '').split(':');
@@ -156,18 +179,28 @@ async function getStream(id, type) {
         const movie = res.data?.movie;
         if (!movie || !Array.isArray(movie.episodes)) return [];
 
+        const fallbackPromise = resolveFallback(movie, targetEp, type).catch(() => []);
+
         const streams = [];
+        const seen = new Set();
         for (const server of movie.episodes) {
             const item = findEpisode(server.items || [], targetEp);
             // NguonC's own HLS link; `embed` pages are not playable in Stremio/Nuvio
-            const m3u8 = item && (item.m3u8 || (/\.m3u8(\?|$)/i.test(item.embed || '') ? item.embed : ''));
-            if (!m3u8) continue;
+            const m3u8 = item && (item.m3u8 || item.link_m3u8 || (/\.m3u8(\?|$)/i.test(item.embed || '') ? item.embed : ''));
+            if (!m3u8 || seen.has(m3u8)) continue;
+            seen.add(m3u8);
             streams.push({
                 name: `⚡ [CDN] NguonC • ${server.server_name || 'VIP'}`,
                 title: `${movie.name || ''}${targetEp && item.name ? ` - Tập ${item.name}` : ''}\n⚡ NguonC HLS trực tiếp`,
                 url: m3u8,
                 behaviorHints: { notWebReady: false }
             });
+        }
+
+        for (const f of await fallbackPromise) {
+            if (seen.has(f.url)) continue;
+            seen.add(f.url);
+            streams.push(f);
         }
         return streams;
     } catch (err) {
