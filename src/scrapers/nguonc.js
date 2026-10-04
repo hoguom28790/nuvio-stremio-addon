@@ -267,7 +267,7 @@ async function findKkphimSlug(movie) {
     return null;
 }
 
-async function getStream(id, type) {
+async function getStream(id, type, host) {
     try {
         const parts = id.replace('nguonc:', '').split(':');
         const slug = parts[0];
@@ -313,9 +313,9 @@ async function getStream(id, type) {
                 const kkSlug = await findKkphimSlug(movie);
                 if (kkSlug) {
                     const kkId = targetEp ? `kkphim:${kkSlug}:1:${targetEp}` : `kkphim:${kkSlug}`;
-                    const kk = await kkphim.getStream(kkId, type);
+                    const kk = await kkphim.getStream(kkId, type, host);
                     kk.forEach(s => direct.push(Object.assign({}, s, {
-                        name: s.name.replace('KKPhim', 'KKPhim (thay thế NguonC, có QC)')
+                        name: s.name.replace('KKPhim', 'KKPhim (thay thế NguonC)')
                     })));
                 }
             } catch (e) {
