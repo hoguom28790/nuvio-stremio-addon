@@ -645,11 +645,29 @@ export default {
             } catch (e) { report.vnProxy = { error: e.message, ms: Date.now() - t1 }; }
             if (raw) {
                 report.isMaster = raw.includes('#EXT-X-STREAM-INF');
+                if (report.isMaster) {
+                    // look into the variants: block layout (DISCONTINUITY-separated) shows where the ads sit
+                    const variants = kkphim.listVariants(raw, targetUrl);
+                    report.variants = variants;
+                    const wanted = url.searchParams.get('variant');
+                    const vUrl = (wanted && variants.find(v => v.includes(wanted))) || variants[0];
+                    if (vUrl) {
+                        try {
+                            const vText = IS_CF_WORKER ? await vnFetchText(vUrl, { headers: hdrs }) : '';
+                            report.variant = { url: vUrl, ok: !!vText };
+                            if (vText) {
+                                report.layout = kkphim.describeBlocks(vText, vUrl);
+                                if (url.searchParams.get('raw') === '1') report.variantText = vText.slice(0, 20000);
+                            }
+                        } catch (e) { report.variant = { url: vUrl, error: e.message }; }
+                    }
+                }
                 if (!report.isMaster) {
                     const before = raw.split('\n').filter(l => l.trim() && !l.startsWith('#')).length;
                     const cleaned = kkphim.cleanM3u8(raw, targetUrl);
                     const after = cleaned.split('\n').filter(l => l.trim() && !l.startsWith('#')).length;
                     report.segments = { before, after, removed: before - after };
+                    report.layout = kkphim.describeBlocks(raw, targetUrl);
                 }
             }
             return new Response(JSON.stringify(report, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });

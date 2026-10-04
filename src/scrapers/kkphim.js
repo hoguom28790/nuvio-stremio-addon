@@ -95,6 +95,33 @@ function markAds(entries) {
     }
 }
 
+// Diagnostics: structure of a media playlist as the ad detector sees it (blocks split by DISCONTINUITY)
+function describeBlocks(content, baseUrl) {
+    const { entries } = parseMedia(content, baseUrl);
+    markAds(entries);
+    const blocks = [];
+    let t = 0;
+    entries.forEach((e, i) => {
+        if (e.disc || !blocks.length) blocks.push({ from: i, startSec: Math.round(t), sec: 0, segs: 0, ads: 0, dir: e.dir, first: e.uri, extra: new Set() });
+        const b = blocks[blocks.length - 1];
+        b.sec += e.dur || 0;
+        b.segs++;
+        if (e.ad) b.ads++;
+        if (e.dir !== b.dir) b.extra.add(e.dir);
+        b.last = e.uri;
+        t += e.dur || 0;
+    });
+    return {
+        segments: entries.length,
+        totalSec: Math.round(t),
+        blocks: blocks.map(b => ({
+            from: b.from, startSec: b.startSec, startMin: +(b.startSec / 60).toFixed(1), sec: Math.round(b.sec), segs: b.segs,
+            markedAsAd: b.ads, dir: b.dir, first: b.first.slice(-60), last: (b.last || '').slice(-60),
+            otherDirs: [...b.extra].slice(0, 3)
+        }))
+    };
+}
+
 function cleanM3u8(content, baseUrl) {
     const { header, entries, tail } = parseMedia(content, baseUrl);
     markAds(entries);
@@ -236,4 +263,4 @@ async function getCleanM3u8(targetUrl, host = 'localhost', opts = {}) {
 }
 
 
-module.exports = { listVariants, getCatalog, getMeta, getStream, getCleanM3u8, cleanM3u8, processCleanM3u8, formatPoster };
+module.exports = { describeBlocks, listVariants, getCatalog, getMeta, getStream, getCleanM3u8, cleanM3u8, processCleanM3u8, formatPoster };
