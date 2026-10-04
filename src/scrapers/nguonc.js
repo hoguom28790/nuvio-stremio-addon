@@ -2,64 +2,71 @@ const axios = require('axios');
 const cache = require('../utils/cache');
 const { parseFilter } = require('../utils/filterHelper');
 const { findEpisode } = require('../utils/episodeHelper');
-const kkphim = require('./kkphim');
 
 
 const BASE_URL = 'https://phim.nguonc.com/api';
 
 async function getCatalog(type, extra = {}) {
     try {
-        const page = extra.skip ? Math.floor(extra.skip / 10) + 1 : 1;
-        let url = '';
+        const skip = parseInt(extra.skip, 10) || 0;
+        const filter = !extra.search && extra.genre ? parseFilter(extra.genre) : null;
+        const isDecade = filter && filter.filterType === 'decade';
+        const size = isDecade ? 100 : 10; // NguonC pages hold 10 titles
+        const page = Math.floor(skip / size) + 1;
+        let urls = [];
 
         if (extra.search) {
-            url = `${BASE_URL}/films/search?keyword=${encodeURIComponent(extra.search)}&page=1`;
-        } else if (extra.genre) {
-            const filter = parseFilter(extra.genre);
-            if (filter) {
-                if (filter.filterType === 'genre') {
-                    url = `${BASE_URL}/films/the-loai/${filter.slug}?page=${page}`;
-                } else if (filter.filterType === 'country') {
-                    url = `${BASE_URL}/films/quoc-gia/${filter.slug}?page=${page}`;
-                } else if (filter.filterType === 'category') {
-                    if (filter.slug === 'phim-moi-cap-nhat') {
-                        url = `${BASE_URL}/films/phim-moi-cap-nhat?page=${page}`;
-                    } else {
-                        url = `${BASE_URL}/films/danh-sach/${filter.slug}?page=${page}`;
-                    }
-                } else if (filter.filterType === 'year' || filter.filterType === 'search') {
-                    url = `${BASE_URL}/films/search?keyword=${encodeURIComponent(filter.value)}&page=1`;
-                }
+            urls = [`${BASE_URL}/films/search?keyword=${encodeURIComponent(extra.search.trim())}&page=${page}`];
+        } else if (filter) {
+            if (filter.filterType === 'genre') {
+                urls = [`${BASE_URL}/films/the-loai/${filter.slug}?page=${page}`];
+            } else if (filter.filterType === 'country') {
+                urls = [`${BASE_URL}/films/quoc-gia/${filter.slug}?page=${page}`];
+            } else if (filter.filterType === 'category') {
+                urls = [filter.slug === 'phim-moi-cap-nhat'
+                    ? `${BASE_URL}/films/phim-moi-cap-nhat?page=${page}`
+                    : `${BASE_URL}/films/danh-sach/${filter.slug}?page=${page}`];
+            } else if (filter.filterType === 'year') {
+                urls = [`${BASE_URL}/films/nam-phat-hanh/${filter.slug}?page=${page}`];
+            } else if (isDecade) {
+                const start = parseInt(filter.slug, 10);
+                urls = Array.from({ length: 10 }, (_, i) => `${BASE_URL}/films/nam-phat-hanh/${start + i}?page=${page}`);
+            } else {
+                urls = [`${BASE_URL}/films/search?keyword=${encodeURIComponent(filter.value)}&page=${page}`];
             }
         }
 
-        if (!url) {
-            if (type === 'series') {
-                url = `${BASE_URL}/films/danh-sach/phim-bo?page=${page}`;
-            } else {
-                url = `${BASE_URL}/films/danh-sach/phim-le?page=${page}`;
-            }
+        if (urls.length === 0) {
+            urls = [type === 'series'
+                ? `${BASE_URL}/films/danh-sach/phim-bo?page=${page}`
+                : `${BASE_URL}/films/danh-sach/phim-le?page=${page}`];
         }
 
         const cacheKey = `nguonc:catalog:${type}:${JSON.stringify(extra)}`;
         const cached = cache.get(cacheKey);
         if (cached) return cached;
 
-        const res = await axios.get(url, { timeout: 10000 });
-        const items = res.data?.items || [];
+        const responses = await Promise.all(urls.map(u =>
+            axios.get(u, { timeout: 10000 }).then(r => r.data).catch(() => null)));
 
-        const metas = items.map(item => {
-            return {
-                id: `nguonc:${item.slug}`,
-                type: type === 'series' ? 'series' : 'movie',
-                name: item.name || 'Không tên',
-                poster: item.poster_url || item.thumb_url || '',
-                posterShape: 'poster',
-                description: `${item.original_name || ''} (${item.year || ''})\n🛡️ Server: Máy chủ trung gian (Proxy / StreamC)\n🎞️ Chất lượng: ${item.quality || 'HD'}`
-            };
-        });
+        const seen = new Set();
+        const metas = [];
+        for (const data of responses) {
+            for (const item of (data && data.items) || []) {
+                if (!item || !item.slug || seen.has(item.slug)) continue;
+                seen.add(item.slug);
+                metas.push({
+                    id: `nguonc:${item.slug}`,
+                    type: type === 'series' ? 'series' : 'movie',
+                    name: item.name || 'Không tên',
+                    poster: item.poster_url || item.thumb_url || '',
+                    posterShape: 'poster',
+                    description: `${item.original_name || ''} (${item.year || ''})\n🛡️ Server: NguonC\n🎞️ Chất lượng: ${item.quality || 'HD'}`
+                });
+            }
+        }
 
-        cache.set(cacheKey, metas, 600);
+        if (metas.length) cache.set(cacheKey, metas, 600);
         return metas;
     } catch (err) {
         console.error('[NguonC Catalog Error]:', err.message);
@@ -80,11 +87,12 @@ async function getMeta(type, id) {
 
         const episodes = movie.episodes || [];
         const totalEpNum = parseInt(movie.total_episodes, 10);
-        const isSeries = type === 'series' || (totalEpNum && totalEpNum > 1);
+        const maxItems = episodes.reduce((n, sv) => Math.max(n, (sv.items || []).length), 0);
+        const isSeries = type === 'series' || (totalEpNum && totalEpNum > 1) || maxItems > 1;
 
         const videos = [];
         if (isSeries && episodes.length > 0) {
-            const firstServerItems = episodes[0]?.items || [];
+            const firstServerItems = episodes.reduce((b, sv) => ((sv.items || []).length > b.length ? sv.items : b), []);
             firstServerItems.forEach((ep, idx) => {
                 videos.push({
                     id: `nguonc:${slug}:1:${ep.slug || idx + 1}`,
@@ -138,7 +146,7 @@ async function getMeta(type, id) {
 
 }
 
-async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.dev') {
+async function getStream(id, type) {
     try {
         const parts = id.replace('nguonc:', '').split(':');
         const slug = parts[0];
@@ -146,45 +154,21 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
 
         const res = await axios.get(`${BASE_URL}/film/${slug}`, { timeout: 10000 });
         const movie = res.data?.movie;
-        if (!movie || !movie.episodes) return [];
+        if (!movie || !Array.isArray(movie.episodes)) return [];
 
         const streams = [];
-
-        // 1. Cross-resolve direct HLS CDN stream from KKPhim or VSMOV
-        try {
-            const searchQueries = [movie.original_name, movie.name].filter(Boolean);
-            let match = null;
-            let matchSource = null;
-
-            // Check KKPhim first
-            for (const q of searchQueries) {
-                const results = await kkphim.getCatalog(type, { search: q });
-                if (results && results.length > 0) {
-                    match = results[0];
-                    matchSource = 'kkphim';
-                    break;
-                }
-            }
-
-            if (match && matchSource === 'kkphim') {
-                const kkSlug = match.id.replace('kkphim:', '').split(':')[0];
-                const kkId = targetEp ? `kkphim:${kkSlug}:1:${targetEp}` : `kkphim:${kkSlug}`;
-                const directStreams = await kkphim.getStream(kkId, type, host);
-                directStreams.forEach(s => {
-                    streams.push({
-                        name: s.name.replace('KKPhim', 'NguonC (CDN HLS)'),
-                        title: s.title,
-                        url: s.url,
-                        behaviorHints: {
-                            notWebReady: false
-                        }
-                    });
-                });
-            }
-        } catch (e) {
-            console.error('[NguonC Cross-source Error]:', e.message);
+        for (const server of movie.episodes) {
+            const item = findEpisode(server.items || [], targetEp);
+            // NguonC's own HLS link; `embed` pages are not playable in Stremio/Nuvio
+            const m3u8 = item && (item.m3u8 || (/\.m3u8(\?|$)/i.test(item.embed || '') ? item.embed : ''));
+            if (!m3u8) continue;
+            streams.push({
+                name: `⚡ [CDN] NguonC • ${server.server_name || 'VIP'}`,
+                title: `${movie.name || ''}${targetEp && item.name ? ` - Tập ${item.name}` : ''}\n⚡ NguonC HLS trực tiếp`,
+                url: m3u8,
+                behaviorHints: { notWebReady: false }
+            });
         }
-
         return streams;
     } catch (err) {
         console.error('[NguonC Stream Error]:', err.message);
