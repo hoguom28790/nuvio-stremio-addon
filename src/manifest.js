@@ -1,9 +1,7 @@
 const reference = require('../Reference.json');
 const vsmov = require('./scrapers/vsmov');
 
-// Filter out tv/sports catalogs and legacy vsmov
-const nguoncLanguages = ["Ngôn ngữ: Vietsub", "Ngôn ngữ: Thuyết minh", "Ngôn ngữ: Lồng tiếng"];
-
+// Filter out tv/sports catalogs and removed sources
 const filteredCatalogs = reference.catalogs.filter(c => 
     c.type !== 'tv' && 
     c.id !== 'streamfree-live' && 
@@ -16,14 +14,8 @@ const filteredCatalogs = reference.catalogs.filter(c =>
             extra: c.extra.map(e => e.name === 'genre' ? Object.assign({}, e, { options: vsmov.CATALOG_OPTIONS }) : e)
         });
     }
-    if (!c.id.startsWith('nguonc-')) return c;
-    // NguonC /films/ngon-ngu/{slug} filter: add language options after the category entries
-    return Object.assign({}, c, {
-        extra: c.extra.map(e => e.name === 'genre'
-            ? Object.assign({}, e, { options: [...e.options.slice(0, 6), ...nguoncLanguages, ...e.options.slice(6)] })
-            : e)
-    });
-});
+    return c;
+}).sort((a, b) => (a.id.startsWith('kkphim') ? 0 : 1) - (b.id.startsWith('kkphim') ? 0 : 1)); // KKPhim stays first
 
 const hentaizGenres = [
     "Tất Cả",
@@ -252,13 +244,13 @@ const missavCatalogs = [
 
 const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs, ...missavCatalogs];
 const allCatalogs = [...filteredCatalogs, ...adultCatalogs];
-const allPrefixes = ["tt", "nguonc:", "kkphim:", "vsmov:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "missav:"];
+const allPrefixes = ["tt", "kkphim:", "vsmov:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "missav:"];
 
 const baseManifest = {
     id: "org.hophim.stremio",
     version: "1.4.5",
     name: "Hồ Phim",
-    description: "Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ KKPhim, NguonC, VSMOV",
+    description: "Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ KKPhim, VSMOV",
     logo: "https://raw.githubusercontent.com/hoguom28790/nuvio-stremio-addon/master/logo.png",
     resources: [
         "catalog",

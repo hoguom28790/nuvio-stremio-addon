@@ -1,6 +1,5 @@
 const axios = require('axios');
 const kkphim = require('./kkphim');
-const nguonc = require('./nguonc');
 const vsmov = require('./vsmov');
 
 const cache = require('../utils/cache');
@@ -71,7 +70,7 @@ async function getStream(id, type, config = {}) {
         console.log(`[IMDb Resolver] Searching streams for: "${title}" (${imdbId}) Season: ${season}, Episode: ${episode}`);
 
         // Check enabled sources from config
-        const enabledSources = config.sources || ['kkphim', 'nguonc', 'vsmov'];
+        const enabledSources = config.sources || ['kkphim', 'vsmov'];
         const prefCdn = config.prefCdn !== false;
         const prefProxy = config.prefProxy !== false;
 
@@ -105,45 +104,7 @@ async function getStream(id, type, config = {}) {
             }
         }
 
-        // 3. Search NguonC (if enabled and proxy allowed)
-        if (enabledSources.includes('nguonc') && prefProxy) {
-            try {
-                let bestMatch = null;
-                if (type === 'series' && season) {
-                    bestMatch = await searchWithSeason(async (q) => {
-                        const r = await axios.get(`https://phim.nguonc.com/api/films/search?keyword=${encodeURIComponent(q)}&page=1`, { timeout: 5000, headers: { Accept: 'application/json' } });
-                        // Prefer exact IMDb id (and TMDB season) over fuzzy title matching
-                        const items = r.data?.items || [];
-                        const byImdb = nguonc.matchImdb(items, imdbId);
-                        const bySeason = byImdb.find(it => it.tmdb && String(it.tmdb.season) === String(season));
-                        return bySeason ? [bySeason] : (byImdb.length ? byImdb : items);
-                    }, title, season);
-                } else {
-                    const ncRes = await axios.get(`https://phim.nguonc.com/api/films/search?keyword=${encodeURIComponent(title)}&page=1`, { timeout: 5000, headers: { Accept: 'application/json' } });
-                    const items = ncRes.data?.items || [];
-                    bestMatch = nguonc.matchImdb(items, imdbId)[0] || items[0] || null;
-                }
-
-                if (bestMatch) {
-                    const ncId = (type === 'series' && episode)
-                        ? `nguonc:${bestMatch.slug}:${season}:${episode}`
-                        : `nguonc:${bestMatch.slug}`;
-                    const ncStreams = await nguonc.getStream(ncId, type, config.host);
-                    ncStreams.forEach(s => {
-                        if (/KKPhim/.test(s.name)) return; // KKPhim is already searched above
-                        if (s.name.includes('[CDN]') && prefCdn) {
-                            cdnStreams.push(s);
-                        } else if (prefProxy) {
-                            proxyStreams.push(s);
-                        }
-                    });
-                }
-            } catch (e) {
-                // ignore
-            }
-        }
-
-        // 4. VSMOV (matched strictly by IMDb id; plays through the addon host, so it counts as a proxy stream)
+        // 2. VSMOV (matched strictly by IMDb id; plays through the addon host, so it counts as a proxy stream)
         if (enabledSources.includes('vsmov') && prefProxy) {
             try {
                 const hits = vsmov.matchImdb(await vsmov.search(title, 10), imdbId);

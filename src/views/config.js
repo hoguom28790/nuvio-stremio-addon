@@ -1,5 +1,5 @@
 function renderConfigPage(host, initialConfig = {}) {
-    const defaultSources = ['kkphim', 'nguonc', 'vsmov'];
+    const defaultSources = ['kkphim', 'vsmov'];
     const activeSources = Array.isArray(initialConfig.sources) ? initialConfig.sources : defaultSources;
     const prefCdnChecked = initialConfig.prefCdn !== false ? 'checked' : '';
     const prefProxyChecked = initialConfig.prefProxy !== false ? 'checked' : '';
@@ -629,7 +629,7 @@ function renderConfigPage(host, initialConfig = {}) {
   <div class="hero">
     <h1>Hồ Phim - Stremio & Nuvio</h1>
     <p class="subtitle">
-      Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ NguonC, Siêu Tầm Phim, Hoạt Hình 3D, CLB Phim Xưa, YanHH3D, KKPhim.
+      Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ KKPhim và VSMOV.
     </p>
     <div class="badge-bar">
       <span class="pill-tag">⚡ CDN Tốc Độ Cao</span>
@@ -666,7 +666,7 @@ function renderConfigPage(host, initialConfig = {}) {
           <span>🛡️ Cho Phép Link Proxy / Embed Dự Phòng</span>
         </div>
         <div class="switch-desc">
-          Bật nguồn StreamC và NguonC qua máy chủ trung gian khi các nguồn phát CDN chính bị nghẽn mạng.
+          Bật các nguồn phát qua máy chủ trung gian (VSMOV) khi các nguồn phát CDN chính bị nghẽn mạng.
         </div>
       </div>
       <label class="switch">
@@ -704,10 +704,6 @@ function renderConfigPage(host, initialConfig = {}) {
       <label class="${sourceClass('kkphim')}">
         <input type="checkbox" name="source" value="kkphim" ${sourceChecked('kkphim')} onchange="updateUI()">
         <span>⚡ KKPhim (Phim Lẻ & Bộ)</span>
-      </label>
-      <label class="${sourceClass('nguonc')}">
-        <input type="checkbox" name="source" value="nguonc" ${sourceChecked('nguonc')} onchange="updateUI()">
-        <span>🛡️ NguonC (Phim Lẻ & Bộ)</span>
       </label>
       <label class="${sourceClass('vsmov')}">
         <input type="checkbox" name="source" value="vsmov" ${sourceChecked('vsmov')} onchange="updateUI()">

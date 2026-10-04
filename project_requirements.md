@@ -13,7 +13,7 @@ Tài liệu này tổng hợp toàn bộ các yêu cầu khắt khe, ràng buộ
 - **Vấn đề Geo-blocking của KKPhim / NguồnC:** CDN của nguồn phim (ví dụ: `s5.phim1280.tv`) chặn toàn bộ IP ngoài lãnh thổ Việt Nam. Do Cloudflare Workers và Google Apps Script (GAS) đều dùng IP quốc tế, việc fetch trực tiếp M3U8 từ các nền tảng này sẽ bị lỗi 404. Khi giải quyết vấn đề này, chỉ được phép sử dụng Proxy trung gian cho các file TEXT cực nhẹ (M3U8) chứ tuyệt đối không proxy video.
 
 ## 3. Quy Tắc Lọc Quảng Cáo (Ad-Filtering)
-> **CẬP NHẬT 2026-10-04 (2):** Stream "Lọc QC" của KKPhim được BẬT LẠI (đặt trước) vì `/kkphim/debug` xác nhận bộ lọc nhận diện đúng khối QC phút 3:00 (`convertv8/`) và 15:00 (`/v8/<hash>/segment_NNNN.ts`). Luồng CDN gốc vẫn được trả ngay sau đó làm dự phòng nếu lọc không ổn định. Khi NguonC chỉ có `embed` (StreamC được bảo vệ, không phát được trong app) addon dùng bản KKPhim khớp IMDb/TMDB/năm.
+> **CẬP NHẬT 2026-10-04 (2):** Stream "Lọc QC" của KKPhim được BẬT LẠI (đặt trước) vì `/kkphim/debug` xác nhận bộ lọc nhận diện đúng khối QC phút 3:00 (`convertv8/`) và 15:00 (`/v8/<hash>/segment_NNNN.ts`). Luồng CDN gốc vẫn được trả ngay sau đó làm dự phòng nếu lọc không ổn định. 
 
 - Việc lọc quảng cáo (đặc biệt là quảng cáo phút 3:00 và 15:00 của KKPhim/Ophim) là **Ưu tiên Hàng đầu**.
 - **Trên Nuvio Web:** Lọc quảng cáo sẽ được thực hiện trực tiếp ở phía trình duyệt (Client-side) thông qua `CleanPlaylistLoader` tích hợp trong Hls.js (`multiThreadedPreloader.js`). Backend Cloudflare chỉ cần trả về *Virtual Master Playlist (Mã 200 OK)* thay vì *302 Redirect* để tránh lỗi CORS Preflight (OPTIONS 405) từ CDN chặn trình duyệt.
@@ -21,9 +21,9 @@ Tài liệu này tổng hợp toàn bộ các yêu cầu khắt khe, ràng buộ
 - Thuật toán Regex nhận diện QC hiện tại: `/convertv\d*\/|\/v\d+\/.*segment_|segment_\d{4}/i` (Phải luôn giữ liên kết #EXT-X-DISCONTINUITY chặt chẽ).
 
 ## 4. Các Nguồn Phim Tích Hợp
-- Nguồn đang hỗ trợ cho phim thường: KKPhim (client `src/scrapers/phimapi.js`) và NguonC (API riêng `phim.nguonc.com`, link m3u8 của chính nó). CLBPX, HH3D, YAN, STP đã bị XÓA (2026-10-04) vì cùng dữ liệu `phimapi.com` với KKPhim.
+- Nguồn đang hỗ trợ cho phim thường: KKPhim (client `src/scrapers/phimapi.js`) và VSMOV (xem bên dưới). NguonC đã bị GỠ (2026-10-04, theo yêu cầu chủ dự án; trang embed StreamC được bảo vệ nên không phát được trong app). CLBPX, HH3D, YAN, STP đã bị XÓA (2026-10-04) vì cùng dữ liệu `phimapi.com` với KKPhim.
 - VSMOV (API công khai `https://vsmov.com/api`, `src/scrapers/vsmov.js`): chi tiết phim chỉ có `link_embed` (`v*.streamvsmov.com/video/<uuid>`). Trang embed lộ công khai `signedMasterUrl` (link có chữ ký, hết hạn ~1 giờ) nên addon phân giải TẠI THỜI ĐIỂM PHÁT qua `/vsmov/playlist.m3u8?e=<embed>`; đoạn video là TS bọc PNG nên đi qua `/vsmov/seg.ts?u=` (Cloudflare Edge, stream, bóc đến hết chunk IEND). `/vsmov/debug?slug=` để chẩn đoán. Không có endpoint năm phát hành (404).
-- Hệ thống cần hỗ trợ bóc tách M3U8 và bypass các phương thức chống trộm link (nếu có) từ các nguồn: KKPhim, NguonC, Ophim, Hentaiz, JavHD, VLXX, AVDB.
+- Hệ thống cần hỗ trợ bóc tách M3U8 và bypass các phương thức chống trộm link (nếu có) từ các nguồn: KKPhim, VSMOV, Ophim, Hentaiz, JavHD, VLXX, AVDB.
 - Khi làm việc với phim người lớn (JavHD/VLXX), lưu ý xử lý Unwrapper (cắt header PNG rác 95-byte) trực tiếp qua Cloudflare Edge.
 
 ## 5. Quy Trình Cập Nhật & Deploy
