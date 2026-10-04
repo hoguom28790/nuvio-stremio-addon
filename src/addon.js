@@ -2,6 +2,7 @@ const manifest = require('./manifest');
 
 const kkphim = require('./scrapers/kkphim');
 const nguonc = require('./scrapers/nguonc');
+const vsmov = require('./scrapers/vsmov');
 
 const hentaiz = require('./scrapers/hentaiz');
 const javhd = require('./scrapers/javhd');
@@ -65,6 +66,9 @@ builder.defineCatalogHandler(async ({ type, id, extra = {}, config = {} }) => {
         if (id === 'nguonc-movie' && isSourceEnabled('nguonc', config)) return { metas: await nguonc.getCatalog('movie', extra) };
         if (id === 'nguonc-series' && isSourceEnabled('nguonc', config)) return { metas: await nguonc.getCatalog('series', extra) };
 
+        if (id === 'vsmov-movie' && isSourceEnabled('vsmov', config)) return { metas: await vsmov.getCatalog('movie', extra) };
+        if (id === 'vsmov-series' && isSourceEnabled('vsmov', config)) return { metas: await vsmov.getCatalog('series', extra) };
+
         if ((id === 'hentaiz-anime' || id === 'hentaiz-movie') && isSourceEnabled('hentaiz', config)) {
             return { metas: await hentaiz.getCatalog(type, extra) };
         }
@@ -104,6 +108,10 @@ builder.defineMetaHandler(async ({ type, id, config = {} }) => {
         }
         if (id.startsWith('nguonc:') && isSourceEnabled('nguonc', config)) {
             const meta = await nguonc.getMeta(type, id);
+            if (meta) return { meta };
+        }
+        if (id.startsWith('vsmov:') && isSourceEnabled('vsmov', config)) {
+            const meta = await vsmov.getMeta(type, id);
             if (meta) return { meta };
         }
         if (id.startsWith('hentaiz:')) {
@@ -154,6 +162,8 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
             streams = await kkphim.getStream(id, type, config.host);
         } else if (id.startsWith('nguonc:') && isSourceEnabled('nguonc', config)) {
             streams = await nguonc.getStream(id, type, config.host);
+        } else if (id.startsWith('vsmov:') && isSourceEnabled('vsmov', config)) {
+            streams = await vsmov.getStream(id, type, config.host);
         } else if (id.startsWith('hentaiz:')) {
             streams = await hentaiz.getStream(id, type, config.host);
         } else if (id.startsWith('javhd:')) {

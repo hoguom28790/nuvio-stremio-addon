@@ -22,6 +22,7 @@ Tài liệu này tổng hợp toàn bộ các yêu cầu khắt khe, ràng buộ
 
 ## 4. Các Nguồn Phim Tích Hợp
 - Nguồn đang hỗ trợ cho phim thường: KKPhim (client `src/scrapers/phimapi.js`) và NguonC (API riêng `phim.nguonc.com`, link m3u8 của chính nó). CLBPX, HH3D, YAN, STP đã bị XÓA (2026-10-04) vì cùng dữ liệu `phimapi.com` với KKPhim.
+- VSMOV (API công khai `https://vsmov.com/api`, `src/scrapers/vsmov.js`): chi tiết phim chỉ có `link_embed` (`v*.streamvsmov.com/video/<uuid>`). Trang embed lộ công khai `signedMasterUrl` (link có chữ ký, hết hạn ~1 giờ) nên addon phân giải TẠI THỜI ĐIỂM PHÁT qua `/vsmov/playlist.m3u8?e=<embed>`; đoạn video là TS bọc PNG nên đi qua `/vsmov/seg.ts?u=` (Cloudflare Edge, stream, bóc đến hết chunk IEND). `/vsmov/debug?slug=` để chẩn đoán. Không có endpoint năm phát hành (404).
 - Hệ thống cần hỗ trợ bóc tách M3U8 và bypass các phương thức chống trộm link (nếu có) từ các nguồn: KKPhim, NguonC, Ophim, Hentaiz, JavHD, VLXX, AVDB.
 - Khi làm việc với phim người lớn (JavHD/VLXX), lưu ý xử lý Unwrapper (cắt header PNG rác 95-byte) trực tiếp qua Cloudflare Edge.
 

@@ -231,6 +231,68 @@ async function handleSegmentProxy(targetUrl, referer) {
     }
 }
 
+// VSMOV segment: PNG-wrapped MPEG-TS on *.streamvsmov.com. Streams the body, dropping everything before the TS payload.
+async function handleVsmovSegment(rawUrl) {
+    let target;
+    try { target = new URL(rawUrl); } catch (e) { return new Response('Bad url', { status: 400, headers: CORS_HEADERS }); }
+    if (target.protocol !== 'https:' || !vsmov.isVsmovHost(target.hostname)) {
+        return new Response('Host not allowed', { status: 403, headers: CORS_HEADERS });
+    }
+    try {
+        const upstream = await fetch(target.href, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'Referer': 'https://v2.streamvsmov.com/',
+                'Origin': 'https://v2.streamvsmov.com',
+                'Accept': '*/*'
+            },
+            cf: { cacheEverything: true, cacheTtlByStatus: { '200-299': 86400, '300-599': 0 } }
+        });
+        if (!upstream.ok) return new Response(`Upstream error: ${upstream.status}`, { status: upstream.status, headers: CORS_HEADERS });
+
+        const reader = upstream.body.getReader();
+        let head = new Uint8Array(0);
+        let started = false;
+        const stream = new ReadableStream({
+            async pull(controller) {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (started) {
+                        if (done) { controller.close(); return; }
+                        controller.enqueue(value);
+                        return;
+                    }
+                    if (value) {
+                        const merged = new Uint8Array(head.length + value.length);
+                        merged.set(head);
+                        merged.set(value, head.length);
+                        head = merged;
+                    }
+                    const off = vsmov.payloadOffset(head, done);
+                    if (off >= 0) {
+                        started = true;
+                        if (head.length > off) controller.enqueue(head.subarray(off));
+                        head = null;
+                        if (done) { controller.close(); return; }
+                        return;
+                    }
+                    if (head.length > 262144) { controller.error(new Error('PNG wrapper too large')); return; }
+                }
+            },
+            cancel() { try { reader.cancel(); } catch (e) {} }
+        });
+        return new Response(stream, {
+            headers: {
+                ...CORS_HEADERS,
+                'Content-Type': 'video/mp2t',
+                'Cache-Control': 'public, max-age=86400, s-maxage=86400, immutable'
+            }
+        });
+    } catch (err) {
+        return new Response(`Proxy error: ${err.message}`, { status: 502, headers: CORS_HEADERS });
+    }
+}
+
 let lastRenderWarm = 0;
 
 export default {
@@ -624,6 +686,24 @@ export default {
             } catch (e) {
                 return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
             }
+        }
+
+        // 8c3. VSMOV playlist: resolve the embed page's signed master at play time, route segments through /vsmov/seg.ts
+        if (pathname === '/vsmov/playlist.m3u8') {
+            const embed = url.searchParams.get('e');
+            if (!embed) return new Response('Missing e parameter', { status: 400, headers: CORS_HEADERS });
+            const res = await edgeCached(request, ctx, 1800, async () => {
+                try {
+                    return playlistResponse(await vsmov.buildPlaylist(embed, `${url.protocol}//${host}`), 1800);
+                } catch (err) {
+                    console.warn('[VSMOV Playlist Error]:', err.message);
+                    return null;
+                }
+            });
+            return res || new Response('Cannot resolve VSMOV playlist', { status: 502, headers: CORS_HEADERS });
+        }
+        if (pathname === '/vsmov/seg.ts') {
+            return handleVsmovSegment(url.searchParams.get('u'));
         }
 
         // 8c2. VSMOV diagnostics: embed page -> signed master -> variant -> first segment (status, CORS, PNG wrapper?)

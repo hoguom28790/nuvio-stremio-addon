@@ -1,4 +1,5 @@
 const reference = require('../Reference.json');
+const vsmov = require('./scrapers/vsmov');
 
 // Filter out tv/sports catalogs and legacy vsmov
 const nguoncLanguages = ["Ngôn ngữ: Vietsub", "Ngôn ngữ: Thuyết minh", "Ngôn ngữ: Lồng tiếng"];
@@ -7,9 +8,14 @@ const filteredCatalogs = reference.catalogs.filter(c =>
     c.type !== 'tv' && 
     c.id !== 'streamfree-live' && 
     c.id !== 'sports-live' && 
-    !c.id.startsWith('vsmov') &&
     !/^(hh3d|yan|stp|clbpx)-/.test(c.id)
 ).map(c => {
+    if (c.id.startsWith('vsmov-')) {
+        // VSMOV filters come from the scraper (only lists/genres/countries the API really serves)
+        return Object.assign({}, c, {
+            extra: c.extra.map(e => e.name === 'genre' ? Object.assign({}, e, { options: vsmov.CATALOG_OPTIONS }) : e)
+        });
+    }
     if (!c.id.startsWith('nguonc-')) return c;
     // NguonC /films/ngon-ngu/{slug} filter: add language options after the category entries
     return Object.assign({}, c, {
@@ -246,13 +252,13 @@ const missavCatalogs = [
 
 const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs, ...missavCatalogs];
 const allCatalogs = [...filteredCatalogs, ...adultCatalogs];
-const allPrefixes = ["tt", "nguonc:", "kkphim:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "missav:"];
+const allPrefixes = ["tt", "nguonc:", "kkphim:", "vsmov:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "missav:"];
 
 const baseManifest = {
     id: "org.hophim.stremio",
     version: "1.4.5",
     name: "Hồ Phim",
-    description: "Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ KKPhim, NguonC",
+    description: "Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ KKPhim, NguonC, VSMOV",
     logo: "https://raw.githubusercontent.com/hoguom28790/nuvio-stremio-addon/master/logo.png",
     resources: [
         "catalog",
