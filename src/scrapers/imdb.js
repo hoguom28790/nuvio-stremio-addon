@@ -110,13 +110,17 @@ async function getStream(id, type, config = {}) {
                 let bestMatch = null;
                 if (type === 'series' && season) {
                     bestMatch = await searchWithSeason(async (q) => {
-                        const r = await axios.get(`https://phim.nguonc.com/api/films/search?keyword=${encodeURIComponent(q)}&page=1`, { timeout: 5000 });
-                        return r.data?.items || [];
+                        const r = await axios.get(`https://phim.nguonc.com/api/films/search?keyword=${encodeURIComponent(q)}&page=1`, { timeout: 5000, headers: { Accept: 'application/json' } });
+                        // Prefer exact IMDb id (and TMDB season) over fuzzy title matching
+                        const items = r.data?.items || [];
+                        const byImdb = nguonc.matchImdb(items, imdbId);
+                        const bySeason = byImdb.find(it => it.tmdb && String(it.tmdb.season) === String(season));
+                        return bySeason ? [bySeason] : (byImdb.length ? byImdb : items);
                     }, title, season);
                 } else {
-                    const ncRes = await axios.get(`https://phim.nguonc.com/api/films/search?keyword=${encodeURIComponent(title)}&page=1`, { timeout: 5000 });
+                    const ncRes = await axios.get(`https://phim.nguonc.com/api/films/search?keyword=${encodeURIComponent(title)}&page=1`, { timeout: 5000, headers: { Accept: 'application/json' } });
                     const items = ncRes.data?.items || [];
-                    if (items.length > 0) bestMatch = items[0];
+                    bestMatch = nguonc.matchImdb(items, imdbId)[0] || items[0] || null;
                 }
 
                 if (bestMatch) {

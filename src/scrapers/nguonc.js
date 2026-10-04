@@ -5,11 +5,28 @@ const { findEpisode } = require('../utils/episodeHelper');
 
 
 const BASE_URL = 'https://phim.nguonc.com/api';
+const HTTP_OPTS = { timeout: 10000, headers: { Accept: 'application/json' } };
+
+// /films/ngon-ngu/{slug}: vietsub | thuyet-minh | long-tieng
+const LANGUAGES = { 'vietsub': 'vietsub', 'thuyết minh': 'thuyet-minh', 'lồng tiếng': 'long-tieng' };
+// NguonC uses its own list slugs (shared filterHelper follows KKPhim naming)
+const LIST_SLUGS = { 'phim-dang-chieu': 'dang-chieu' };
+
+function parseLanguage(genre) {
+    const m = typeof genre === 'string' && genre.trim().match(/^Ngôn ngữ:\s*(.+)$/i);
+    const slug = m && LANGUAGES[m[1].trim().toLowerCase()];
+    return slug ? { filterType: 'language', slug } : null;
+}
+
+/** Find films by IMDb id inside a NguonC list/search `items` array. */
+function matchImdb(items, imdbId) {
+    return (items || []).filter(it => it && it.imdb && it.imdb.id === imdbId);
+}
 
 async function getCatalog(type, extra = {}) {
     try {
         const skip = parseInt(extra.skip, 10) || 0;
-        const filter = !extra.search && extra.genre ? parseFilter(extra.genre) : null;
+        const filter = !extra.search && extra.genre ? (parseLanguage(extra.genre) || parseFilter(extra.genre)) : null;
         const isDecade = filter && filter.filterType === 'decade';
         const size = isDecade ? 100 : 10; // NguonC pages hold 10 titles
         const page = Math.floor(skip / size) + 1;
@@ -18,14 +35,16 @@ async function getCatalog(type, extra = {}) {
         if (extra.search) {
             urls = [`${BASE_URL}/films/search?keyword=${encodeURIComponent(extra.search.trim())}&page=${page}`];
         } else if (filter) {
-            if (filter.filterType === 'genre') {
+            if (filter.filterType === 'language') {
+                urls = [`${BASE_URL}/films/ngon-ngu/${filter.slug}?page=${page}`];
+            } else if (filter.filterType === 'genre') {
                 urls = [`${BASE_URL}/films/the-loai/${filter.slug}?page=${page}`];
             } else if (filter.filterType === 'country') {
                 urls = [`${BASE_URL}/films/quoc-gia/${filter.slug}?page=${page}`];
             } else if (filter.filterType === 'category') {
                 urls = [filter.slug === 'phim-moi-cap-nhat'
                     ? `${BASE_URL}/films/phim-moi-cap-nhat?page=${page}`
-                    : `${BASE_URL}/films/danh-sach/${filter.slug}?page=${page}`];
+                    : `${BASE_URL}/films/danh-sach/${LIST_SLUGS[filter.slug] || filter.slug}?page=${page}`];
             } else if (filter.filterType === 'year') {
                 urls = [`${BASE_URL}/films/nam-phat-hanh/${filter.slug}?page=${page}`];
             } else if (isDecade) {
@@ -47,7 +66,7 @@ async function getCatalog(type, extra = {}) {
         if (cached) return cached;
 
         const responses = await Promise.all(urls.map(u =>
-            axios.get(u, { timeout: 10000 }).then(r => r.data).catch(() => null)));
+            axios.get(u, HTTP_OPTS).then(r => r.data).catch(() => null)));
 
         const seen = new Set();
         const metas = [];
@@ -81,7 +100,7 @@ async function getMeta(type, id) {
         const cached = cache.get(cacheKey);
         if (cached) return cached;
 
-        const res = await axios.get(`${BASE_URL}/film/${slug}`, { timeout: 10000 });
+        const res = await axios.get(`${BASE_URL}/film/${slug}`, HTTP_OPTS);
         const movie = res.data?.movie;
         if (!movie) return null;
 
@@ -134,6 +153,7 @@ async function getMeta(type, id) {
             genres: genres.length > 0 ? genres : ['Phim'],
             director: movie.director ? [movie.director] : [],
             cast: movie.casts ? [movie.casts] : [],
+            imdb_id: movie.imdb && movie.imdb.id ? movie.imdb.id : undefined,
             videos: videos.length > 0 ? videos : undefined
         };
 
@@ -152,7 +172,7 @@ async function getStream(id, type) {
         const slug = parts[0];
         const targetEp = parts[2] || (type === 'series' ? parts[1] : null);
 
-        const res = await axios.get(`${BASE_URL}/film/${slug}`, { timeout: 10000 });
+        const res = await axios.get(`${BASE_URL}/film/${slug}`, HTTP_OPTS);
         const movie = res.data?.movie;
         if (!movie || !Array.isArray(movie.episodes)) return [];
 
@@ -176,4 +196,4 @@ async function getStream(id, type) {
     }
 }
 
-module.exports = { getCatalog, getMeta, getStream };
+module.exports = { getCatalog, getMeta, getStream, matchImdb };
