@@ -107,7 +107,7 @@ app.get('/hentaiz/stream/:videoId/:quality.m3u8', async (req, res) => {
     const cfHost = req.query.cfhost || process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
     try {
         const playlist = await hentaiz.getM3u8(videoId, quality, cfHost);
-        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', '*');
@@ -178,7 +178,7 @@ app.get('/javhd/stream/:slug/:quality.m3u8', async (req, res) => {
     const cfHost = req.query.cfhost || process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
     try {
         const playlist = await javhd.getM3u8(slug, quality, cfHost);
-        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', '*');
@@ -217,7 +217,7 @@ app.get('/vlxx/stream/:vid/:server.m3u8', async (req, res) => {
     const cfHost = req.query.cfhost || process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
     try {
         const playlist = await vlxx.getM3u8(vid, server, cfHost);
-        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', '*');
@@ -311,7 +311,7 @@ app.get('/avdb/stream/:slug.m3u8', async (req, res) => {
         // Fast path: ready-made helvid URL from the mirror (numeric id), else mint through the upload18 embed
         const mirror = req.query.id ? await avdb.fetchMirrorStream(req.query.id) : null;
         const playlist = await avdb.getM3u8(slug, cfHost, mirror ? mirror.url : null, {}, 'render');
-        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
         res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=600');
         res.send(playlist);
     } catch (err) {
@@ -341,7 +341,7 @@ app.get(['/missav/stream/:slug.m3u8', '/missav/stream/:slug/:quality.m3u8'], asy
     setCors(res);
     try {
         const playlist = await missav.getM3u8(slug, quality, cfHost);
-        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
         res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
         res.send(playlist);
     } catch (err) {
@@ -372,7 +372,7 @@ app.get('/kkphim/clean.m3u8', async (req, res) => {
     try {
         const playlist = await kkphim.getCleanM3u8(targetUrl, cfHost);
         if (playlist) {
-            res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+            res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
             res.setHeader('Access-Control-Allow-Origin', '*');
             res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
             res.setHeader('Access-Control-Allow-Headers', '*');
@@ -383,7 +383,7 @@ app.get('/kkphim/clean.m3u8', async (req, res) => {
         console.error('[KKPhim Clean M3U8 Error]:', err.message);
     }
     // Auto-fallback: return Virtual Master Playlist (HTTP 200 OK) to avoid CORS Preflight (OPTIONS 405) from upstream CDN
-    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', '*');
