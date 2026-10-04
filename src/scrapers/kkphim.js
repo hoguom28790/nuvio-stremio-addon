@@ -138,6 +138,7 @@ function cleanM3u8(content, baseUrl) {
 
     const out = header.map(t => absolutizeTagUris(t, baseUrl));
     let afterAd = false;
+    let emitted = 0;
     for (const e of entries) {
         if (e.ad) { afterAd = true; continue; }
         let tags = e.tags;
@@ -147,9 +148,14 @@ function cleanM3u8(content, baseUrl) {
                 if (x.startsWith('#EXT-X-DISCONTINUITY-SEQUENCE')) return true;
                 return !x.startsWith('#EXT-X-DISCONTINUITY') && !x.startsWith('#EXT-X-KEY:METHOD=NONE');
             });
+            // The content on both sides of a cut-out ad was split by a discontinuity in the source playlist (new
+            // timestamps / parameter sets). Keep exactly one so the player resets its decoder at the join; dropping
+            // it left a glitch / error right after the cut (3:00 ad block).
+            if (emitted > 0) tags = ['#EXT-X-DISCONTINUITY', ...tags];
             afterAd = false;
         }
         out.push(...tags.map(t => absolutizeTagUris(t, baseUrl)), e.uri);
+        emitted++;
     }
     out.push(...tail.map(t => absolutizeTagUris(t, baseUrl)));
     return out.join('\n');
