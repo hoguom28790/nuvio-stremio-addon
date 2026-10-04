@@ -82,7 +82,7 @@ function playlistResponse(text, ttlSeconds) {
     return new Response(text, {
         headers: {
             ...CORS_HEADERS,
-            'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+            'Content-Type': 'application/vnd.apple.mpegurl',
             'Cache-Control': `public, max-age=${ttlSeconds}, s-maxage=${ttlSeconds}`,
             'X-Cacheable': '1'
         }
@@ -471,7 +471,7 @@ export default {
                     return new Response(playlist, {
                         headers: {
                             ...CORS_HEADERS,
-                            'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                            'Content-Type': 'application/vnd.apple.mpegurl',
                             'Cache-Control': 'max-age=600, stale-while-revalidate=1200, public'
                         }
                     });
@@ -493,7 +493,7 @@ export default {
                         return new Response(renderText, {
                             headers: {
                                 ...CORS_HEADERS,
-                                'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                                'Content-Type': 'application/vnd.apple.mpegurl',
                                 'Cache-Control': 'max-age=600, stale-while-revalidate=1200, public'
                             }
                         });
@@ -515,7 +515,7 @@ export default {
                 return new Response(playlist, {
                     headers: {
                         ...CORS_HEADERS,
-                        'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                        'Content-Type': 'application/vnd.apple.mpegurl',
                         'Cache-Control': 'max-age=1800, public'
                     }
                 });
@@ -586,7 +586,7 @@ export default {
                         return new Response(renderText, {
                             headers: {
                                 ...CORS_HEADERS,
-                                'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                                'Content-Type': 'application/vnd.apple.mpegurl',
                                 'Cache-Control': 'public, max-age=1800, s-maxage=1800, stale-while-revalidate=3600',
                                 'CDN-Cache-Control': 'public, max-age=1800'
                             }
@@ -603,7 +603,7 @@ export default {
                 return new Response(playlist, {
                     headers: {
                         ...CORS_HEADERS,
-                        'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                        'Content-Type': 'application/vnd.apple.mpegurl',
                         'Cache-Control': 'public, max-age=1800, s-maxage=1800, stale-while-revalidate=3600',
                         'CDN-Cache-Control': 'public, max-age=1800'
                     }
@@ -721,7 +721,7 @@ export default {
                         return new Response(renderText, {
                             headers: {
                                 ...CORS_HEADERS,
-                                'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                                'Content-Type': 'application/vnd.apple.mpegurl',
                                 'Cache-Control': 'public, max-age=7200, s-maxage=14400'
                             }
                         });
@@ -746,7 +746,7 @@ export default {
                                 return new Response(cleanedPlaylist, {
                                     headers: {
                                         ...CORS_HEADERS,
-                                        'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                                        'Content-Type': 'application/vnd.apple.mpegurl',
                                         'Cache-Control': 'public, max-age=7200, s-maxage=14400'
                                     }
                                 });
@@ -764,7 +764,7 @@ export default {
                 status: 200,
                 headers: {
                     ...CORS_HEADERS,
-                    'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
+                    'Content-Type': 'application/vnd.apple.mpegurl',
                     'Cache-Control': 'no-cache'
                 }
             });
