@@ -704,76 +704,58 @@ export default {
             }
         }
 
-        // 8d. KKPhim diagnostics: which route (direct / VN proxy) serves a playlist, how many ads are cut, and whether the
-        //     segment host is reachable from the Worker (segments are fetched by the player, but this shows blocking/geo issues)
+        // 8d. KKPhim diagnostics: shows which stage (direct / VN proxy) works for a playlist URL and how many ads are cut
         if (pathname === '/kkphim/debug') {
-            const targetUrl = (url.searchParams.get('url') || '').trim();
+            const targetUrl = url.searchParams.get('url');
             if (!targetUrl) return new Response('Missing url query parameter', { status: 400, headers: CORS_HEADERS });
             const hdrs = { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://player.phimapi.com/', 'Origin': 'https://player.phimapi.com' };
             const report = { url: targetUrl, isWorker: IS_CF_WORKER };
-
-            // direct first, then the VN proxy; keep whichever returns a playlist so the analysis never depends on one route
-            const fetchBoth = async (u, key) => {
-                const out = { text: '', via: null };
-                const t0 = Date.now();
-                try {
-                    const r = await fetch(u, { headers: hdrs, signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined });
-                    const txt = await r.text();
-                    report[key] = { direct: { status: r.status, m3u8: txt.includes('#EXTM3U'), ms: Date.now() - t0 } };
-                    if (r.ok && txt.includes('#EXTM3U')) { out.text = txt; out.via = 'direct'; }
-                } catch (e) { report[key] = { direct: { error: e.message, ms: Date.now() - t0 } }; }
-                if (!out.text && IS_CF_WORKER) {
-                    const t1 = Date.now();
-                    try {
-                        const txt = await vnFetchText(u, { headers: hdrs });
-                        report[key].vnProxy = { ok: !!txt, ms: Date.now() - t1 };
-                        if (txt) { out.text = txt; out.via = 'vn-proxy'; }
-                    } catch (e) { report[key].vnProxy = { error: e.message, ms: Date.now() - t1 }; }
-                }
-                return out;
-            };
-
-            const first = await fetchBoth(targetUrl, 'playlist');
-            report.source = first.via;
-            let media = first;
-            let mediaUrl = targetUrl;
-            if (first.text) {
-                report.isMaster = first.text.includes('#EXT-X-STREAM-INF');
+            const t0 = Date.now();
+            try {
+                const r = await fetch(targetUrl, { headers: hdrs, signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined });
+                const txt = await r.text();
+                report.direct = { status: r.status, m3u8: txt.includes('#EXTM3U'), ms: Date.now() - t0 };
+            } catch (e) { report.direct = { error: e.message, ms: Date.now() - t0 }; }
+            const t1 = Date.now();
+            let raw = '';
+            try {
+                raw = IS_CF_WORKER ? await vnFetchText(targetUrl, { headers: hdrs }) : '';
+                report.vnProxy = { ok: !!raw, ms: Date.now() - t1 };
+            } catch (e) { report.vnProxy = { error: e.message, ms: Date.now() - t1 }; }
+            if (raw) {
+                report.isMaster = raw.includes('#EXT-X-STREAM-INF');
                 if (report.isMaster) {
-                    const variants = kkphim.listVariants(first.text, targetUrl);
+                    // look into the variants: block layout (DISCONTINUITY-separated) shows where the ads sit
+                    const variants = kkphim.listVariants(raw, targetUrl);
                     report.variants = variants;
                     const wanted = url.searchParams.get('variant');
-                    mediaUrl = (wanted && variants.find(v => v.includes(wanted))) || variants[0];
-                    media = mediaUrl ? await fetchBoth(mediaUrl, 'variant') : { text: '', via: null };
-                    if (mediaUrl) report.variant = Object.assign({ url: mediaUrl, source: media.via }, report.variant);
+                    const vUrl = (wanted && variants.find(v => v.includes(wanted))) || variants[0];
+                    if (vUrl) {
+                        try {
+                            const vText = IS_CF_WORKER ? await vnFetchText(vUrl, { headers: hdrs }) : '';
+                            report.variant = { url: vUrl, ok: !!vText };
+                            if (vText) {
+                                report.layout = kkphim.describeBlocks(vText, vUrl);
+                                // what the player gets vs. the original: tag kinds, first lines, relative URIs in tags
+                                const tagKinds = {};
+                                vText.split(/\r?\n/).forEach(l => { if (l.startsWith('#')) { const k = l.split(/[:,]/)[0]; tagKinds[k] = (tagKinds[k] || 0) + 1; } });
+                                const cleanedText = kkphim.cleanM3u8(vText, vUrl);
+                                report.tagKinds = tagKinds;
+                                report.tagUriLines = [...new Set(vText.split(/\r?\n/).filter(l => l.startsWith('#') && l.includes('URI=')))].slice(0, 6);
+                                report.rawHead = vText.split(/\r?\n/).slice(0, 14);
+                                report.cleanedHead = cleanedText.split(/\r?\n/).slice(0, 14);
+                                report.cleanedSegments = cleanedText.split(/\r?\n/).filter(l => l && !l.startsWith('#')).length;
+                                if (url.searchParams.get('raw') === '1') report.variantText = vText.slice(0, 20000);
+                            }
+                        } catch (e) { report.variant = { url: vUrl, error: e.message }; }
+                    }
                 }
-            }
-            if (media.text) {
-                const text = media.text;
-                const cleaned = kkphim.cleanM3u8(text, mediaUrl);
-                const segLines = l => l.split(/\r?\n/).map(x => x.trim()).filter(x => x && !x.startsWith('#'));
-                const segs = segLines(text);
-                report.segments = { before: segs.length, after: segLines(cleaned).length, removed: segs.length - segLines(cleaned).length };
-                report.layout = kkphim.describeBlocks(text, mediaUrl);
-                const tagKinds = {};
-                text.split(/\r?\n/).forEach(l => { if (l.startsWith('#')) { const k = l.split(/[:,]/)[0]; tagKinds[k] = (tagKinds[k] || 0) + 1; } });
-                report.tagKinds = tagKinds;
-                report.tagUriLines = [...new Set(text.split(/\r?\n/).filter(l => l.startsWith('#') && l.includes('URI=')))].slice(0, 6);
-                report.rawHead = text.split(/\r?\n/).slice(0, 14);
-                report.cleanedHead = cleaned.split(/\r?\n/).slice(0, 14);
-                if (url.searchParams.get('raw') === '1') report.mediaText = text.slice(0, 20000);
-
-                // which hosts serve the segments, and can the Worker reach the first one?
-                const hosts = {};
-                segs.forEach(sg => { try { const h = new URL(sg, mediaUrl).hostname; hosts[h] = (hosts[h] || 0) + 1; } catch (e) {} });
-                report.segmentHosts = hosts;
-                if (segs.length) {
-                    const segUrl = new URL(segs[0], mediaUrl).toString();
-                    const t2 = Date.now();
-                    try {
-                        const r = await fetch(segUrl, { headers: Object.assign({}, hdrs, { Range: 'bytes=0-255' }), signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined });
-                        report.firstSegment = { url: segUrl, status: r.status, contentType: r.headers.get('content-type'), cors: r.headers.get('access-control-allow-origin'), ms: Date.now() - t2 };
-                    } catch (e) { report.firstSegment = { url: segUrl, error: e.message, ms: Date.now() - t2 }; }
+                if (!report.isMaster) {
+                    const before = raw.split('\n').filter(l => l.trim() && !l.startsWith('#')).length;
+                    const cleaned = kkphim.cleanM3u8(raw, targetUrl);
+                    const after = cleaned.split('\n').filter(l => l.trim() && !l.startsWith('#')).length;
+                    report.segments = { before, after, removed: before - after };
+                    report.layout = kkphim.describeBlocks(raw, targetUrl);
                 }
             }
             return new Response(JSON.stringify(report, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
