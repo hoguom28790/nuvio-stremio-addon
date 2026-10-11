@@ -17,9 +17,7 @@ async function testAllScrapers() {
     // 2. Test Catalogs
     const catalogsToTest = [
         { id: 'kkphim-movie', type: 'movie' },
-        { id: 'vsmov-movie', type: 'movie' },
-        { id: 'vsmov-movie', type: 'movie' },
-        { id: 'missav-movie', type: 'movie' }
+        { id: 'vsmov-movie', type: 'movie' }
     ];
 
     console.log('[2] Testing Catalog Handlers:');
@@ -55,8 +53,7 @@ async function testAllScrapers() {
     console.log('[4] Testing Stream Handlers:');
     const streamsToTest = [
         { id: 'kkphim:biet-doi-danh-thue-4', type: 'movie' },
-        { id: 'vsmov:mau-se-phai-do', type: 'movie' },
-        { id: 'missav:siro-5719', type: 'movie' }
+        { id: 'vsmov:mau-se-phai-do', type: 'movie' }
     ];
     for (const s of streamsToTest) {
         try {

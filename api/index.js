@@ -70,7 +70,6 @@ const hentaiz = require('../src/scrapers/hentaiz');
 const javhd = require('../src/scrapers/javhd');
 const vlxx = require('../src/scrapers/vlxx');
 const avdb = require('../src/scrapers/avdb');
-const missav = require('../src/scrapers/missav');
 
 async function handleResource(req, res, config) {
     const { resource, type } = req.params;
@@ -332,36 +331,6 @@ app.get('/avdb/segment.ts', (req, res) => {
     }
     const cfHost = process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
     return res.redirect(302, `https://${cfHost}/avdb/segment.ts?url=${encodeURIComponent(rawUrl)}`);
-});
-
-// MissAV HLS M3U8 Stream Delivery Route
-app.get(['/missav/stream/:slug.m3u8', '/missav/stream/:slug/:quality.m3u8'], async (req, res) => {
-    const { slug, quality = '1080' } = req.params;
-    const cfHost = req.query.cfhost || process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
-    setCors(res);
-    try {
-        const playlist = await missav.getM3u8(slug, quality, cfHost);
-        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
-        res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
-        res.send(playlist);
-    } catch (err) {
-        console.error('[MissAV M3U8 Error]:', err.message);
-        res.status(502).send('Error generating playlist');
-    }
-});
-
-// MissAV Segment Route
-// - ?stream=1 (called by the Cloudflare Worker, surrit.com blocks Cloudflare IPs): stream via Render
-// - otherwise: 302 to the Cloudflare Worker edge
-app.get('/missav/segment.ts', (req, res) => {
-    const rawUrl = req.query.url;
-    if (!rawUrl) return res.status(400).send('Missing url');
-    setCors(res);
-    if (req.query.stream === '1') {
-        return streamUpstreamSegment(res, rawUrl, { referer: 'https://missav.ai/', allowedHosts: ['surrit.com'] });
-    }
-    const cfHost = process.env.CF_HOST || 'hophimaddon.hophim-4g6qbubt.workers.dev';
-    return res.redirect(302, `https://${cfHost}/missav/segment.ts?url=${encodeURIComponent(rawUrl)}`);
 });
 
 // KKPhim Clean M3U8 Stream Delivery Route (Filter out 15:00 and 3:00 SSAI ads)

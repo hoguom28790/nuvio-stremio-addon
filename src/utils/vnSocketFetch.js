@@ -1,6 +1,6 @@
 // Cloudflare Worker-only: fetch small TEXT resources (M3U8 playlists) through Vietnam HTTP proxies using raw
 // TCP sockets. Needed because the KKPhim-family CDNs geo-block every non-VN IP (Cloudflare and Render get 404)
-// and tiktokcdn.top / surrit.com refuse Cloudflare IPs. NEVER use this for video segments.
+// and tiktokcdn.top refuses Cloudflare IPs. NEVER use this for video segments.
 import { connect } from 'cloudflare:sockets';
 
 const VN_PROXIES = [
