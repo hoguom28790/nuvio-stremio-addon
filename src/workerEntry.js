@@ -744,8 +744,11 @@ export default {
             try {
                 const lr = await get(new URL(listPath, 'https://hohoj.tv').href, { 'Referer': 'https://hohoj.tv/' });
                 const html = await lr.text();
-                const vi = html.search(/video\?id=\d+/);
+                const nth = Math.max(0, parseInt(url.searchParams.get('nth') || '0', 10) || 0);
+                const idxs = [...html.matchAll(/video\?id=\d+/g)].map(m => m.index);
+                const vi = idxs.length ? idxs[Math.min(nth, idxs.length - 1)] : -1;
                 out.list = {
+                    totalVideoLinks: idxs.length,
                     status: lr.status,
                     title: (html.match(/<title>([\s\S]*?)<\/title>/i) || [])[1],
                     sample: vi >= 0 ? html.slice(Math.max(0, vi - 500), vi + 1100) : null,
