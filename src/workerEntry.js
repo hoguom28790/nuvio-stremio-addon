@@ -849,6 +849,27 @@ export default {
             return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
         }
 
+        // Javhay diagnostics: /wp-json/fb/v1/player/ answer for a post id and server
+        if (pathname === '/javhay/debug') {
+            const id = url.searchParams.get('id') || '4722';
+            const page = url.searchParams.get('page') || 'https://javhay.buzz/co-thu-ky-xinh-xan-vua-goi-chong-vua-bi-sep-du/';
+            const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+            const out = { id };
+            const brief = async (label, u, init) => {
+                try {
+                    const r = await fetch(u, { ...init, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                    const txt = await r.text();
+                    out[label] = { status: r.status, type: r.headers.get('content-type'), len: txt.length, body: txt.slice(0, 1800) };
+                } catch (e) { out[label] = { error: e.message }; }
+            };
+            const base = { 'User-Agent': UA, 'Referer': page, 'X-Requested-With': 'XMLHttpRequest' };
+            for (const server of ['1', '2']) {
+                await brief(`get_server${server}`, `https://javhay.buzz/wp-json/fb/v1/player/?id=${encodeURIComponent(id)}&server=${server}`, { headers: base });
+                await brief(`post_server${server}`, 'https://javhay.buzz/wp-json/fb/v1/player/', { method: 'POST', headers: { ...base, 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, body: new URLSearchParams({ id, server }).toString() });
+            }
+            return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
         // Generic list-page structure probe: sample around a needle, pagination links, menu links, search forms
         if (pathname === '/debug/list') {
             const target = url.searchParams.get('url');
