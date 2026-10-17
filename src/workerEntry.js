@@ -621,6 +621,26 @@ export default {
             }
         }
 
+        // JavMost diagnostics: fetch a movie page from the Worker and list player-related lines
+        if (pathname === '/javmost/debug') {
+            const code = url.searchParams.get('code') || 'SQTE-727';
+            const target = url.searchParams.get('url') || `https://www.javmost.ws/${encodeURIComponent(code)}/`;
+            try {
+                const r = await fetch(target, {
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': 'https://www.javmost.ws/' },
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined
+                });
+                const html = await r.text();
+                const keys = /iframe|m3u8|\.mp4|player|server|ajax|data-|onclick|get_|load|source|embed|hash|stream/i;
+                const lines = html.split('\n').map(l => l.trim()).filter(l => l && keys.test(l)).map(l => l.slice(0, 300));
+                const media = [...new Set(html.match(/(?:https?:)?\/\/[^"'\s<>\\]+\.(?:m3u8|mp4)[^"'\s<>\\]*/g) || [])].slice(0, 20);
+                const scripts = [...html.matchAll(/<script[^>]+src=["']([^"']+)["']/g)].map(m => m[1]);
+                return new Response(JSON.stringify({ target, status: r.status, length: html.length, media, scripts, lines: lines.slice(0, 120) }, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+            } catch (e) {
+                return new Response(JSON.stringify({ target, error: e.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+            }
+        }
+
         // AVDB diagnostics: API item, 18plusok mirror, upload18 embed from the Worker, Render
         if (pathname === '/avdb/debug') {
             const id = url.searchParams.get('id') || '';
