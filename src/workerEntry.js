@@ -644,6 +644,12 @@ export default {
             });
             const ep = item && item.episodes && item.episodes.server_data && Object.values(item.episodes.server_data)[0];
             const slug = ep && ep.link_embed ? ep.link_embed.split('/').pop() : (item && item.slug) || '';
+            await probe('provide1', async () => {
+                const r = await fetch(`https://avdbapi.com/api.php/provide1/vod?ac=detail&ids=${encodeURIComponent(id)}`, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+                const j = await r.json();
+                const it = j && j.list && j.list[0];
+                return { status: r.status, vod_play_from: it && it.vod_play_from, vod_play_url: it && it.vod_play_url };
+            });
             await probe('mirror', async () => {
                 const r = await fetch(`https://18plusok.vercel.app/eyJoaWRlRnJvbUhvbWUiOnRydWV9/stream/movie/avdb:${encodeURIComponent(id)}.json`, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
                 const j = await r.json();
