@@ -621,6 +621,30 @@ export default {
             }
         }
 
+        // fs1.app (Jable clone) diagnostics: page -> hlsUrl -> playlist from the Worker
+        if (pathname === '/fs1/debug') {
+            const slug = url.searchParams.get('slug') || 'start-617';
+            const hdr = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': 'https://fs1.app/' };
+            const out = { slug };
+            try {
+                const pr = await fetch(`https://fs1.app/videos/${encodeURIComponent(slug)}/`, { headers: hdr, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                const html = await pr.text();
+                out.page = { status: pr.status, length: html.length };
+                const m = html.match(/var\s+hlsUrl\s*=\s*['"]([^'"]+)['"]/);
+                out.hlsUrl = m ? m[1] : null;
+                const t = html.match(/<title>([^<]*)<\/title>/);
+                out.title = t ? t[1] : null;
+                if (out.hlsUrl) {
+                    const mr = await fetch(out.hlsUrl, { headers: hdr, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                    const mt = await mr.text();
+                    out.playlist = { status: mr.status, length: mt.length, contentType: mr.headers.get('content-type'), cors: mr.headers.get('access-control-allow-origin'), head: mt.slice(0, 400) };
+                    const mr2 = await fetch(out.hlsUrl, { headers: { 'User-Agent': hdr['User-Agent'] }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                    out.playlistNoReferer = { status: mr2.status };
+                }
+            } catch (e) { out.error = e.message; }
+            return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
         // AVDB diagnostics: API item, 18plusok mirror, upload18 embed from the Worker, Render
         if (pathname === '/avdb/debug') {
             const id = url.searchParams.get('id') || '';
