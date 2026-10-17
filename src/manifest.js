@@ -328,9 +328,49 @@ const sexmupCatalogs = [
     }
 ];
 
-const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs, ...fs1Catalogs, ...javtifulCatalogs, ...hohojCatalogs, ...sexmupCatalogs];
+const javhayGenres = [
+    "Mới Nhất",
+    "Loạn Luân",
+    "Trung Quốc",
+    "Âu Mỹ",
+    "Uncen (Không Che)",
+    "Vietsub",
+    "Sex Hay",
+    "👤 Shen Nana",
+    "👤 Yua Mikami",
+    "👤 Tsumugi Akari",
+    "👤 Airi Kijima",
+    "👤 Karen Yuzuriha",
+    "👤 Riho Fujimori",
+    "👤 Eimi Fukada",
+    "👤 Mina Kitano",
+    "👤 Jun Suehiro",
+    "👤 Yu Shinoda",
+    "👤 Moe Amatsuka",
+    "👤 Jessica Kizaki",
+    "👤 Yui Hatano",
+    "👤 Megu Fujiura",
+    "👤 Tsubaki Sannomiya",
+    "👤 Ranran Fujii",
+    "👤 Li Nana"
+];
+
+const javhayCatalogs = [
+    {
+        type: "movie",
+        id: "javhay-movie",
+        name: "JavHay",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: javhayGenres }
+        ]
+    }
+];
+
+const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs, ...fs1Catalogs, ...javtifulCatalogs, ...hohojCatalogs, ...sexmupCatalogs, ...javhayCatalogs];
 const allCatalogs = [...filteredCatalogs, ...adultCatalogs];
-const allPrefixes = ["tt", "kkphim:", "vsmov:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "fs1:", "javtiful:", "hohoj:", "sexmup:"];
+const allPrefixes = ["tt", "kkphim:", "vsmov:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "fs1:", "javtiful:", "hohoj:", "sexmup:", "javhay:"];
 
 const baseManifest = {
     id: "org.hophim.stremio",

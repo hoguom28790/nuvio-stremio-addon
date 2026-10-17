@@ -6,6 +6,7 @@ const javhd = require('./scrapers/javhd');
 const vlxx = require('./scrapers/vlxx');
 const avdb = require('./scrapers/avdb');
 const sexmup = require('./scrapers/sexmup');
+const javhay = require('./scrapers/javhay');
 const kkphim = require('./scrapers/kkphim');
 const vsmov = require('./scrapers/vsmov');
 import { vnFetchText, vnProbe } from './utils/vnSocketFetch';
@@ -509,6 +510,58 @@ export default {
                 return new Response('Segment host not allowed', { status: 403, headers: CORS_HEADERS });
             }
             return handleSegmentProxy(segUrl, 'https://v1.sanplaystream.com/');
+        }
+
+        // 4f. JavHay: poster proxy (.jpg/.webp first, .avif as fallback), rewritten playlist, PNG-header unwrapper
+        if (pathname.startsWith('/javhay/poster/')) {
+            const rel = pathname.replace('/javhay/poster/', '');
+            const pm = rel.match(/^(\d{4}\/\d{2}\/[A-Za-z0-9_-]+)\.(avif|jpg|jpeg|webp|png)$/i);
+            if (!pm) return new Response('Bad poster path', { status: 400, headers: CORS_HEADERS });
+            const headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Referer': 'https://javhay.buzz/'
+            };
+            const exts = [...new Set(['jpg', 'webp', pm[2].toLowerCase()])];
+            for (const ext of exts) {
+                try {
+                    const upstream = await fetch(`https://javhay.buzz/wp-content/uploads/${pm[1]}.${ext}`, { headers, cf: { cacheEverything: true, cacheTtl: 604800 } });
+                    const type = upstream.headers.get('content-type') || '';
+                    if (upstream.ok && /^image\//i.test(type)) {
+                        return new Response(upstream.body, {
+                            headers: {
+                                ...CORS_HEADERS,
+                                'Content-Type': type,
+                                'Cache-Control': 'public, max-age=604800, immutable',
+                                'CDN-Cache-Control': 'public, max-age=604800'
+                            }
+                        });
+                    }
+                } catch (err) { /* try next extension */ }
+            }
+            return new Response('Poster not found', { status: 404, headers: CORS_HEADERS });
+        }
+
+        if (pathname === '/javhay/play.m3u8') {
+            const slug = url.searchParams.get('slug') || '';
+            if (!/^[A-Za-z0-9_-]+$/.test(slug)) return new Response('Bad slug', { status: 400, headers: CORS_HEADERS });
+            try {
+                const body = await javhay.getM3u8(slug, host);
+                return new Response(body, {
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8', 'Cache-Control': 'no-store' }
+                });
+            } catch (err) {
+                return new Response(`JavHay playlist error: ${err.message}`, { status: 502, headers: CORS_HEADERS });
+            }
+        }
+
+        if (pathname === '/javhay/segment.ts') {
+            const segUrl = url.searchParams.get('url') || '';
+            let segHost = '';
+            try { segHost = new URL(segUrl).hostname; } catch (e) { /* invalid */ }
+            if (!/(^|\.)(fqcdn\.top|tiktokcdn\.com)$/i.test(segHost)) {
+                return new Response('Segment host not allowed', { status: 403, headers: CORS_HEADERS });
+            }
+            return handleSegmentProxy(segUrl, 'https://javhay.buzz/');
         }
 
         // 5. VLXX Segment Unwrapper

@@ -721,7 +721,7 @@ function renderConfigPage(host, initialConfig = {}) {
     </div>
 
     <!-- Khối khóa mặc định -->
-    <div id="tgk-locked" class="tgk-lock-box" style="${activeSources.some(s => ['hentaiz', 'javhd', 'vlxx', 'avdb', 'fs1', 'javtiful', 'hohoj', 'sexmup'].includes(s)) ? 'display: none;' : ''}">
+    <div id="tgk-locked" class="tgk-lock-box" style="${activeSources.some(s => ['hentaiz', 'javhd', 'vlxx', 'avdb', 'fs1', 'javtiful', 'hohoj', 'sexmup', 'javhay'].includes(s)) ? 'display: none;' : ''}">
       <div style="font-size: 0.9rem; color: #ff8fab; font-weight: 600;">
         🔒 Mục này đã được khóa bảo vệ. Vui lòng nhập mật mã để mở khóa các nguồn:
       </div>
@@ -732,7 +732,7 @@ function renderConfigPage(host, initialConfig = {}) {
     </div>
 
     <!-- Khối nguồn phim sau khi mở khóa -->
-    <div id="tgk-unlocked" style="${activeSources.some(s => ['hentaiz', 'javhd', 'vlxx', 'avdb', 'fs1', 'javtiful', 'hohoj', 'sexmup'].includes(s)) ? 'display: block;' : 'display: none;'} margin-top: 14px;">
+    <div id="tgk-unlocked" style="${activeSources.some(s => ['hentaiz', 'javhd', 'vlxx', 'avdb', 'fs1', 'javtiful', 'hohoj', 'sexmup', 'javhay'].includes(s)) ? 'display: block;' : 'display: none;'} margin-top: 14px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
         <span style="font-size: 0.85rem; color: var(--text-muted);">Đã xác thực thành công. Chọn các nguồn bạn muốn bật:</span>
         <button type="button" class="btn-text-action" onclick="toggleAllAdultSources()">Chọn tất cả</button>
@@ -769,6 +769,10 @@ function renderConfigPage(host, initialConfig = {}) {
         <label class="${sourceClass('sexmup')}">
           <input type="checkbox" name="source" value="sexmup" ${sourceChecked('sexmup')} onchange="updateUI()">
           <span>⚡ Sex Mụp Xinh (sexmupxinh.net)</span>
+        </label>
+        <label class="${sourceClass('javhay')}">
+          <input type="checkbox" name="source" value="javhay" ${sourceChecked('javhay')} onchange="updateUI()">
+          <span>⚡ JavHay (javhay.buzz)</span>
         </label>
       </div>
     </div>
