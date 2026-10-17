@@ -751,7 +751,10 @@ export default {
                     sample: vi >= 0 ? html.slice(Math.max(0, vi - 500), vi + 1100) : null,
                     pagination: [...new Set([...html.matchAll(/href="([^"#]*[?&]page=\d+[^"]*)"/g)].map(m => m[1]))].slice(0, 8),
                     menu: [...new Set([...html.matchAll(/href="(\/[^"#]*)"/g)].map(m => m[1]))].filter(h => !/video\?id=|resources|^\/embed/.test(h)).slice(0, 50),
-                    searchForms: [...html.matchAll(/<form[^>]*>[\s\S]{0,300}/gi)].map(m => m[0].replace(/\s+/g, ' ').slice(0, 300)).filter(f => /search|keyword|query/i.test(f)).slice(0, 3)
+                    searchForms: [...html.matchAll(/<form[^>]*>[\s\S]{0,300}/gi)].map(m => m[0].replace(/\s+/g, ' ').slice(0, 300)).filter(f => /search|keyword|query/i.test(f)).slice(0, 3),
+                    searchScript: (() => { const a = html.indexOf('#search-input'); return a >= 0 ? html.slice(Math.max(0, a - 1500), a + 1000).replace(/\s+/g, ' ') : null; })(),
+                    searchInput: (html.match(/<input[^>]*id="search-input"[^>]*>/i) || [])[0],
+                    pageLinks: [...new Set([...html.matchAll(/href="([^"#]*(?:page|p|pg)=\d+[^"]*)"/g)].map(m => m[1]))].slice(0, 8)
                 };
             } catch (e) { out.list = { error: e.message }; }
             return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
