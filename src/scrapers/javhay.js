@@ -177,27 +177,40 @@ async function getMeta(type, id, host) {
 /**
  * Movie page (`data-id`) -> GET /wp-json/fb/v1/player/?id=<id>&server=1 (JSON whose `data` is the player HTML) -> `url: '...m3u8'`.
  */
+async function fetchPlayerApi(slug) {
+    const page = await fetchHtml(`/${slug}/`);
+    const pid = (page.match(/id="video-player"[^>]*data-id="(\d+)"/) || page.match(/<div id="video"[^>]*data-id="(\d+)"/) || page.match(/data-id="(\d+)"/) || [])[1];
+    if (!pid) throw new Error('post id not found');
+    const raw = await fetchHtml(`/wp-json/fb/v1/player/?id=${pid}&server=1`, { Referer: `${BASE_URL}/${slug}/`, 'X-Requested-With': 'XMLHttpRequest' });
+    return { pid, raw };
+}
+
+function findM3u8(raw) {
+    let text = String(raw || '');
+    try {
+        const j = JSON.parse(text);
+        if (j && typeof j.data === 'string') {
+            if (j.success === false) throw new Error(j.data);
+            text = j.data;
+        }
+    } catch (e) {
+        if (!(e instanceof SyntaxError)) throw e;
+    }
+    text = text.replace(/\\\//g, '/');
+    const m = text.match(/https?:\/\/[^'"\s\\<>]+\.m3u8[^'"\s\\<>]*/);
+    return m ? m[0] : null;
+}
+
 async function resolvePlaylist(slug) {
     const cacheKey = `javhay:playlist:${slug}`;
     const cached = cache.get(cacheKey);
     if (cached) return cached;
 
-    const page = await fetchHtml(`/${slug}/`);
-    const pid = (page.match(/id="video-player"[^>]*data-id="(\d+)"/) || page.match(/<div id="video"[^>]*data-id="(\d+)"/) || page.match(/data-id="(\d+)"/) || [])[1];
-    if (!pid) throw new Error('post id not found');
-
-    const raw = await fetchHtml(`/wp-json/fb/v1/player/?id=${pid}&server=1`, { Referer: `${BASE_URL}/${slug}/`, 'X-Requested-With': 'XMLHttpRequest' });
-    let data = raw;
-    let parsed = null;
-    try { parsed = JSON.parse(raw); } catch (e) { /* not JSON: scan the raw text */ }
-    if (parsed) {
-        if (!parsed.success || typeof parsed.data !== 'string') throw new Error(typeof parsed.data === 'string' ? parsed.data : 'player api failed');
-        data = parsed.data;
-    }
-    const m = data.match(/\burl\s*:\s*['"]([^'"]+\.m3u8[^'"]*)['"]/);
-    if (!m) throw new Error('m3u8 url not found');
-    cache.set(cacheKey, m[1], 1800);
-    return m[1];
+    const { pid, raw } = await fetchPlayerApi(slug);
+    const url = findM3u8(raw);
+    if (!url) throw new Error(`m3u8 url not found (post ${pid}, api ${String(raw).length} bytes)`);
+    cache.set(cacheKey, url, 1800);
+    return url;
 }
 
 /**
@@ -243,4 +256,4 @@ async function getStream(id, type, host) {
     }];
 }
 
-module.exports = { getCatalog, getMeta, getStream, getM3u8, resolvePlaylist, parseList, GENRE_MAP };
+module.exports = { getCatalog, getMeta, getStream, getM3u8, resolvePlaylist, fetchPlayerApi, findM3u8, parseList, GENRE_MAP };

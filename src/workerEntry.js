@@ -911,6 +911,12 @@ export default {
                 try { out.stages[name] = { ok: true, ...(await fn()), ms: Date.now() - t0 }; }
                 catch (e) { out.stages[name] = { ok: false, error: e.message, ms: Date.now() - t0 }; }
             };
+            await stage('playerApi', async () => {
+                const { pid, raw } = await javhay.fetchPlayerApi(slug);
+                const text = String(raw);
+                const i = text.indexOf('.m3u8');
+                return { pid, bytes: text.length, head: text.slice(0, 400), aroundM3u8: i >= 0 ? text.slice(Math.max(0, i - 120), i + 40) : null, found: javhay.findM3u8(text) };
+            });
             let playlist = null;
             await stage('resolvePlaylist', async () => { playlist = await javhay.resolvePlaylist(slug); return { playlist }; });
             let rewritten = null;
