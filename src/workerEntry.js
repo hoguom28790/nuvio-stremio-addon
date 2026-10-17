@@ -8,7 +8,7 @@ const avdb = require('./scrapers/avdb');
 const missav = require('./scrapers/missav');
 const kkphim = require('./scrapers/kkphim');
 const vsmov = require('./scrapers/vsmov');
-import { vnFetchText } from './utils/vnSocketFetch';
+import { vnFetchText, vnProbe } from './utils/vnSocketFetch';
 
 // The same bundle also runs on Render (Dockerfile -> Node). There, raw sockets are unavailable (the Node proxy pool
 // in vnProxyFetcher.js is used instead) and "delegate to Render" would be Render calling itself.
@@ -484,6 +484,50 @@ export default {
             return proxyViaRender(renderUrl);
         }
 
+
+        // JavHD diagnostics: reports each stage from the Worker (page, CDN playlist direct, VN proxies, Render)
+        if (pathname === '/javhd/debug') {
+            const diag = { stages: {} };
+            const hdr = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': 'https://javhdz.wtf/' };
+            const probe = async (label, fn) => {
+                const t0 = Date.now();
+                try { diag.stages[label] = { ...(await fn()), ms: Date.now() - t0 }; }
+                catch (e) { diag.stages[label] = { error: e.message, ms: Date.now() - t0 }; }
+            };
+            const brief = async (u, init = {}) => {
+                const r = await fetch(u, { ...init, headers: hdr, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+                const t = await r.text();
+                return { status: r.status, len: t.length, head: t.slice(0, 160).replace(/\s+/g, ' ') };
+            };
+            let slug = url.searchParams.get('slug');
+            try {
+                await javhd.ensureStaticCatalog();
+                const cat = await javhd.getCatalog('javhd-latest', 'movie', {});
+                diag.catalogCount = cat.length;
+                if (!slug && cat[0]) slug = String(cat[0].id).replace(/^javhd:/, '');
+                const raw = await javhd.ensureStaticCatalog();
+                const item = raw.find(x => x.slug === slug);
+                diag.hasStaticStreamUrl = !!(item && item.streamUrl);
+                if (item && item.streamUrl) diag.masterUrl = item.streamUrl;
+            } catch (e) { diag.catalogError = e.message; }
+            diag.slug = slug;
+            let master = url.searchParams.get('m3u8') || diag.masterUrl;
+            if (!master && slug) {
+                const st = await javhd.getStream(`javhd:${slug}`, 'movie', host);
+                diag.streamsCount = st.length;
+            }
+            await probe('page', () => brief(`https://javhdz.wtf/${slug}.html`));
+            if (master) {
+                await probe('cdnDirect', () => brief(master));
+                if (IS_CF_WORKER) await probe('vnProxies', async () => ({ results: await vnProbe(master, { headers: hdr }) }));
+            }
+            await probe('render', () => brief(`${RENDER_BASE}/javhd/stream/${slug}/1080.m3u8?cfhost=${encodeURIComponent(host)}`));
+            await probe('playlist', async () => {
+                const p = await javhd.getM3u8(slug, '1080', host, env, { ...VN_FETCH, fresh: true });
+                return { len: p.length, head: p.slice(0, 200) };
+            });
+            return new Response(JSON.stringify(diag, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+        }
 
         // 6. JavHD M3U8 Stream
         const javhdMatch = pathname.match(/^\/javhd\/stream\/([^/]+)\/([^/]+)\.m3u8$/);

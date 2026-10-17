@@ -135,3 +135,25 @@ export async function vnFetchText(url, { headers = {}, timeoutMs = 6000, tls = f
         for (const s of sockets) { try { s.close(); } catch (e) {} }
     }
 }
+
+/**
+ * Diagnostics: ask every proxy of the pool separately and report what each one returned (status / error).
+ */
+export async function vnProbe(url, { headers = {}, timeoutMs = 6000 } = {}) {
+    const target = url.replace(/^https:/, 'http:');
+    return Promise.all(VN_PROXIES.map(async proxy => {
+        const sockets = [];
+        const t0 = Date.now();
+        let timer;
+        try {
+            const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), timeoutMs); });
+            const res = await Promise.race([fetchViaProxy(proxy, target, headers, sockets), timeout]);
+            return { proxy: proxy.hostname, status: res.status, ms: Date.now() - t0, head: res.text.slice(0, 120) };
+        } catch (e) {
+            return { proxy: proxy.hostname, error: e.message, ms: Date.now() - t0 };
+        } finally {
+            clearTimeout(timer);
+            for (const s of sockets) { try { s.close(); } catch (e) {} }
+        }
+    }));
+}
