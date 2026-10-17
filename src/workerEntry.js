@@ -645,6 +645,27 @@ export default {
             return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
         }
 
+        // Generic page scanner: fetch a URL from the Worker and list only player-related findings (keeps output small)
+        if (pathname === '/debug/scan') {
+            const target = url.searchParams.get('url');
+            if (!target) return new Response('Missing url parameter', { status: 400, headers: CORS_HEADERS });
+            try {
+                const r = await fetch(target, {
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': url.searchParams.get('referer') || new URL(target).origin + '/' },
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined
+                });
+                const html = await r.text();
+                const uniq = (arr) => [...new Set(arr)].slice(0, 25);
+                const media = uniq(html.match(/(?:https?:)?\\?\/\\?\/[^"'\s<>\\]+\.(?:m3u8|mp4|mpd)[^"'\s<>\\]*/g) || []);
+                const iframes = uniq([...html.matchAll(/<iframe[^>]+src=["']([^"']+)["']/gi)].map(m => m[1]));
+                const keys = /m3u8|\.mp4|video_url|video_embed|data-src-video|player|source|stream|embed|hls|file["']?\s*:/i;
+                const lines = html.split('\n').map(l => l.trim()).filter(l => l && keys.test(l) && !/^<(link|meta|style)/i.test(l)).map(l => { const m = l.match(keys); const i = Math.max(0, (m ? m.index : 0) - 120); return l.slice(i, i + 320); }).slice(0, 40);
+                return new Response(JSON.stringify({ target, status: r.status, length: html.length, media, iframes, lines }, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+            } catch (e) {
+                return new Response(JSON.stringify({ target, error: e.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+            }
+        }
+
         // AVDB diagnostics: API item, 18plusok mirror, upload18 embed from the Worker, Render
         if (pathname === '/avdb/debug') {
             const id = url.searchParams.get('id') || '';
