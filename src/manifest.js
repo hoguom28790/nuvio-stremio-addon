@@ -258,6 +258,7 @@ const javtifulCatalogs = [
 ];
 
 const hohojGenres = [
+    "Mới Nhất",
     "Mới Nhất (Có Che)",
     "Không Che",
     "Phụ Đề Trung",

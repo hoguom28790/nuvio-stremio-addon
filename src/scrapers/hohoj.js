@@ -14,6 +14,7 @@ const client = axios.create({
 
 // Menu entries of the site. Listing pages live under /lang_en and paginate with ?p=N.
 const GENRE_MAP = {
+    'Mới Nhất': `${LANG}/`,
     'Mới Nhất (Có Che)': `${LANG}/search?type=censored&order=latest`,
     'Không Che': `${LANG}/search?type=uncensored`,
     'Phụ Đề Trung': `${LANG}/search?type=chinese`,
@@ -103,7 +104,7 @@ async function getCatalog(catalogId, type, extra = {}, host) {
 
     let base;
     if (search) base = `${LANG}/search?text=${encodeURIComponent(search)}`;
-    else base = GENRE_MAP[extra.genre] || GENRE_MAP['Mới Nhất (Có Che)'];
+    else base = GENRE_MAP[extra.genre] || GENRE_MAP['Mới Nhất'];
     const url = page > 1 ? `${base}${base.includes('?') ? '&' : '?'}p=${page}` : base;
 
     const cacheKey = `hohoj:catalog:${url}`;

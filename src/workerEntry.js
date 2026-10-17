@@ -801,27 +801,24 @@ export default {
             const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
             const paths = (url.searchParams.get('paths') || '').split('|').filter(Boolean);
             const defaults = [
-                '/?page=2',
-                '/search?type=chinese&page=1',
-                '/search?type=chinese&order=latest&page=1',
-                '/search?type=censored&order=latest&page=1',
-                '/search?search=AVSA',
-                '/search?q=AVSA',
-                '/search?keyword=AVSA',
-                '/search?text=AVSA',
-                '/main_ctg?id=1&name=%E7%B5%B2%E8%A5%AA%E7%BE%8E%E8%85%BF',
-                '/main_ctg?id=1&name=%E7%B5%B2%E8%A5%AA%E7%BE%8E%E8%85%BF&page=2',
-                '/all_models'
+                '/lang_en/?p=2',
+                '/lang_en/main_ctg?id=1&p=2',
+                '/lang_en/search?type=uncensored',
+                '/lang_en/search?text=AVSA',
+                '/lang_en/model?id=43',
+                '/lang_en/extra_info',
+                '/extra_info'
             ];
+            const BROWSER = { 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', 'Accept-Language': 'en-US,en;q=0.9', 'Upgrade-Insecure-Requests': '1' };
             const results = [];
             for (const path of (paths.length ? paths : defaults)) {
-                for (const cookie of ['', 'lang=zh-hant']) {
+                for (const variant of ['plain', 'browserAccept']) {
                     try {
-                        const r = await fetch(new URL(path, 'https://hohoj.tv').href, { headers: { 'User-Agent': UA, 'Referer': 'https://hohoj.tv/', 'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8', ...(cookie ? { 'Cookie': cookie } : {}) }, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+                        const r = await fetch(new URL(path, 'https://hohoj.tv').href, { headers: { 'User-Agent': UA, 'Referer': 'https://hohoj.tv/', ...(variant === 'browserAccept' ? BROWSER : {}) }, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
                         const html = await r.text();
                         const ids = [...html.matchAll(/video\?id=(\d+)/g)].map(m => m[1]);
-                        results.push({ path, cookie, status: r.status, videoLinks: ids.length, firstIds: ids.slice(0, 3), pageLinks: [...new Set([...html.matchAll(/href="([^"#]*[?&](?:page|p)=\d+[^"]*)"/g)].map(m => m[1]))].slice(0, 4) });
-                    } catch (e) { results.push({ path, cookie, error: e.message }); }
+                        results.push({ path, variant, status: r.status, type: r.headers.get('content-type'), len: html.length, videoLinks: ids.length, firstIds: ids.slice(0, 3), head: ids.length ? undefined : html.replace(/\s+/g, ' ').slice(0, 160) });
+                    } catch (e) { results.push({ path, variant, error: e.message }); }
                 }
             }
             return new Response(JSON.stringify(results, null, 1), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
