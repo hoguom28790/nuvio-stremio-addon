@@ -257,9 +257,41 @@ const javtifulCatalogs = [
     }
 ];
 
-const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs, ...fs1Catalogs, ...javtifulCatalogs];
+const hohojGenres = [
+    "Mới Nhất (Có Che)",
+    "Không Che",
+    "Phụ Đề Trung",
+    "Châu Âu",
+    "Loạn Luân",
+    "Cưỡng Hiếp / Lăng Nhục",
+    "Nội Xạ",
+    "Nhóm / Đa Người",
+    "Ngực Bự",
+    "Ngoại Tình",
+    "Nhập Vai / Kịch Bản",
+    "Tất Lụa / Chân Đẹp",
+    "Phun Nước",
+    "Hậu Môn",
+    "Đồng Phục",
+    "Điều Giáo (BDSM)"
+];
+
+const hohojCatalogs = [
+    {
+        type: "movie",
+        id: "hohoj-movie",
+        name: "HoHoJ",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: hohojGenres }
+        ]
+    }
+];
+
+const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs, ...fs1Catalogs, ...javtifulCatalogs, ...hohojCatalogs];
 const allCatalogs = [...filteredCatalogs, ...adultCatalogs];
-const allPrefixes = ["tt", "kkphim:", "vsmov:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "fs1:", "javtiful:"];
+const allPrefixes = ["tt", "kkphim:", "vsmov:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "fs1:", "javtiful:", "hohoj:"];
 
 const baseManifest = {
     id: "org.hophim.stremio",

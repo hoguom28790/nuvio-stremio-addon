@@ -8,6 +8,7 @@ const javhd = require('./scrapers/javhd');
 const vlxx = require('./scrapers/vlxx');
 const fs1 = require('./scrapers/fs1');
 const javtiful = require('./scrapers/javtiful');
+const hohoj = require('./scrapers/hohoj');
 const avdb = require('./scrapers/avdb');
 const imdb = require('./scrapers/imdb');
 const cache = require('./utils/cache');
@@ -86,6 +87,10 @@ builder.defineCatalogHandler(async ({ type, id, extra = {}, config = {} }) => {
             return { metas: await javtiful.getCatalog(id, type, extra, config.host) };
         }
 
+        if (id.startsWith('hohoj-') && isSourceEnabled('hohoj', config)) {
+            return { metas: await hohoj.getCatalog(id, type, extra, config.host) };
+        }
+
         if (id.startsWith('avdb-') && (isSourceEnabled('avdb', config) || isSourceEnabled(id.replace('-', '_'), config))) {
             return { metas: await avdb.getCatalog(id, type, extra) };
         }
@@ -135,6 +140,10 @@ builder.defineMetaHandler(async ({ type, id, config = {} }) => {
             const meta = await javtiful.getMeta(type, id, config.host);
             if (meta) return { meta };
         }
+        if (id.startsWith('hohoj:')) {
+            const meta = await hohoj.getMeta(type, id, config.host);
+            if (meta) return { meta };
+        }
     } catch (e) {
         console.error(`[Meta Error] ID: ${id}:`, e.message);
     }
@@ -175,6 +184,8 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
             streams = await fs1.getStream(id);
         } else if (id.startsWith('javtiful:')) {
             streams = await javtiful.getStream(id);
+        } else if (id.startsWith('hohoj:')) {
+            streams = await hohoj.getStream(id);
         } else if (id.startsWith('tt')) {
             if (config.prefImdb !== false) {
                 streams = await imdb.getStream(id, type, config);

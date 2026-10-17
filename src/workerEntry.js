@@ -427,6 +427,37 @@ export default {
             }
         }
 
+        // 4d. HoHoJ Poster Proxy (Edge cached 7 days)
+        if (pathname.startsWith('/hohoj/poster/')) {
+            const rel = pathname.replace('/hohoj/poster/', '');
+            if (!/^[A-Za-z0-9_\-./]+\.(?:jpg|jpeg|png|webp)$/i.test(rel) || rel.includes('..')) {
+                return new Response('Bad poster path', { status: 400, headers: CORS_HEADERS });
+            }
+            const targetUrl = `https://cdn-1.ggjav.com/media/${rel}`;
+            try {
+                const upstream = await fetch(targetUrl, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                        'Referer': 'https://hohoj.tv/'
+                    },
+                    cf: { cacheEverything: true, cacheTtl: 604800 }
+                });
+                if (upstream.ok) {
+                    return new Response(upstream.body, {
+                        headers: {
+                            ...CORS_HEADERS,
+                            'Content-Type': upstream.headers.get('content-type') || 'image/jpeg',
+                            'Cache-Control': 'public, max-age=604800, immutable',
+                            'CDN-Cache-Control': 'public, max-age=604800'
+                        }
+                    });
+                }
+                return new Response(`Upstream ${upstream.status}`, { status: 502, headers: CORS_HEADERS });
+            } catch (err) {
+                return new Response(`Poster error: ${err.message}`, { status: 502, headers: CORS_HEADERS });
+            }
+        }
+
         // 5. VLXX Segment Unwrapper
         if (pathname === '/vlxx/segment.ts') {
             return handleSegmentProxy(url.searchParams.get('url'), 'https://vlxx.phd/');
