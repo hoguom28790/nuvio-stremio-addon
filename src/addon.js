@@ -83,7 +83,7 @@ builder.defineCatalogHandler(async ({ type, id, extra = {}, config = {} }) => {
         }
 
         if (id.startsWith('javtiful-') && isSourceEnabled('javtiful', config)) {
-            return { metas: await javtiful.getCatalog(id, type, extra) };
+            return { metas: await javtiful.getCatalog(id, type, extra, config.host) };
         }
 
         if (id.startsWith('avdb-') && (isSourceEnabled('avdb', config) || isSourceEnabled(id.replace('-', '_'), config))) {
@@ -132,7 +132,7 @@ builder.defineMetaHandler(async ({ type, id, config = {} }) => {
             if (meta) return { meta };
         }
         if (id.startsWith('javtiful:')) {
-            const meta = await javtiful.getMeta(type, id);
+            const meta = await javtiful.getMeta(type, id, config.host);
             if (meta) return { meta };
         }
     } catch (e) {

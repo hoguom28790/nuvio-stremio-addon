@@ -38,6 +38,18 @@ function absUrl(src) {
     return `${BASE_URL}${src.startsWith('/') ? '' : '/'}${src}`;
 }
 
+/**
+ * Route site thumbnails through the edge poster proxy (/javtiful/poster/...): sends the Referer and caches at the edge.
+ */
+function proxyPoster(src, host) {
+    const abs = absUrl(src);
+    const m = abs.match(/^https?:\/\/(?:www\.)?javtiful\.com\/uploads\/uploads\/(.+)$/);
+    if (!m || !host) return abs;
+    const edgeHost = !host.includes('onrender.com') ? host : ((typeof process !== 'undefined' && process.env && process.env.CF_HOST) || 'hophimaddon.hophim-4g6qbubt.workers.dev');
+    const edgeBase = edgeHost.includes('://') ? edgeHost : `https://${edgeHost}`;
+    return `${edgeBase}/javtiful/poster/${m[1]}`;
+}
+
 function parseId(id) {
     const m = String(id).replace(/\.json$/, '').match(/^javtiful:(\d+):(.+)$/);
     return m ? { vid: m[1], slug: m[2] } : null;
@@ -79,21 +91,22 @@ async function fetchHtml(path) {
     return typeof res.data === 'string' ? res.data : '';
 }
 
-function toMeta(item) {
+function toMeta(item, host) {
+    const poster = proxyPoster(item.poster, host);
     const info = [item.quality, item.duration].filter(Boolean).join(' • ');
     return {
         id: `javtiful:${item.vid}:${item.slug}`,
         type: 'movie',
         name: item.title,
-        poster: item.poster,
-        background: item.poster,
+        poster,
+        background: poster,
         posterShape: 'landscape',
         description: `${item.title}${info ? `\n${info}` : ''}`,
         genres: ['18+']
     };
 }
 
-async function getCatalog(catalogId, type, extra = {}) {
+async function getCatalog(catalogId, type, extra = {}, host) {
     const search = extra.search ? String(extra.search).trim() : '';
     const sizeKey = 'javtiful:psize';
     const pageSize = cache.get(sizeKey) || DEFAULT_PAGE_SIZE;
@@ -119,7 +132,7 @@ async function getCatalog(catalogId, type, extra = {}) {
 
     try {
         const items = parseList(await fetchHtml(url));
-        const metas = items.map(toMeta);
+        const metas = items.map(item => toMeta(item, host));
         if (page === 1 && metas.length > 0) cache.set(sizeKey, metas.length, 86400);
         if (metas.length > 0) cache.set(cacheKey, metas, 900);
         return metas;
@@ -129,7 +142,7 @@ async function getCatalog(catalogId, type, extra = {}) {
     }
 }
 
-async function getMeta(type, id) {
+async function getMeta(type, id, host) {
     const p = parseId(id);
     if (!p) return null;
     const cacheKey = `javtiful:meta:${p.vid}`;
@@ -145,7 +158,7 @@ async function getMeta(type, id) {
         };
         const h1 = (html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/) || [])[1];
         const name = decode(h1) || og('title') || p.slug.toUpperCase();
-        const poster = absUrl(og('image')) || absUrl(((html.match(/<video[^>]*id="front-player"[^>]*poster="([^"]+)"/) || [])[1]) || '');
+        const poster = proxyPoster(og('image') || (html.match(/<video[^>]*id="front-player"[^>]*poster="([^"]+)"/) || [])[1] || '', host);
         const meta = {
             id: `javtiful:${p.vid}:${p.slug}`,
             type: 'movie',
