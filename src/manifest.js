@@ -296,9 +296,41 @@ const hohojCatalogs = [
     }
 ];
 
-const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs, ...fs1Catalogs, ...javtifulCatalogs, ...hohojCatalogs];
+const sexmupGenres = [
+    "Mới Nhất",
+    "Hiếp Dâm",
+    "Loạn Luân",
+    "Không Che",
+    "Nhật Bản",
+    "Châu Âu",
+    "JAV HD",
+    "XNXX",
+    "Phim Hay",
+    "Trung Quốc",
+    "Lầu Xanh",
+    "XXX",
+    "VLXX",
+    "Địt Nhau",
+    "Học Sinh",
+    "Vụng Trộm"
+];
+
+const sexmupCatalogs = [
+    {
+        type: "movie",
+        id: "sexmup-movie",
+        name: "Sex Mụp Xinh",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: sexmupGenres }
+        ]
+    }
+];
+
+const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs, ...fs1Catalogs, ...javtifulCatalogs, ...hohojCatalogs, ...sexmupCatalogs];
 const allCatalogs = [...filteredCatalogs, ...adultCatalogs];
-const allPrefixes = ["tt", "kkphim:", "vsmov:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "fs1:", "javtiful:", "hohoj:"];
+const allPrefixes = ["tt", "kkphim:", "vsmov:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "fs1:", "javtiful:", "hohoj:", "sexmup:"];
 
 const baseManifest = {
     id: "org.hophim.stremio",

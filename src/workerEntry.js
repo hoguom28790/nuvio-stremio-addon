@@ -5,6 +5,7 @@ const hentaiz = require('./scrapers/hentaiz');
 const javhd = require('./scrapers/javhd');
 const vlxx = require('./scrapers/vlxx');
 const avdb = require('./scrapers/avdb');
+const sexmup = require('./scrapers/sexmup');
 const kkphim = require('./scrapers/kkphim');
 const vsmov = require('./scrapers/vsmov');
 import { vnFetchText, vnProbe } from './utils/vnSocketFetch';
@@ -456,6 +457,58 @@ export default {
             } catch (err) {
                 return new Response(`Poster error: ${err.message}`, { status: 502, headers: CORS_HEADERS });
             }
+        }
+
+        // 4e. Sex Mụp Xinh: poster proxy, rewritten playlist, PNG-header unwrapper (segments limited to the site's own CDNs)
+        if (pathname.startsWith('/sexmup/poster/')) {
+            const slug = pathname.replace('/sexmup/poster/', '').replace(/\.jpg$/i, '');
+            if (!/^[A-Za-z0-9_-]+$/.test(slug)) return new Response('Bad poster path', { status: 400, headers: CORS_HEADERS });
+            const targetUrl = `https://sexmupxinh.net/file/cover/${slug}.jpg`;
+            try {
+                const upstream = await fetch(targetUrl, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                        'Referer': 'https://sexmupxinh.net/'
+                    },
+                    cf: { cacheEverything: true, cacheTtl: 604800 }
+                });
+                if (upstream.ok) {
+                    return new Response(upstream.body, {
+                        headers: {
+                            ...CORS_HEADERS,
+                            'Content-Type': upstream.headers.get('content-type') || 'image/jpeg',
+                            'Cache-Control': 'public, max-age=604800, immutable',
+                            'CDN-Cache-Control': 'public, max-age=604800'
+                        }
+                    });
+                }
+                return new Response(`Upstream ${upstream.status}`, { status: 502, headers: CORS_HEADERS });
+            } catch (err) {
+                return new Response(`Poster error: ${err.message}`, { status: 502, headers: CORS_HEADERS });
+            }
+        }
+
+        if (pathname === '/sexmup/play.m3u8') {
+            const slug = url.searchParams.get('slug') || '';
+            if (!/^[A-Za-z0-9_-]+$/.test(slug)) return new Response('Bad slug', { status: 400, headers: CORS_HEADERS });
+            try {
+                const body = await sexmup.getM3u8(slug, host);
+                return new Response(body, {
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8', 'Cache-Control': 'no-store' }
+                });
+            } catch (err) {
+                return new Response(`Sexmup playlist error: ${err.message}`, { status: 502, headers: CORS_HEADERS });
+            }
+        }
+
+        if (pathname === '/sexmup/segment.ts') {
+            const segUrl = url.searchParams.get('url') || '';
+            let segHost = '';
+            try { segHost = new URL(segUrl).hostname; } catch (e) { /* invalid */ }
+            if (!/(^|\.)(sanstreamplay\.xyz|sanplaystream\.com)$/i.test(segHost)) {
+                return new Response('Segment host not allowed', { status: 403, headers: CORS_HEADERS });
+            }
+            return handleSegmentProxy(segUrl, 'https://v1.sanplaystream.com/');
         }
 
         // 5. VLXX Segment Unwrapper
