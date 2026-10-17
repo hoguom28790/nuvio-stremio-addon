@@ -833,7 +833,10 @@ export default {
                                 step.segmentUrl = segUrl.slice(0, 200);
                                 const sr = await get(segUrl, { Range: 'bytes=0-511', ...h });
                                 const buf = await sr.arrayBuffer();
-                                step.segment = { status: sr.status, type: sr.headers.get('content-type'), bytes: buf.byteLength, cors: sr.headers.get('access-control-allow-origin') };
+                                const u8 = new Uint8Array(buf);
+                                const hex = [...u8.slice(0, 16)].map(b => b.toString(16).padStart(2, '0')).join(' ');
+                                const sync = []; for (let i = 0; i + 188 < u8.length && sync.length < 3; i++) { if (u8[i] === 0x47 && u8[i + 188] === 0x47) sync.push(i); }
+                                step.segment = { status: sr.status, type: sr.headers.get('content-type'), bytes: buf.byteLength, cors: sr.headers.get('access-control-allow-origin'), first16: hex, tsSyncAt: sync, range: sr.headers.get('content-range') };
                             }
                         }
                     } catch (e) { step.error = e.message; }
