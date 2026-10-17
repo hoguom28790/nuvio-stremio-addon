@@ -756,6 +756,8 @@ export default {
                     menu: [...new Set([...html.matchAll(/href="(\/[^"#]*)"/g)].map(m => m[1]))].filter(h => !/video\?id=|resources|^\/embed/.test(h)).slice(0, 50),
                     searchForms: [...html.matchAll(/<form[^>]*>[\s\S]{0,300}/gi)].map(m => m[0].replace(/\s+/g, ' ').slice(0, 300)).filter(f => /search|keyword|query/i.test(f)).slice(0, 3),
                     searchScript: (() => { const a = html.indexOf('#search-input'); return a >= 0 ? html.slice(Math.max(0, a - 1500), a + 1000).replace(/\s+/g, ' ') : null; })(),
+                    searchFn: (() => { const a = html.search(/function\s+search\s*\(/); return a >= 0 ? html.slice(a, a + 900).replace(/\s+/g, ' ') : null; })(),
+                    extraInfo: (() => { const a = html.indexOf('/extra_info'); return a >= 0 ? html.slice(Math.max(0, a - 50), a + 500).replace(/\s+/g, ' ') : null; })(),
                     searchInput: (html.match(/<input[^>]*id="search-input"[^>]*>/i) || [])[0],
                     pageLinks: [...new Set([...html.matchAll(/href="([^"#]*(?:page|p|pg)=\d+[^"]*)"/g)].map(m => m[1]))].slice(0, 8)
                 };
