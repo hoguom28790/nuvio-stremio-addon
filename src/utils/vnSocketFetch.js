@@ -1,6 +1,6 @@
 // Cloudflare Worker-only: fetch small TEXT resources (M3U8 playlists) through Vietnam HTTP proxies using raw
 // TCP sockets. Needed because the KKPhim-family CDNs geo-block every non-VN IP (Cloudflare and Render get 404)
-// and tiktokcdn.top / surrit.com refuse Cloudflare IPs. NEVER use this for video segments.
+// and tiktokcdn.top refuses Cloudflare IPs. NEVER use this for video segments.
 import { connect } from 'cloudflare:sockets';
 
 const VN_PROXIES = [
@@ -134,4 +134,26 @@ export async function vnFetchText(url, { headers = {}, timeoutMs = 6000, tls = f
         clearTimeout(timer);
         for (const s of sockets) { try { s.close(); } catch (e) {} }
     }
+}
+
+/**
+ * Diagnostics: ask every proxy of the pool separately and report what each one returned (status / error).
+ */
+export async function vnProbe(url, { headers = {}, timeoutMs = 6000 } = {}) {
+    const target = url.replace(/^https:/, 'http:');
+    return Promise.all(VN_PROXIES.map(async proxy => {
+        const sockets = [];
+        const t0 = Date.now();
+        let timer;
+        try {
+            const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), timeoutMs); });
+            const res = await Promise.race([fetchViaProxy(proxy, target, headers, sockets), timeout]);
+            return { proxy: proxy.hostname, status: res.status, ms: Date.now() - t0, head: res.text.slice(0, 120) };
+        } catch (e) {
+            return { proxy: proxy.hostname, error: e.message, ms: Date.now() - t0 };
+        } finally {
+            clearTimeout(timer);
+            for (const s of sockets) { try { s.close(); } catch (e) {} }
+        }
+    }));
 }

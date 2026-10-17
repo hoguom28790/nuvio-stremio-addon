@@ -33,7 +33,7 @@
 
 function doGet(e) {
   var url = e.parameter.url;
-  var referer = e.parameter.referer || 'https://javhdz.bz/';
+  var referer = e.parameter.referer || 'https://javhdz.one/';
 
   if (!url) {
     return ContentService.createTextOutput("Missing url parameter")

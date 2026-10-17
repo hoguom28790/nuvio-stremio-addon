@@ -8,12 +8,12 @@ Write-Host "Currently loaded: $($existing.Count) movies."
 
 $headers = @{
     'User-Agent' = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    'Referer' = 'https://javhdz.bz/'
+    'Referer' = 'https://javhdz.one/'
 }
 
 $endpoints = @(
-    @{ prefix = 'https://javhdz.bz/video/page/'; min = 31; max = 90 },
-    @{ prefix = 'https://javhdz.bz/tag/vietsub/page/'; min = 1; max = 40 }
+    @{ prefix = 'https://javhdz.one/video/page/'; min = 31; max = 90 },
+    @{ prefix = 'https://javhdz.one/tag/vietsub/page/'; min = 1; max = 40 }
 )
 
 $newItems = [System.Collections.Generic.List[PSObject]]::new()
@@ -44,8 +44,8 @@ foreach ($ep in $endpoints) {
                 if ($imgMatch.Success) {
                     $poster = $imgMatch.Groups[1].Value.Trim()
                     if ($poster.StartsWith('//')) { $poster = "https:$poster" }
-                    elseif ($poster.StartsWith('/')) { $poster = "https://javhdz.bz$poster" }
-                    elseif (-not $poster.StartsWith('http')) { $poster = "https://javhdz.bz/$poster" }
+                    elseif ($poster.StartsWith('/')) { $poster = "https://javhdz.one$poster" }
+                    elseif (-not $poster.StartsWith('http')) { $poster = "https://javhdz.one/$poster" }
                 }
 
                 $subMatch = [regex]::Match($card, '<span class="meta-sub">([^<]*)<\/span>')

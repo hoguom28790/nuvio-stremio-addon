@@ -6,8 +6,12 @@ const vsmov = require('./scrapers/vsmov');
 const hentaiz = require('./scrapers/hentaiz');
 const javhd = require('./scrapers/javhd');
 const vlxx = require('./scrapers/vlxx');
+const fs1 = require('./scrapers/fs1');
+const javtiful = require('./scrapers/javtiful');
+const hohoj = require('./scrapers/hohoj');
+const sexmup = require('./scrapers/sexmup');
+const javhay = require('./scrapers/javhay');
 const avdb = require('./scrapers/avdb');
-const missav = require('./scrapers/missav');
 const imdb = require('./scrapers/imdb');
 const cache = require('./utils/cache');
 
@@ -77,12 +81,28 @@ builder.defineCatalogHandler(async ({ type, id, extra = {}, config = {} }) => {
             return { metas: await vlxx.getCatalog(id, type, extra) };
         }
 
-        if (id.startsWith('avdb-') && (isSourceEnabled('avdb', config) || isSourceEnabled(id.replace('-', '_'), config))) {
-            return { metas: await avdb.getCatalog(id, type, extra) };
+        if (id.startsWith('fs1-') && isSourceEnabled('fs1', config)) {
+            return { metas: await fs1.getCatalog(id, type, extra) };
         }
 
-        if (id.startsWith('missav-') && isSourceEnabled('missav', config)) {
-            return { metas: await missav.getCatalog(id, type, extra) };
+        if (id.startsWith('javtiful-') && isSourceEnabled('javtiful', config)) {
+            return { metas: await javtiful.getCatalog(id, type, extra, config.host) };
+        }
+
+        if (id.startsWith('hohoj-') && isSourceEnabled('hohoj', config)) {
+            return { metas: await hohoj.getCatalog(id, type, extra, config.host) };
+        }
+
+        if (id.startsWith('sexmup-') && isSourceEnabled('sexmup', config)) {
+            return { metas: await sexmup.getCatalog(id, type, extra, config.host) };
+        }
+
+        if (id.startsWith('javhay-') && isSourceEnabled('javhay', config)) {
+            return { metas: await javhay.getCatalog(id, type, extra, config.host) };
+        }
+
+        if (id.startsWith('avdb-') && (isSourceEnabled('avdb', config) || isSourceEnabled(id.replace('-', '_'), config))) {
+            return { metas: await avdb.getCatalog(id, type, extra) };
         }
 
     } catch (e) {
@@ -122,8 +142,24 @@ builder.defineMetaHandler(async ({ type, id, config = {} }) => {
             const meta = await avdb.getMeta(type, id);
             if (meta) return { meta };
         }
-        if (id.startsWith('missav:')) {
-            const meta = await missav.getMeta(type, id);
+        if (id.startsWith('fs1:')) {
+            const meta = await fs1.getMeta(type, id);
+            if (meta) return { meta };
+        }
+        if (id.startsWith('javtiful:')) {
+            const meta = await javtiful.getMeta(type, id, config.host);
+            if (meta) return { meta };
+        }
+        if (id.startsWith('hohoj:')) {
+            const meta = await hohoj.getMeta(type, id, config.host);
+            if (meta) return { meta };
+        }
+        if (id.startsWith('sexmup:')) {
+            const meta = await sexmup.getMeta(type, id, config.host);
+            if (meta) return { meta };
+        }
+        if (id.startsWith('javhay:')) {
+            const meta = await javhay.getMeta(type, id, config.host);
             if (meta) return { meta };
         }
     } catch (e) {
@@ -162,8 +198,16 @@ builder.defineStreamHandler(async ({ type, id, config = {} }) => {
             streams = await vlxx.getStream(id, type, config.host);
         } else if (id.startsWith('avdb:')) {
             streams = await avdb.getStream(id, type, config.host);
-        } else if (id.startsWith('missav:')) {
-            streams = await missav.getStream(id, type, config.host);
+        } else if (id.startsWith('fs1:')) {
+            streams = await fs1.getStream(id);
+        } else if (id.startsWith('javtiful:')) {
+            streams = await javtiful.getStream(id);
+        } else if (id.startsWith('hohoj:')) {
+            streams = await hohoj.getStream(id);
+        } else if (id.startsWith('sexmup:')) {
+            streams = await sexmup.getStream(id, type, config.host);
+        } else if (id.startsWith('javhay:')) {
+            streams = await javhay.getStream(id, type, config.host);
         } else if (id.startsWith('tt')) {
             if (config.prefImdb !== false) {
                 streams = await imdb.getStream(id, type, config);

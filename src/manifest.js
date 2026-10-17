@@ -204,47 +204,173 @@ const avdbCatalogs = [
     }
 ];
 
-const missavGenres = [
-    "Tất Cả",
-    "Phát Hành Mới",
+const fs1Genres = [
     "Mới Cập Nhật",
-    "Không Che (Uncensored)",
-    "Vietsub / Phụ Đề",
-    "Phụ Đề Tiếng Anh",
-    "Nghiệp Dư / FC2",
-    "Thịnh Hành (Hôm nay)",
-    "Thịnh Hành (Tuần)",
-    "Thịnh Hành (Tháng)",
-    "VR Thực Tế Ảo",
-    "Siro (Amateur)",
-    "Luxu (Amateur)",
-    "Gana (Amateur)",
-    "Maan (Amateur)",
-    "Nữ Sinh (Schoolgirl)",
-    "Ngực Khủng (Big Breasts)",
-    "Vợ / MILF (Mature Woman)",
-    "Xuất Tinh Trong (Creampie)",
-    "Gái Xinh (Pretty Girl)",
-    "Oral Sex",
-    "Tập Thể (Orgy)"
+    "Xem Nhiều (Hot)",
+    "Mới Ra Mắt",
+    "Phụ Đề Trung",
+    "Kịch Bản Nhập Vai",
+    "Đồng Phục",
+    "Quần Tất",
+    "Vào Việc Ngay",
+    "Nhóm (Group)",
+    "BDSM",
+    "POV",
+    "Quay Lén"
 ];
 
-const missavCatalogs = [
+const fs1Catalogs = [
     {
         type: "movie",
-        id: "missav-movie",
-        name: "MissAV",
+        id: "fs1-movie",
+        name: "Jable (fs1)",
         extra: [
             { name: "search", isRequired: false },
             { name: "skip", isRequired: false },
-            { name: "genre", isRequired: false, options: missavGenres }
+            { name: "genre", isRequired: false, options: fs1Genres }
         ]
     }
 ];
 
-const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs, ...missavCatalogs];
+const javtifulGenres = [
+    "Mới Nhất",
+    "Hot Hôm Nay",
+    "Hot Tuần Này",
+    "Hot Tháng Này",
+    "Xem Nhiều Nhất",
+    "Nhiều Like Nhất",
+    "Mới Thêm Hôm Nay",
+    "Mới Thêm Tuần Này",
+    "Mới Thêm Tháng Này"
+];
+
+const javtifulCatalogs = [
+    {
+        type: "movie",
+        id: "javtiful-movie",
+        name: "Javtiful",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: javtifulGenres }
+        ]
+    }
+];
+
+const hohojGenres = [
+    "Mới Nhất",
+    "Loạn Luân",
+    "Cưỡng Hiếp / Lăng Nhục",
+    "Nội Xạ",
+    "Nhóm / Đa Người",
+    "Ngực Bự",
+    "Ngoại Tình",
+    "Nhập Vai / Kịch Bản",
+    "Tất Lụa / Chân Đẹp",
+    "Phun Nước",
+    "Hậu Môn",
+    "Đồng Phục",
+    "Điều Giáo (BDSM)",
+    "👤 波多野結衣",
+    "👤 三上悠亞",
+    "👤 北野未奈",
+    "👤 凪光",
+    "👤 森澤佳奈",
+    "👤 河北彩花",
+    "👤 楪可憐",
+    "👤 橘瑪麗",
+    "👤 瀬戸環奈",
+    "👤 楓可憐",
+    "👤 素人 (Nghiệp dư)"
+];
+
+const hohojCatalogs = [
+    {
+        type: "movie",
+        id: "hohoj-movie",
+        name: "HoHoJ",
+        extra: [
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: hohojGenres }
+        ]
+    }
+];
+
+const sexmupGenres = [
+    "Mới Nhất",
+    "Hiếp Dâm",
+    "Loạn Luân",
+    "Không Che",
+    "Nhật Bản",
+    "Châu Âu",
+    "JAV HD",
+    "XNXX",
+    "Phim Hay",
+    "Trung Quốc",
+    "Lầu Xanh",
+    "XXX",
+    "VLXX",
+    "Địt Nhau",
+    "Học Sinh",
+    "Vụng Trộm"
+];
+
+const sexmupCatalogs = [
+    {
+        type: "movie",
+        id: "sexmup-movie",
+        name: "Sex Mụp Xinh",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: sexmupGenres }
+        ]
+    }
+];
+
+const javhayGenres = [
+    "Mới Nhất",
+    "Loạn Luân",
+    "Trung Quốc",
+    "Âu Mỹ",
+    "Uncen (Không Che)",
+    "Vietsub",
+    "Sex Hay",
+    "👤 Shen Nana",
+    "👤 Yua Mikami",
+    "👤 Tsumugi Akari",
+    "👤 Airi Kijima",
+    "👤 Karen Yuzuriha",
+    "👤 Riho Fujimori",
+    "👤 Eimi Fukada",
+    "👤 Mina Kitano",
+    "👤 Jun Suehiro",
+    "👤 Yu Shinoda",
+    "👤 Moe Amatsuka",
+    "👤 Jessica Kizaki",
+    "👤 Yui Hatano",
+    "👤 Megu Fujiura",
+    "👤 Tsubaki Sannomiya",
+    "👤 Ranran Fujii",
+    "👤 Li Nana"
+];
+
+const javhayCatalogs = [
+    {
+        type: "movie",
+        id: "javhay-movie",
+        name: "JavHay",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: javhayGenres }
+        ]
+    }
+];
+
+const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs, ...fs1Catalogs, ...javtifulCatalogs, ...hohojCatalogs, ...sexmupCatalogs, ...javhayCatalogs];
 const allCatalogs = [...filteredCatalogs, ...adultCatalogs];
-const allPrefixes = ["tt", "kkphim:", "vsmov:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "missav:"];
+const allPrefixes = ["tt", "kkphim:", "vsmov:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "fs1:", "javtiful:", "hohoj:", "sexmup:", "javhay:"];
 
 const baseManifest = {
     id: "org.hophim.stremio",
