@@ -635,6 +635,31 @@ export default {
                 const lines = html.split('\n').map(l => l.trim()).filter(l => l && keys.test(l)).map(l => l.slice(0, 300));
                 const media = [...new Set(html.match(/(?:https?:)?\/\/[^"'\s<>\\]+\.(?:m3u8|mp4)[^"'\s<>\\]*/g) || [])].slice(0, 20);
                 const scripts = [...html.matchAll(/<script[^>]+src=["']([^"']+)["']/g)].map(m => m[1]);
+                if (url.searchParams.get('call') === '1') {
+                    const out = { target, status: r.status };
+                    const um = html.match(/url_source\s*=\s*['"]([^'"]+)['"]/);
+                    const vm = html.match(/(?:var|let|const)?\s*YWRzMQo\s*=\s*([^;]{0,200});/);
+                    out.url_source = um ? um[1] : null;
+                    out.YWRzMQo_def = vm ? vm[0].slice(0, 250) : null;
+                    const idx = html.indexOf('url_source');
+                    out.url_source_context = idx >= 0 ? html.slice(Math.max(0, idx - 150), idx + 250) : null;
+                    const cm = [...html.matchAll(/select_part\(\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*this\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'/g)];
+                    out.calls = cm.length;
+                    if (um && cm.length) {
+                        const c = cm[0];
+                        const pickValue = vm && /^['"]/.test(vm[1].trim()) ? vm[1].trim().replace(/^['"]|['"]$/g, '') : '';
+                        const body = new URLSearchParams({ group: c[2], part: c[1], code: c[4], code2: c[5], code3: c[6], value: pickValue, sound: 'av' });
+                        const ar = await fetch(new URL(um[1], target).href, {
+                            method: 'POST',
+                            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': target, 'Origin': 'https://www.javmost.ws', 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                            body: body.toString(),
+                            signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined
+                        });
+                        const at = await ar.text();
+                        out.api = { status: ar.status, valueSent: pickValue, response: at.slice(0, 1500) };
+                    }
+                    return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+                }
                 const di = html.search(/function\s+select_part|select_part\s*=/);
                 const defs = di >= 0 ? html.slice(di, di + 3500) : '';
                 return new Response(JSON.stringify({ target, status: r.status, length: html.length, media, scripts, defs, lines: defs ? [] : lines.slice(0, 120) }, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
