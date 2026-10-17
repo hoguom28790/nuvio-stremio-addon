@@ -699,6 +699,64 @@ export default {
             }
         }
 
+        // Hohoj diagnostics: embed m3u8 + playlist/segment probe, plus list-page structure
+        if (pathname === '/hohoj/debug') {
+            const id = url.searchParams.get('id') || '60919';
+            const listPath = url.searchParams.get('list') || '/';
+            const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+            const out = { id };
+            const get = async (u, headers = {}) => fetch(u, { headers: { 'User-Agent': UA, ...headers }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+            try {
+                const er = await get(`https://hohoj.tv/embed?id=${encodeURIComponent(id)}`, { 'Referer': `https://hohoj.tv/video?id=${encodeURIComponent(id)}` });
+                const eh = await er.text();
+                out.embedStatus = er.status;
+                const m = eh.match(/var\s+videoSrc\s*=\s*["']([^"']+)["']/);
+                out.videoSrc = m ? m[1] : null;
+                if (out.videoSrc) {
+                    const probe = async (headers) => {
+                        try {
+                            const pr = await get(out.videoSrc, headers);
+                            const txt = await pr.text();
+                            const h = (n) => pr.headers.get(n);
+                            const lines = txt.split('\n').map(l => l.trim()).filter(Boolean);
+                            const seg = lines.find(l => !l.startsWith('#'));
+                            return { status: pr.status, type: h('content-type'), cors: h('access-control-allow-origin'), head: txt.slice(0, 500), firstUri: seg, lineCount: lines.length };
+                        } catch (e) { return { error: e.message }; }
+                    };
+                    out.playlistWithReferer = await probe({ 'Referer': 'https://hohoj.tv/' });
+                    out.playlistNoReferer = await probe({});
+                    const first = out.playlistNoReferer.firstUri || out.playlistWithReferer.firstUri;
+                    if (first) {
+                        const segUrl = new URL(first, out.videoSrc).href;
+                        out.segmentUrl = segUrl;
+                        try {
+                            const sr = await get(segUrl, { 'Range': 'bytes=0-511' });
+                            const buf = await sr.arrayBuffer();
+                            out.segment = { status: sr.status, type: sr.headers.get('content-type'), bytes: buf.byteLength, cors: sr.headers.get('access-control-allow-origin') };
+                        } catch (e) { out.segment = { error: e.message }; }
+                        try {
+                            const sr = await get(segUrl, { 'Range': 'bytes=0-511', 'Referer': 'https://hohoj.tv/' });
+                            out.segmentWithReferer = { status: sr.status };
+                        } catch (e) { out.segmentWithReferer = { error: e.message }; }
+                    }
+                }
+            } catch (e) { out.error = e.message; }
+            try {
+                const lr = await get(new URL(listPath, 'https://hohoj.tv').href, { 'Referer': 'https://hohoj.tv/' });
+                const html = await lr.text();
+                const vi = html.search(/video\?id=\d+/);
+                out.list = {
+                    status: lr.status,
+                    title: (html.match(/<title>([\s\S]*?)<\/title>/i) || [])[1],
+                    sample: vi >= 0 ? html.slice(Math.max(0, vi - 500), vi + 1100) : null,
+                    pagination: [...new Set([...html.matchAll(/href="([^"#]*[?&]page=\d+[^"]*)"/g)].map(m => m[1]))].slice(0, 8),
+                    menu: [...new Set([...html.matchAll(/href="(\/[^"#]*)"/g)].map(m => m[1]))].filter(h => !/video\?id=|resources|^\/embed/.test(h)).slice(0, 50),
+                    searchForms: [...html.matchAll(/<form[^>]*>[\s\S]{0,300}/gi)].map(m => m[0].replace(/\s+/g, ' ').slice(0, 300)).filter(f => /search|keyword|query/i.test(f)).slice(0, 3)
+                };
+            } catch (e) { out.list = { error: e.message }; }
+            return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
         // Javtiful list structure: sample cards, pagination, menu links, search form
         if (pathname === '/javtiful/list') {
             const target = url.searchParams.get('url') || 'https://javtiful.com/vn/videos';
