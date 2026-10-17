@@ -635,7 +635,9 @@ export default {
                 const lines = html.split('\n').map(l => l.trim()).filter(l => l && keys.test(l)).map(l => l.slice(0, 300));
                 const media = [...new Set(html.match(/(?:https?:)?\/\/[^"'\s<>\\]+\.(?:m3u8|mp4)[^"'\s<>\\]*/g) || [])].slice(0, 20);
                 const scripts = [...html.matchAll(/<script[^>]+src=["']([^"']+)["']/g)].map(m => m[1]);
-                return new Response(JSON.stringify({ target, status: r.status, length: html.length, media, scripts, lines: lines.slice(0, 120) }, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+                const di = html.search(/function\s+select_part|select_part\s*=/);
+                const defs = di >= 0 ? html.slice(di, di + 3500) : '';
+                return new Response(JSON.stringify({ target, status: r.status, length: html.length, media, scripts, defs, lines: defs ? [] : lines.slice(0, 120) }, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
             } catch (e) {
                 return new Response(JSON.stringify({ target, error: e.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
             }
@@ -644,14 +646,16 @@ export default {
         // JavMost diagnostics (2): follow the site's chain of public loader scripts down to the player code
         if (pathname === '/javmost/js') {
             let jsUrl = url.searchParams.get('url') || 'https://www.javmost.ws/src/jpm.js?v=3';
+            const single = !!url.searchParams.get('url');
             const hops = [];
             try {
-                for (let i = 0; i < 6; i++) {
+                for (let i = 0; i < (single ? 1 : 6); i++) {
                     const r = await fetch(jsUrl, { headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.javmost.ws/' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
                     const js = await r.text();
                     const hop = { jsUrl, status: r.status, length: js.length };
-                    const at = js.indexOf('select_part');
-                    if (at >= 0 || js.length > 3000 && i > 0) {
+                    const kw = ['select_part', '$.ajax', '$.post', 'ajax(', 'fetch('].map(k => js.indexOf(k)).filter(k => k >= 0);
+                    const at = js.indexOf('select_part') >= 0 ? js.indexOf('select_part') : (kw.length ? Math.min(...kw) : -1);
+                    if (single || at >= 0 || js.length > 3000 && i > 0) {
                         hop.around = js.slice(Math.max(0, (at >= 0 ? at : 0) - 200), (at >= 0 ? at : 0) + 3500);
                         hop.hits = [...new Set(js.match(/(?:https?:)?\/\/[^"'\s\\)]+|\/[a-zA-Z0-9_\/-]*(?:ajax|get_|stream|player|link|source)[a-zA-Z0-9_\/-]*/g) || [])].slice(0, 40);
                         hops.push(hop);
