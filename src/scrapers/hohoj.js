@@ -12,13 +12,10 @@ const client = axios.create({
     headers: { 'User-Agent': USER_AGENT, 'Referer': `${BASE_URL}/` }
 });
 
-// Menu entries of the site. Listing pages live under /lang_en and paginate with ?p=N.
+// Entries of the site's menu that answer to the Worker. Listing pages live under /lang_en and paginate with ?p=N
+// (the home page is a single page). /search pages answer 500 to the Worker, so there is no keyword search.
 const GENRE_MAP = {
     'Mới Nhất': `${LANG}/`,
-    'Mới Nhất (Có Che)': `${LANG}/search?type=censored&order=latest`,
-    'Không Che': `${LANG}/search?type=uncensored`,
-    'Phụ Đề Trung': `${LANG}/search?type=chinese`,
-    'Châu Âu': `${LANG}/search?type=europe`,
     'Loạn Luân': `${LANG}/main_ctg?id=8`,
     'Cưỡng Hiếp / Lăng Nhục': `${LANG}/main_ctg?id=2`,
     'Nội Xạ': `${LANG}/main_ctg?id=12`,
@@ -30,7 +27,18 @@ const GENRE_MAP = {
     'Phun Nước': `${LANG}/main_ctg?id=10`,
     'Hậu Môn': `${LANG}/main_ctg?id=11`,
     'Đồng Phục': `${LANG}/main_ctg?id=4`,
-    'Điều Giáo (BDSM)': `${LANG}/main_ctg?id=3`
+    'Điều Giáo (BDSM)': `${LANG}/main_ctg?id=3`,
+    '👤 波多野結衣': `${LANG}/model?id=43`,
+    '👤 三上悠亞': `${LANG}/model?id=41`,
+    '👤 北野未奈': `${LANG}/model?id=93`,
+    '👤 凪光': `${LANG}/model?id=990`,
+    '👤 森澤佳奈': `${LANG}/model?id=1002`,
+    '👤 河北彩花': `${LANG}/model?id=586`,
+    '👤 楪可憐': `${LANG}/model?id=69`,
+    '👤 橘瑪麗': `${LANG}/model?id=726`,
+    '👤 瀬戸環奈': `${LANG}/model?id=7197`,
+    '👤 楓可憐': `${LANG}/model?id=19`,
+    '👤 素人 (Nghiệp dư)': `${LANG}/model?id=404`
 };
 
 function decode(str) {
@@ -97,14 +105,15 @@ function toMeta(item, host) {
 }
 
 async function getCatalog(catalogId, type, extra = {}, host) {
-    const search = extra.search ? String(extra.search).trim() : '';
-    const sizeKey = 'hohoj:psize';
+    // Keyword search is not available (the site's /search answers 500 to the Worker)
+    if (extra.search && String(extra.search).trim()) return [];
+
+    const base = GENRE_MAP[extra.genre] || GENRE_MAP['Mới Nhất'];
+    const singlePage = base === `${LANG}/`;
+    const sizeKey = `hohoj:psize:${base}`;
     const pageSize = cache.get(sizeKey) || DEFAULT_PAGE_SIZE;
     const page = extra.skip ? Math.max(1, Math.round(Number(extra.skip) / pageSize) + 1) : 1;
-
-    let base;
-    if (search) base = `${LANG}/search?text=${encodeURIComponent(search)}`;
-    else base = GENRE_MAP[extra.genre] || GENRE_MAP['Mới Nhất'];
+    if (singlePage && page > 1) return [];
     const url = page > 1 ? `${base}${base.includes('?') ? '&' : '?'}p=${page}` : base;
 
     const cacheKey = `hohoj:catalog:${url}`;

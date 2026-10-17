@@ -259,10 +259,6 @@ const javtifulCatalogs = [
 
 const hohojGenres = [
     "Mới Nhất",
-    "Mới Nhất (Có Che)",
-    "Không Che",
-    "Phụ Đề Trung",
-    "Châu Âu",
     "Loạn Luân",
     "Cưỡng Hiếp / Lăng Nhục",
     "Nội Xạ",
@@ -274,7 +270,18 @@ const hohojGenres = [
     "Phun Nước",
     "Hậu Môn",
     "Đồng Phục",
-    "Điều Giáo (BDSM)"
+    "Điều Giáo (BDSM)",
+    "👤 波多野結衣",
+    "👤 三上悠亞",
+    "👤 北野未奈",
+    "👤 凪光",
+    "👤 森澤佳奈",
+    "👤 河北彩花",
+    "👤 楪可憐",
+    "👤 橘瑪麗",
+    "👤 瀬戸環奈",
+    "👤 楓可憐",
+    "👤 素人 (Nghiệp dư)"
 ];
 
 const hohojCatalogs = [
@@ -283,7 +290,6 @@ const hohojCatalogs = [
         id: "hohoj-movie",
         name: "HoHoJ",
         extra: [
-            { name: "search", isRequired: false },
             { name: "skip", isRequired: false },
             { name: "genre", isRequired: false, options: hohojGenres }
         ]
