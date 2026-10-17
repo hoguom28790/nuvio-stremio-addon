@@ -658,8 +658,10 @@ export default {
                 const uniq = (arr) => [...new Set(arr)].slice(0, 25);
                 const media = uniq(html.match(/(?:https?:)?\\?\/\\?\/[^"'\s<>\\]+\.(?:m3u8|mp4|mpd)[^"'\s<>\\]*/g) || []);
                 const iframes = uniq([...html.matchAll(/<iframe[^>]+src=["']([^"']+)["']/gi)].map(m => m[1]));
-                const keys = /m3u8|\.mp4|video_url|video_embed|data-src-video|player|source|stream|embed|hls|file["']?\s*:/i;
-                const lines = html.split('\n').map(l => l.trim()).filter(l => l && keys.test(l) && !/^<(link|meta|style)/i.test(l)).map(l => { const m = l.match(keys); const i = Math.max(0, (m ? m.index : 0) - 120); return l.slice(i, i + 320); }).slice(0, 40);
+                let keys = /m3u8|\.mp4|video_url|video_embed|data-src-video|player|source|stream|embed|hls|file["']?\s*:/i;
+                const q = url.searchParams.get('q');
+                if (q) { try { keys = new RegExp(q, 'i'); } catch (e) {} }
+                const lines = html.split('\n').map(l => l.trim()).filter(l => l && keys.test(l) && !/^<(link|meta|style)/i.test(l) && !/embed-responsive/.test(l)).map(l => { const m = l.match(keys); const i = Math.max(0, (m ? m.index : 0) - 120); return l.slice(i, i + 320); }).slice(0, 40);
                 return new Response(JSON.stringify({ target, status: r.status, length: html.length, media, iframes, lines }, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
             } catch (e) {
                 return new Response(JSON.stringify({ target, error: e.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
