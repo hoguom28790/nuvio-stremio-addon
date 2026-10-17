@@ -621,6 +621,38 @@ export default {
             }
         }
 
+        // AVDB diagnostics: API item, 18plusok mirror, upload18 embed from the Worker, Render
+        if (pathname === '/avdb/debug') {
+            const id = url.searchParams.get('id') || '';
+            const diag = { stages: {} };
+            const probe = async (label, fn) => {
+                const t0 = Date.now();
+                try { diag.stages[label] = { ...(await fn()), ms: Date.now() - t0 }; }
+                catch (e) { diag.stages[label] = { error: e.message, ms: Date.now() - t0 }; }
+            };
+            const brief = async (u, headers = { 'User-Agent': 'Mozilla/5.0' }) => {
+                const r = await fetch(u, { headers, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+                const t = await r.text();
+                return { status: r.status, len: t.length, head: t.slice(0, 200).replace(/\s+/g, ' ') };
+            };
+            let item = null;
+            await probe('api', async () => {
+                const r = await fetch(`https://avdbapi.com/api.php/provide/vod?ac=detail&ids=${encodeURIComponent(id)}`, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+                const j = await r.json();
+                item = j && j.list && j.list[0];
+                return { status: r.status, found: !!item, episodes: item && item.episodes, keys: item && Object.keys(item) };
+            });
+            const ep = item && item.episodes && item.episodes.server_data && Object.values(item.episodes.server_data)[0];
+            const slug = ep && ep.link_embed ? ep.link_embed.split('/').pop() : (item && item.slug) || '';
+            await probe('mirror', () => brief(`https://18plusok.vercel.app/eyJoaWRlRnJvbUhvbWUiOnRydWV9/stream/movie/avdb:${encodeURIComponent(id)}.json`));
+            if (slug) {
+                await probe('embedCom', () => brief(`https://upload18.com/play/index/${slug}`));
+                await probe('embedOrg', () => brief(`https://upload18.org/play/index/${slug}`));
+            }
+            await probe('render', () => brief(`${RENDER_BASE}/avdb/stream/${encodeURIComponent(slug)}.m3u8?cfhost=${encodeURIComponent(host)}&id=${encodeURIComponent(id)}`));
+            return new Response(JSON.stringify(diag, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
         // 8c. AVDB M3U8 Stream
         const avdbMatch = pathname.match(/^\/avdb\/stream\/([^/]+)\.m3u8$/);
         if (avdbMatch) {
