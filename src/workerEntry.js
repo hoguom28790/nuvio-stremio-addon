@@ -713,7 +713,11 @@ export default {
                 const cardCount = (html.match(/<article class="video-card/g) || []).length;
                 const title = (html.match(/<title>([\s\S]*?)<\/title>/i) || [])[1];
                 const head = parts.length ? undefined : html.replace(/\s+/g, ' ').slice(0, 600);
-                return new Response(JSON.stringify({ target, finalUrl: r.url, status: r.status, length: html.length, title, cardCount, cards: parts, head, pagination: pag, menu, searchForms: forms }, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+                const videoLinks = [...new Set([...html.matchAll(/href="(\/(?:vn|en)\/video\/\d+\/[^"]+)"/g)].map(m => m[1]))].slice(0, 10);
+                const vi = html.search(/\/(?:vn|en)\/video\/\d+\//);
+                const sample = vi >= 0 ? html.slice(Math.max(0, vi - 300), vi + 1200) : undefined;
+                const noResult = (html.match(/[^>]{0,80}(?:không tìm thấy|no results?|not found|0 kết quả)[^<]{0,80}/i) || [])[0];
+                return new Response(JSON.stringify({ target, finalUrl: r.url, status: r.status, length: html.length, title, cardCount, videoLinks, noResult, sample, cards: parts, head: parts.length || sample ? undefined : head, pagination: pag, menu, searchForms: forms }, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
             } catch (e) {
                 return new Response(JSON.stringify({ target, error: e.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
             }
