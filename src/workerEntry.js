@@ -666,6 +666,23 @@ export default {
             }
         }
 
+        // HAYAV diagnostics: inline player-loader script + source tokens of a movie page
+        if (pathname === '/hayav/debug') {
+            const target = url.searchParams.get('url') || 'https://hayav.com/video/chinese-subtitles/abf-375c/';
+            try {
+                const r = await fetch(target, {
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': 'https://hayav.com/' },
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined
+                });
+                const html = await r.text();
+                const sm = html.match(/<script id="hayav-player-pilot-script"[^>]*>([\s\S]*?)<\/script>/i);
+                const tokens = [...html.matchAll(/<[^>]*data-hayav-player-token=["'][^>]*>/gi)].map(m => m[0].slice(0, 400)).slice(0, 10);
+                return new Response(JSON.stringify({ target, status: r.status, script: sm ? sm[1].slice(0, 6000) : null, tokens }, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+            } catch (e) {
+                return new Response(JSON.stringify({ target, error: e.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+            }
+        }
+
         // AVDB diagnostics: API item, 18plusok mirror, upload18 embed from the Worker, Render
         if (pathname === '/avdb/debug') {
             const id = url.searchParams.get('id') || '';
