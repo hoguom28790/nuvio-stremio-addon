@@ -95,7 +95,10 @@ function parseList(html) {
 
 async function fetchHtml(path, headers) {
     const res = await client.get(path, { responseType: 'text', transformResponse: [d => d], headers });
-    return typeof res.data === 'string' ? res.data : '';
+    const d = res.data;
+    if (typeof d === 'string') return d;
+    // some adapters hand JSON bodies back already parsed
+    return d && typeof d === 'object' ? JSON.stringify(d) : '';
 }
 
 function toMeta(item, host) {
