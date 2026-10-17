@@ -668,6 +668,48 @@ export default {
             }
         }
 
+        // Javtiful diagnostics: <video id="front-player"> + playerSources of a movie page, then probe the first source
+        if (pathname === '/javtiful/debug') {
+            const target = url.searchParams.get('url') || 'https://javtiful.com/vn/video/114709/tikb-229';
+            const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+            const out = { target };
+            try {
+                const r = await fetch(target, { headers: { 'User-Agent': UA, 'Referer': 'https://javtiful.com/' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                const html = await r.text();
+                out.status = r.status;
+                const vm = html.match(/<video[^>]*id="front-player"[\s\S]*?<\/video>/i);
+                out.videoTag = vm ? vm[0].slice(0, 3000) : null;
+                let sources = null;
+                const i = html.indexOf('"playerSources"');
+                if (i >= 0) {
+                    const a = html.indexOf('[', i);
+                    let depth = 0, end = -1;
+                    for (let k = a; k < html.length && k < a + 20000; k++) {
+                        const ch = html[k];
+                        if (ch === '[') depth++;
+                        else if (ch === ']') { depth--; if (depth === 0) { end = k; break; } }
+                    }
+                    if (a >= 0 && end > a) { try { sources = JSON.parse(html.slice(a, end + 1)); } catch (e) { out.parseError = e.message; out.raw = html.slice(a, a + 1500); } }
+                }
+                out.playerSources = sources ? sources.slice(0, 6) : null;
+                const first = sources && sources[0] && sources[0].src;
+                if (first) {
+                    const probe = async (headers) => {
+                        try {
+                            const pr = await fetch(first, { headers: { 'User-Agent': UA, 'Range': 'bytes=0-1023', ...headers }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                            const buf = await pr.arrayBuffer();
+                            const txt = new TextDecoder().decode(buf.slice(0, 300));
+                            const h = (n) => pr.headers.get(n);
+                            return { status: pr.status, type: h('content-type'), len: h('content-length'), range: h('content-range'), accept: h('accept-ranges'), cors: h('access-control-allow-origin'), head: /^#EXTM3U/.test(txt) ? txt : txt.replace(/[^\x20-\x7e]/g, '.').slice(0, 80) };
+                        } catch (e) { return { error: e.message }; }
+                    };
+                    out.probeWithReferer = await probe({ 'Referer': 'https://javtiful.com/' });
+                    out.probeNoReferer = await probe({});
+                }
+            } catch (e) { out.error = e.message; }
+            return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
         // HAYAV diagnostics: inline player-loader script + source tokens of a movie page
         if (pathname === '/hayav/debug') {
             const target = url.searchParams.get('url') || 'https://hayav.com/video/chinese-subtitles/abf-375c/';
