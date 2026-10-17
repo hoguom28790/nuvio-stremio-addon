@@ -765,6 +765,37 @@ export default {
             return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
         }
 
+        // Hohoj URL variants: which list/search URLs does the site answer to the Worker?
+        if (pathname === '/hohoj/variants') {
+            const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+            const paths = (url.searchParams.get('paths') || '').split('|').filter(Boolean);
+            const defaults = [
+                '/?page=2',
+                '/search?type=chinese&page=1',
+                '/search?type=chinese&order=latest&page=1',
+                '/search?type=censored&order=latest&page=1',
+                '/search?search=AVSA',
+                '/search?q=AVSA',
+                '/search?keyword=AVSA',
+                '/search?text=AVSA',
+                '/main_ctg?id=1&name=%E7%B5%B2%E8%A5%AA%E7%BE%8E%E8%85%BF',
+                '/main_ctg?id=1&name=%E7%B5%B2%E8%A5%AA%E7%BE%8E%E8%85%BF&page=2',
+                '/all_models'
+            ];
+            const results = [];
+            for (const path of (paths.length ? paths : defaults)) {
+                for (const cookie of ['', 'lang=zh-hant']) {
+                    try {
+                        const r = await fetch(new URL(path, 'https://hohoj.tv').href, { headers: { 'User-Agent': UA, 'Referer': 'https://hohoj.tv/', 'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8', ...(cookie ? { 'Cookie': cookie } : {}) }, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+                        const html = await r.text();
+                        const ids = [...html.matchAll(/video\?id=(\d+)/g)].map(m => m[1]);
+                        results.push({ path, cookie, status: r.status, videoLinks: ids.length, firstIds: ids.slice(0, 3), pageLinks: [...new Set([...html.matchAll(/href="([^"#]*[?&](?:page|p)=\d+[^"]*)"/g)].map(m => m[1]))].slice(0, 4) });
+                    } catch (e) { results.push({ path, cookie, error: e.message }); }
+                }
+            }
+            return new Response(JSON.stringify(results, null, 1), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
         // Javtiful list structure: sample cards, pagination, menu links, search form
         if (pathname === '/javtiful/list') {
             const target = url.searchParams.get('url') || 'https://javtiful.com/vn/videos';
