@@ -641,18 +641,31 @@ export default {
             }
         }
 
-        // JavMost diagnostics (2): read the site's public player script to see how server links are requested
+        // JavMost diagnostics (2): follow the site's chain of public loader scripts down to the player code
         if (pathname === '/javmost/js') {
-            const jsUrl = url.searchParams.get('url') || 'https://www.javmost.ws/src/jpm.js?v=3';
+            let jsUrl = url.searchParams.get('url') || 'https://www.javmost.ws/src/jpm.js?v=3';
+            const hops = [];
             try {
-                const r = await fetch(jsUrl, { headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.javmost.ws/' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
-                const js = await r.text();
-                const at = js.indexOf('select_part');
-                const around = at >= 0 ? js.slice(Math.max(0, at - 200), at + 3500) : '';
-                const hits = [...new Set(js.match(/(?:https?:)?\/\/[^"'\s\\)]+|\/[a-zA-Z0-9_\/-]*(?:ajax|get_|stream|player|link|source)[a-zA-Z0-9_\/-]*/g) || [])].slice(0, 40);
-                return new Response(JSON.stringify({ jsUrl, status: r.status, length: js.length, hits, around }, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+                for (let i = 0; i < 6; i++) {
+                    const r = await fetch(jsUrl, { headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.javmost.ws/' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                    const js = await r.text();
+                    const hop = { jsUrl, status: r.status, length: js.length };
+                    const at = js.indexOf('select_part');
+                    if (at >= 0 || js.length > 3000 && i > 0) {
+                        hop.around = js.slice(Math.max(0, (at >= 0 ? at : 0) - 200), (at >= 0 ? at : 0) + 3500);
+                        hop.hits = [...new Set(js.match(/(?:https?:)?\/\/[^"'\s\\)]+|\/[a-zA-Z0-9_\/-]*(?:ajax|get_|stream|player|link|source)[a-zA-Z0-9_\/-]*/g) || [])].slice(0, 40);
+                        hops.push(hop);
+                        break;
+                    }
+                    hop.head = js.slice(0, 400);
+                    hops.push(hop);
+                    const next = js.match(/(?:https?:)?\/\/[^"'\s\\)]+\.js(?:\?[^"'\s\\)]*)?/);
+                    if (!next) break;
+                    jsUrl = next[0].startsWith('//') ? 'https:' + next[0] : next[0];
+                }
+                return new Response(JSON.stringify({ hops }, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
             } catch (e) {
-                return new Response(JSON.stringify({ jsUrl, error: e.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+                return new Response(JSON.stringify({ hops, error: e.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
             }
         }
 
