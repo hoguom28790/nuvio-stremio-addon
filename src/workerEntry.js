@@ -677,6 +677,25 @@ export default {
                 const html = await r.text();
                 const sm = html.match(/<script id="hayav-player-pilot-script"[^>]*>([\s\S]*?)<\/script>/i);
                 const tokens = [...html.matchAll(/<[^>]*data-hayav-player-token=["'][^>]*>/gi)].map(m => m[0].slice(0, 400)).slice(0, 10);
+                if (url.searchParams.get('probe')) {
+                    const toks = [...new Set([...html.matchAll(/data-hayav-player-token=["']([^"']+)["']/g)].map(m => m[1]))].slice(0, 6);
+                    const sources = [];
+                    for (const token of toks) {
+                        try {
+                            const pr = await fetch('https://hayav.com/wp-admin/admin-ajax.php', {
+                                method: 'POST',
+                                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'Referer': target, 'Origin': 'https://hayav.com' },
+                                body: new URLSearchParams({ action: 'hayav_player_pilot_source', token }).toString(),
+                                signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined
+                            });
+                            const txt = await pr.text();
+                            let h = txt;
+                            try { const j = JSON.parse(txt); h = (j && j.data && j.data.html) || txt; } catch (e) {}
+                            sources.push({ status: pr.status, html: String(h).slice(0, 1200) });
+                        } catch (e) { sources.push({ error: e.message }); }
+                    }
+                    return new Response(JSON.stringify({ target, status: r.status, sources }, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+                }
                 return new Response(JSON.stringify({ target, status: r.status, script: sm ? sm[1].slice(0, 6000) : null, tokens }, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
             } catch (e) {
                 return new Response(JSON.stringify({ target, error: e.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
