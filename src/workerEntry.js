@@ -661,6 +661,21 @@ export default {
                         });
                         const at = await ar.text();
                         out.api = { status: ar.status, valueSent: pickValue, response: at.slice(0, 1500) };
+                        let embedUrl = null;
+                        try { embedUrl = JSON.parse(at).data[0]; } catch (e) {}
+                        if (embedUrl && url.searchParams.get('embed') !== '0') {
+                            try {
+                                const er = await fetch(embedUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': 'https://www.javmost.ws/' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                                const eh = await er.text();
+                                const ek = /mostplayer|\.mp4|\.m3u8|stream|token|fetch\(|ajax|api|source|src=|player|jwplayer|videojs|hls|encrypt|decrypt|atob/i;
+                                out.embed = {
+                                    url: embedUrl, status: er.status, length: eh.length,
+                                    media: [...new Set(eh.match(/(?:https?:)?\/\/[^"'\s<>\\]+\.(?:m3u8|mp4)[^"'\s<>\\]*/g) || [])].slice(0, 10),
+                                    scripts: [...eh.matchAll(/<script[^>]+src=["']([^"']+)["']/g)].map(m => m[1]).slice(0, 20),
+                                    lines: eh.split('\n').map(l => l.trim()).filter(l => l && ek.test(l)).map(l => l.slice(0, 300)).slice(0, 60)
+                                };
+                            } catch (e) { out.embed = { url: embedUrl, error: e.message }; }
+                        }
                     }
                     return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
                 }
