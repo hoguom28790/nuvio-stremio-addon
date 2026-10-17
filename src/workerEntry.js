@@ -668,6 +668,23 @@ export default {
             }
         }
 
+        // Javtiful list structure: sample cards, pagination, menu links, search form
+        if (pathname === '/javtiful/list') {
+            const target = url.searchParams.get('url') || 'https://javtiful.com/vn/videos';
+            try {
+                const r = await fetch(target, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': 'https://javtiful.com/' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                const html = await r.text();
+                const parts = html.split(/(?=<[a-z]+[^>]*class="[^"]*\bvideo-card\b[^"]*")/).slice(1, 3).map(s => s.slice(0, 1800));
+                const hrefs = [...new Set([...html.matchAll(/href="([^"#]+)"/g)].map(m => m[1]))];
+                const pag = hrefs.filter(h => /[?&]page=|\/page\/|\/\d+$/.test(h) && !/video\//.test(h)).slice(0, 12);
+                const menu = hrefs.filter(h => /^\/(vn|en)?\/?(videos|categories|category|genre|tag|search|trending|popular|new|latest|hot|top)/i.test(h) || /\/(categories|category|search|trending|popular|newest|latest|hot|top)/i.test(h)).slice(0, 60);
+                const forms = [...html.matchAll(/<form[^>]*>[\s\S]{0,400}/gi)].map(m => m[0].replace(/\s+/g, ' ').slice(0, 400)).filter(f => /search/i.test(f)).slice(0, 3);
+                return new Response(JSON.stringify({ target, status: r.status, cards: parts, pagination: pag, menu, searchForms: forms }, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+            } catch (e) {
+                return new Response(JSON.stringify({ target, error: e.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+            }
+        }
+
         // Javtiful diagnostics: <video id="front-player"> + playerSources of a movie page, then probe the first source
         if (pathname === '/javtiful/debug') {
             const target = url.searchParams.get('url') || 'https://javtiful.com/vn/video/114709/tikb-229';
