@@ -544,29 +544,7 @@ async function getStream(id, type, host = 'hophimaddon.vercel.app') {
 
         const streams = [];
 
-        // Stream 1: Luồng Clean qua Cloudflare Edge (Khử header PNG rác 95-byte, chuẩn MPEG-TS tương thích 100% mọi nền tảng kể cả Stremio Web)
-        streams.push({
-            name: '🛡️ JavHD [Lọc Rác PNG]',
-            title: `[Full HD 1080p] ${title}\n🛡️ Đã Khử Header PNG Rác • Chuẩn MPEG-TS (Stremio Web, TV, Nuvio)`,
-            url: `${currentHost}/javhd/stream/${slug}/1080.m3u8`,
-            behaviorHints: {
-                notWebReady: false,
-                bingeGroup: 'javhd-clean'
-            }
-        });
-
-        // Stream 2: Luồng 720p HD Clean qua Cloudflare Edge (Dự phòng & mượt mà trên kết nối yếu)
-        streams.push({
-            name: '⚡ JavHD [720p HD]',
-            title: `[HD 720p] ${title}\n⚡ Độ Phân Giải 720p • Tối Ưu Băng Thông & Tua Nhanh`,
-            url: `${currentHost}/javhd/stream/${slug}/720.m3u8`,
-            behaviorHints: {
-                notWebReady: false,
-                bingeGroup: 'javhd-720'
-            }
-        });
-
-        // Stream 3: VIP CDN trực tiếp (Tốc độ tối đa, tương thích trình phát hỗ trợ proxyHeaders)
+        // Nguồn duy nhất: VIP CDN trực tiếp (Tốc độ tối đa, tương thích trình phát hỗ trợ proxyHeaders)
         streams.push({
             name: '🔞 JavHD [VIP Direct CDN]',
             title: `[Full HD 1080p] ${title}\n⚡ Luồng Trực Tiếp CDN Gốc • Nhanh & Mượt`,
