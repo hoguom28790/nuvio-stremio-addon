@@ -796,6 +796,34 @@ export default {
             return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
         }
 
+        // Generic list-page structure probe: sample around a needle, pagination links, menu links, search forms
+        if (pathname === '/debug/list') {
+            const target = url.searchParams.get('url');
+            if (!target) return new Response('Missing url parameter', { status: 400, headers: CORS_HEADERS });
+            let needle;
+            try { needle = new RegExp(url.searchParams.get('needle') || 'href="[^"]*/phim/', 'g'); } catch (e) { needle = /href="[^"]*\/phim\//g; }
+            const nth = Math.max(0, parseInt(url.searchParams.get('nth') || '0', 10) || 0);
+            try {
+                const r = await fetch(target, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': new URL(target).origin + '/' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                const html = await r.text();
+                const idxs = [...html.matchAll(needle)].map(m => m.index);
+                const at = idxs.length ? idxs[Math.min(nth, idxs.length - 1)] : -1;
+                const hrefs = [...new Set([...html.matchAll(/href="([^"#]+)"/g)].map(m => m[1]))];
+                const out = {
+                    target, finalUrl: r.url, status: r.status, length: html.length,
+                    title: (html.match(/<title>([\s\S]*?)<\/title>/i) || [])[1],
+                    matches: idxs.length,
+                    sample: at >= 0 ? html.slice(Math.max(0, at - 400), at + 1300) : null,
+                    pageLinks: hrefs.filter(h => /[?&](?:page|p|paged)=\d+|\/page\/\d+|\/trang[-/]?\d+|\/p\d+/i.test(h)).slice(0, 10),
+                    menu: hrefs.filter(h => !/\.(?:css|js|jpg|png|svg|ico|webp)/i.test(h)).slice(0, 60),
+                    forms: [...html.matchAll(/<form[^>]*>[\s\S]{0,350}/gi)].map(m => m[0].replace(/\s+/g, ' ').slice(0, 350)).filter(f => /search|tim|keyword|query|name="s"|name="q"/i.test(f)).slice(0, 3)
+                };
+                return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+            } catch (e) {
+                return new Response(JSON.stringify({ target, error: e.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+            }
+        }
+
         // Generic HLS probe: master -> variant -> first segment, with/without Referer
         if (pathname === '/debug/hls') {
             const target = url.searchParams.get('url');
