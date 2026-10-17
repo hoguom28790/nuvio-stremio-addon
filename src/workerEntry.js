@@ -902,6 +902,36 @@ export default {
             return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
         }
 
+        // JavHay self-test: runs the whole playback chain inside the Worker and reports each stage
+        if (pathname === '/javhay/selftest') {
+            const slug = url.searchParams.get('slug') || 'co-thu-ky-xinh-xan-vua-goi-chong-vua-bi-sep-du';
+            const out = { slug, host, stages: {} };
+            const stage = async (name, fn) => {
+                const t0 = Date.now();
+                try { out.stages[name] = { ok: true, ...(await fn()), ms: Date.now() - t0 }; }
+                catch (e) { out.stages[name] = { ok: false, error: e.message, ms: Date.now() - t0 }; }
+            };
+            let playlist = null;
+            await stage('resolvePlaylist', async () => { playlist = await javhay.resolvePlaylist(slug); return { playlist }; });
+            let rewritten = null;
+            await stage('getM3u8', async () => {
+                rewritten = await javhay.getM3u8(slug, host);
+                const lines = rewritten.split('\n').filter(Boolean);
+                return { lines: lines.length, head: rewritten.slice(0, 500), firstSegment: lines.find(l => !l.startsWith('#')) };
+            });
+            await stage('segment', async () => {
+                const first = rewritten && rewritten.split('\n').map(l => l.trim()).find(l => l && !l.startsWith('#'));
+                if (!first) throw new Error('no segment line');
+                const segUrl = new URL(first).searchParams.get('url');
+                const res = await handleSegmentProxy(segUrl, 'https://javhay.buzz/');
+                const buf = new Uint8Array(await res.arrayBuffer());
+                const sync = [];
+                for (let i = 0; i + 376 < buf.length && sync.length < 3; i++) { if (buf[i] === 0x47 && buf[i + 188] === 0x47 && buf[i + 376] === 0x47) sync.push(i); }
+                return { status: res.status, contentType: res.headers.get('content-type'), bytes: buf.length, first8: [...buf.slice(0, 8)].map(b => b.toString(16).padStart(2, '0')).join(' '), startsWithTs: buf[0] === 0x47, tsSyncAt: sync, error: res.ok ? undefined : new TextDecoder().decode(buf.slice(0, 200)) };
+            });
+            return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
         // Javhay diagnostics: /wp-json/fb/v1/player/ answer for a post id and server
         if (pathname === '/javhay/debug') {
             const id = url.searchParams.get('id') || '4722';
