@@ -5,7 +5,6 @@ const hentaiz = require('./scrapers/hentaiz');
 const javhd = require('./scrapers/javhd');
 const vlxx = require('./scrapers/vlxx');
 const avdb = require('./scrapers/avdb');
-const missav = require('./scrapers/missav');
 const kkphim = require('./scrapers/kkphim');
 const vsmov = require('./scrapers/vsmov');
 import { vnFetchText, vnProbe } from './utils/vnSocketFetch';
@@ -112,7 +111,7 @@ const CORS_HEADERS = {
 
 const RENDER_BASE = 'https://nuvio-stremio-addon-1.onrender.com';
 
-// Segment bridge through Render for upstreams that refuse Cloudflare IPs (MissAV/surrit) or whose tokens are
+// Segment bridge through Render for upstreams that refuse Cloudflare IPs or whose tokens are
 // bound to Render's IP (Render-minted AVDB/helvid playlists). Successful responses are cached at the edge.
 async function proxyViaRender(renderUrl) {
     try {
@@ -426,13 +425,6 @@ export default {
             return handleSegmentProxy(rawTarget, 'https://upload18.com/');
         }
 
-        // 5d. MissAV Segment Proxy (surrit.com refuses Cloudflare IPs -> bridge through Render, cached at the edge)
-        if (pathname === '/missav/segment.ts') {
-            const rawUrl = url.searchParams.get('url');
-            if (!rawUrl) return new Response('Missing url parameter', { status: 400, headers: CORS_HEADERS });
-            if (!IS_CF_WORKER) return handleSegmentProxy(rawUrl, 'https://missav.ai/');
-            return proxyViaRender(`${RENDER_BASE}/missav/segment.ts?stream=1&url=${encodeURIComponent(rawUrl)}`);
-        }
 
         // 5e. HentaiZ Segment (PNG-wrapped TS on c1.animez.top: needs haiten.org Referer, no CORS upstream)
         if (pathname === '/hentaiz/segment.ts') {
@@ -666,56 +658,6 @@ export default {
                 }
             };
             return fresh ? build() : edgeCached(request, ctx, 600, build);
-        }
-
-        // 8d. MissAV M3U8 Stream
-        const missavMatch = pathname.match(/^\/missav\/stream\/([^/]+)(?:\/([^/]+))?\.m3u8$/);
-        if (missavMatch) {
-            const [, slug, quality = '1080'] = missavMatch;
-            const resolveHost = host;
-
-            // 1. Delegate to Render (Render resolves playlist with zero video bandwidth)
-            const renderUrl = `https://nuvio-stremio-addon-1.onrender.com/missav/stream/${encodeURIComponent(slug)}/${quality}.m3u8?cfhost=${encodeURIComponent(resolveHost)}`;
-            if (IS_CF_WORKER) try {
-                const renderRes = await fetch(renderUrl, {
-                    headers: { 'User-Agent': 'Mozilla/5.0' },
-                    cf: {
-                        cacheEverything: true,
-                        cacheTtl: 1800
-                    },
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined
-                });
-                if (renderRes.ok) {
-                    const renderText = await renderRes.text();
-                    if (renderText && renderText.includes('#EXTM3U')) {
-                        return new Response(renderText, {
-                            headers: {
-                                ...CORS_HEADERS,
-                                'Content-Type': 'application/vnd.apple.mpegurl',
-                                'Cache-Control': 'public, max-age=1800, s-maxage=1800, stale-while-revalidate=3600',
-                                'CDN-Cache-Control': 'public, max-age=1800'
-                            }
-                        });
-                    }
-                }
-            } catch (renderErr) {
-                console.warn('[MissAV Render Delegation Error]:', renderErr.message);
-            }
-
-            // 2. Fallback to local missav.getM3u8
-            try {
-                const playlist = await missav.getM3u8(slug, quality, resolveHost);
-                return new Response(playlist, {
-                    headers: {
-                        ...CORS_HEADERS,
-                        'Content-Type': 'application/vnd.apple.mpegurl',
-                        'Cache-Control': 'public, max-age=1800, s-maxage=1800, stale-while-revalidate=3600',
-                        'CDN-Cache-Control': 'public, max-age=1800'
-                    }
-                });
-            } catch (err) {
-                return new Response('Error generating playlist: ' + err.message, { status: 500, headers: CORS_HEADERS });
-            }
         }
 
         // 8c3. VSMOV playlist: resolve the embed page's signed master at play time, route segments through /vsmov/seg.ts
@@ -1001,8 +943,8 @@ export default {
                 }
             }
 
-            // Fallback / Delegation to Render for adult resources that may be blocked on Cloudflare edge IPs (MissAV, JavHD, VLXX, AVDB)
-            const isAdultSource = id && (id.startsWith('missav') || id.startsWith('javhd') || id.startsWith('vlxx') || id.startsWith('avdb'));
+            // Fallback / Delegation to Render for adult resources that may be blocked on Cloudflare edge IPs (JavHD, VLXX, AVDB)
+            const isAdultSource = id && (id.startsWith('javhd') || id.startsWith('vlxx') || id.startsWith('avdb'));
             const isEmpty = !resp || 
                 (resource === 'catalog' && (!resp.metas || resp.metas.length === 0)) ||
                 (resource === 'meta' && (!resp.meta || !resp.meta.name)) ||
