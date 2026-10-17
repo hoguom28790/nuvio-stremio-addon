@@ -796,6 +796,53 @@ export default {
             return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
         }
 
+        // Generic HLS probe: master -> variant -> first segment, with/without Referer
+        if (pathname === '/debug/hls') {
+            const target = url.searchParams.get('url');
+            if (!target) return new Response('Missing url parameter', { status: 400, headers: CORS_HEADERS });
+            const referer = url.searchParams.get('referer');
+            const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+            const out = { target };
+            const get = (u, headers = {}) => fetch(u, { headers: { 'User-Agent': UA, ...headers }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+            const firstUri = (txt) => txt.split('\n').map(l => l.trim()).find(l => l && !l.startsWith('#'));
+            try {
+                for (const withRef of [true, false]) {
+                    if (withRef && !referer) continue;
+                    const key = withRef ? 'withReferer' : 'noReferer';
+                    const h = withRef ? { Referer: referer } : {};
+                    const step = {};
+                    try {
+                        const mr = await get(target, h);
+                        const mt = await mr.text();
+                        step.master = { status: mr.status, type: mr.headers.get('content-type'), cors: mr.headers.get('access-control-allow-origin'), head: mt.slice(0, 400) };
+                        const v = firstUri(mt);
+                        if (mr.ok && v) {
+                            const vUrl = new URL(v, target).href;
+                            step.variantUrl = vUrl.slice(0, 200);
+                            const isMedia = /#EXTINF/.test(mt);
+                            let segSrc = isMedia ? mt : null, base = target;
+                            if (!isMedia) {
+                                const vr = await get(vUrl, h);
+                                const vt = await vr.text();
+                                step.variant = { status: vr.status, cors: vr.headers.get('access-control-allow-origin'), head: vt.slice(0, 400), lines: vt.split('\n').length };
+                                segSrc = vt; base = vUrl;
+                            }
+                            const sv = segSrc && firstUri(segSrc);
+                            if (sv) {
+                                const segUrl = new URL(sv, base).href;
+                                step.segmentUrl = segUrl.slice(0, 200);
+                                const sr = await get(segUrl, { Range: 'bytes=0-511', ...h });
+                                const buf = await sr.arrayBuffer();
+                                step.segment = { status: sr.status, type: sr.headers.get('content-type'), bytes: buf.byteLength, cors: sr.headers.get('access-control-allow-origin') };
+                            }
+                        }
+                    } catch (e) { step.error = e.message; }
+                    out[key] = step;
+                }
+            } catch (e) { out.error = e.message; }
+            return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
         // Sexmupxinh diagnostics: pid of a movie page + the /player-proxy.php answer
         if (pathname === '/sexmup/debug') {
             const target = url.searchParams.get('url') || 'https://sexmupxinh.net/phim/tinh-vung-trom-de-me-voi-me-dam-ban-than';
