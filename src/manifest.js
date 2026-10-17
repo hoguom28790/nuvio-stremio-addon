@@ -204,9 +204,37 @@ const avdbCatalogs = [
     }
 ];
 
-const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs];
+const fs1Genres = [
+    "Mới Cập Nhật",
+    "Xem Nhiều (Hot)",
+    "Mới Ra Mắt",
+    "Phụ Đề Trung",
+    "Kịch Bản Nhập Vai",
+    "Đồng Phục",
+    "Quần Tất",
+    "Vào Việc Ngay",
+    "Nhóm (Group)",
+    "BDSM",
+    "POV",
+    "Quay Lén"
+];
+
+const fs1Catalogs = [
+    {
+        type: "movie",
+        id: "fs1-movie",
+        name: "Jable (fs1)",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: fs1Genres }
+        ]
+    }
+];
+
+const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs, ...fs1Catalogs];
 const allCatalogs = [...filteredCatalogs, ...adultCatalogs];
-const allPrefixes = ["tt", "kkphim:", "vsmov:", "hentaiz:", "javhd:", "vlxx:", "avdb:"];
+const allPrefixes = ["tt", "kkphim:", "vsmov:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "fs1:"];
 
 const baseManifest = {
     id: "org.hophim.stremio",
