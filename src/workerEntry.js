@@ -644,7 +644,18 @@ export default {
             });
             const ep = item && item.episodes && item.episodes.server_data && Object.values(item.episodes.server_data)[0];
             const slug = ep && ep.link_embed ? ep.link_embed.split('/').pop() : (item && item.slug) || '';
-            await probe('mirror', () => brief(`https://18plusok.vercel.app/eyJoaWRlRnJvbUhvbWUiOnRydWV9/stream/movie/avdb:${encodeURIComponent(id)}.json`));
+            await probe('mirror', async () => {
+                const r = await fetch(`https://18plusok.vercel.app/eyJoaWRlRnJvbUhvbWUiOnRydWV9/stream/movie/avdb:${encodeURIComponent(id)}.json`, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+                const j = await r.json();
+                const s0 = j && j.streams && j.streams[0];
+                diag.mirrorStream = s0 || null;
+                return { status: r.status, streams: (j.streams || []).length };
+            });
+            if (diag.mirrorStream && diag.mirrorStream.url) {
+                const ph = (diag.mirrorStream.behaviorHints && diag.mirrorStream.behaviorHints.proxyHeaders && diag.mirrorStream.behaviorHints.proxyHeaders.request) || { 'Referer': 'https://upload18.org/' };
+                await probe('helvidFromWorker', () => brief(diag.mirrorStream.url, { 'User-Agent': 'Mozilla/5.0', ...ph }));
+                await probe('helvidNoHeaders', () => brief(diag.mirrorStream.url, { 'User-Agent': 'Mozilla/5.0' }));
+            }
             if (slug) {
                 await probe('embedCom', () => brief(`https://upload18.com/play/index/${slug}`));
                 await probe('embedOrg', () => brief(`https://upload18.org/play/index/${slug}`));
