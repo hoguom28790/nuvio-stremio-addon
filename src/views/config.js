@@ -744,7 +744,7 @@ function renderConfigPage(host, initialConfig = {}) {
         </label>
         <label class="${sourceClass('javhd')}">
           <input type="checkbox" name="source" value="javhd" ${sourceChecked('javhd')} onchange="updateUI()">
-          <span>⚡ JavHD (javhdz.bz)</span>
+          <span>⚡ JavHD (javhdz.one)</span>
         </label>
         <label class="${sourceClass('vlxx')}">
           <input type="checkbox" name="source" value="vlxx" ${sourceChecked('vlxx')} onchange="updateUI()">

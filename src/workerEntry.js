@@ -358,24 +358,24 @@ export default {
         // 4. JavHD Segment Unwrapper (Direct Cloudflare Edge streaming with PNG-header unwrapping)
         if (pathname === '/javhd/segment.ts') {
             const segUrl = url.searchParams.get('url');
-            const res = await handleSegmentProxy(segUrl, 'https://javhdz.wtf/');
+            const res = await handleSegmentProxy(segUrl, 'https://javhdz.one/');
             const ref = url.searchParams.get('r');
             if (res.status < 400 || !ref) return res;
             // Signed tiktokcdn URL expired -> fresh playlist (via VN proxy) -> same segment index
             const fresh = await refreshSegmentUrl('javhd', ref, segUrl, ([slug, quality]) =>
                 javhd.getM3u8(slug, quality, host, env, { ...VN_FETCH, fresh: true }));
-            return fresh ? handleSegmentProxy(fresh, 'https://javhdz.wtf/') : res;
+            return fresh ? handleSegmentProxy(fresh, 'https://javhdz.one/') : res;
         }
 
         // 4b. JavHD Poster Proxy (Edge cached with 7 days TTL, CORS enabled, bypasses ISP blocks)
         if (pathname.startsWith('/javhd/poster/')) {
             const filename = pathname.replace('/javhd/poster/', '');
-            const targetUrl = `https://javhdz.wtf/data/${filename}`;
+            const targetUrl = `https://javhdz.one/data/${filename}`;
             try {
                 const upstream = await fetch(targetUrl, {
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                        'Referer': 'https://javhdz.wtf/'
+                        'Referer': 'https://javhdz.one/'
                     },
                     cf: {
                         cacheEverything: true,
@@ -480,7 +480,7 @@ export default {
         // JavHD diagnostics: reports each stage from the Worker (page, CDN playlist direct, VN proxies, Render)
         if (pathname === '/javhd/debug') {
             const diag = { stages: {} };
-            const hdr = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': 'https://javhdz.wtf/' };
+            const hdr = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': 'https://javhdz.one/' };
             const probe = async (label, fn) => {
                 const t0 = Date.now();
                 try { diag.stages[label] = { ...(await fn()), ms: Date.now() - t0 }; }
@@ -508,7 +508,7 @@ export default {
                 const st = await javhd.getStream(`javhd:${slug}`, 'movie', host);
                 diag.streamsCount = st.length;
             }
-            await probe('page', () => brief(`https://javhdz.wtf/${slug}.html`));
+            await probe('page', () => brief(`https://javhdz.one/${slug}.html`));
             if (master) {
                 await probe('cdnDirect', () => brief(master));
                 if (IS_CF_WORKER) await probe('vnProxies', async () => ({ results: await vnProbe(master, { headers: hdr }) }));
@@ -836,7 +836,7 @@ export default {
         }
 
         if (pathname === '/debug/test-render') {
-            const target = url.searchParams.get('url') || 'https://javhdz.bz/';
+            const target = url.searchParams.get('url') || 'https://javhdz.one/';
             const customReferer = url.searchParams.get('referer');
             const customUa = url.searchParams.get('ua');
             const customOrigin = url.searchParams.get('origin');

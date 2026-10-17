@@ -78,7 +78,7 @@ async function runTests() {
         assert(first.name, 'Missing name');
         assert(!first.poster.includes('wsrv.nl'), 'Must not use wsrv.nl');
         assert(!first.poster.includes('javhdz.bz'), 'Must not use dead javhdz.bz');
-        assert(first.poster.includes('/javhd/poster/') || first.poster.includes('javhdz.wtf'), 'Must use live or edge poster URL');
+        assert(first.poster.includes('/javhd/poster/') || first.poster.includes('javhdz.one'), 'Must use live or edge poster URL');
     });
 
     // 5. JavHD M3U8 on Render (verifying segment URLs route to CF Worker, 0 video proxy)

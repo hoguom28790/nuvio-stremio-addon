@@ -1,7 +1,7 @@
 const axios = require('axios');
 const cache = require('../utils/cache');
 
-const BASE_URL = 'https://javhdz.wtf';
+const BASE_URL = 'https://javhdz.one';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 const client = axios.create({
@@ -92,18 +92,18 @@ async function ensureStaticCatalog() {
 }
 
 /**
- * Format poster URL cleanly (replaces dead javhdz.bz, strips wsrv.nl, supports Edge CDN route)
+ * Format poster URL cleanly (replaces old javhdz.bz/.wtf, strips wsrv.nl, supports Edge CDN route)
  */
 function formatPoster(poster, host) {
     if (!poster) return '';
-    let clean = String(poster).replace(/https?:\/\/wsrv\.nl\/\?url=/g, '').replace(/javhdz\.bz/g, 'javhdz.wtf');
+    let clean = String(poster).replace(/https?:\/\/wsrv\.nl\/\?url=/g, '').replace(/javhdz\.(?:bz|wtf)/g, 'javhdz.one');
     try { clean = decodeURIComponent(clean); } catch (e) {}
     if (clean.startsWith('//')) clean = 'https:' + clean;
     else if (clean.startsWith('/')) clean = `${BASE_URL}${clean}`;
     else if (!clean.startsWith('http')) clean = `${BASE_URL}/${clean}`;
 
     // If host provided and it contains /data/, route through edge poster proxy for 100% reliability
-    if (host && clean.includes('javhdz.wtf/data/')) {
+    if (host && clean.includes('javhdz.one/data/')) {
         const edgeHost = host && !host.includes('onrender.com') ? host : ((typeof process !== 'undefined' && process.env && process.env.CF_HOST) || 'hophimaddon.hophim-4g6qbubt.workers.dev');
         const edgeBase = edgeHost.includes('://') ? edgeHost : `https://${edgeHost}`;
         const parts = clean.split('/data/');
@@ -114,7 +114,7 @@ function formatPoster(poster, host) {
     return clean;
 }
 
-// Genre to URL mapping on javhdz.wtf
+// Genre to URL mapping on javhdz.one
 const GENRE_MAP = {
     'Tất Cả': '/video/',
     'Mới Cập Nhật': '/video/',
@@ -256,7 +256,7 @@ async function getCatalog(catalogId, type, extra = {}, host = '') {
             const searchMetas = [];
             const seenSlugs = new Set();
 
-            // Live search on javhdz.wtf
+            // Live search on javhdz.one
             try {
                 const searchUrl = page > 1 
                     ? `${BASE_URL}/search/${encodeURIComponent(query)}/page/${page}/`
@@ -335,7 +335,7 @@ async function getCatalog(catalogId, type, extra = {}, host = '') {
         const cached = cache.get(cacheKey);
         if (cached && cached.length > 0) return cached;
 
-        // Try live fetch from javhdz.wtf
+        // Try live fetch from javhdz.one
         try {
             const html = await fetchPage(targetUrl);
             if (html) {
