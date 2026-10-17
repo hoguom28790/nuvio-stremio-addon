@@ -796,6 +796,28 @@ export default {
             return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
         }
 
+        // Sexmupxinh diagnostics: pid of a movie page + the /player-proxy.php answer
+        if (pathname === '/sexmup/debug') {
+            const target = url.searchParams.get('url') || 'https://sexmupxinh.net/phim/tinh-vung-trom-de-me-voi-me-dam-ban-than';
+            const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+            const out = { target };
+            try {
+                const r = await fetch(target, { headers: { 'User-Agent': UA, 'Referer': 'https://sexmupxinh.net/' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                const html = await r.text();
+                out.status = r.status;
+                const pidLines = html.split('\n').map(l => l.trim()).filter(l => /\bpid\b/.test(l)).map(l => l.slice(0, 300)).slice(0, 8);
+                out.pidLines = pidLines;
+                const pm = html.match(/\bpid\s*=\s*['"]?([\w-]+)['"]?/) || html.match(/data-(?:pid|id)=["']([\w-]+)["']/);
+                out.pid = url.searchParams.get('pid') || (pm && pm[1]) || null;
+                if (out.pid) {
+                    const pr = await fetch(`https://sexmupxinh.net/player-proxy.php?id=${encodeURIComponent(out.pid)}&_ts=${Date.now()}`, { headers: { 'User-Agent': UA, 'Referer': target, 'X-Requested-With': 'XMLHttpRequest' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                    const txt = await pr.text();
+                    out.proxy = { status: pr.status, type: pr.headers.get('content-type'), len: txt.length, body: txt.slice(0, 1500) };
+                }
+            } catch (e) { out.error = e.message; }
+            return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
         // Hohoj URL variants: which list/search URLs does the site answer to the Worker?
         if (pathname === '/hohoj/variants') {
             const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
