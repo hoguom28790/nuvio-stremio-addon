@@ -637,12 +637,12 @@ export default {
                 const scripts = [...html.matchAll(/<script[^>]+src=["']([^"']+)["']/g)].map(m => m[1]);
                 if (url.searchParams.get('call') === '1') {
                     const out = { target, status: r.status };
-                    const ym = html.match(/(?:var|let|const)\s+YREdIr\s*=\s*([^;]{0,300});/);
-                    out.YREdIr_def = ym ? ym[0].slice(0, 350) : null;
-                    const ylit = ym && /^['"][^'"]*['"]$/.test(ym[1].trim()) ? ym[1].trim().slice(1, -1) : null;
+                    const ym = html.match(/(?:var|let|const)\s+YREdIr\s*=\s*['"]([^'"]*)['"]/);
+                    out.YREdIr_def = ym ? ym[0].slice(0, 200) : null;
+                    const ylit = ym ? ym[1] : null;
                     const sm = html.match(/url_source\s*=\s*YREdIr\s*\+\s*['"]([^'"]+)['"]/);
                     const um = html.match(/url_source\s*=\s*['"]([^'"]+)['"]/) || (ylit !== null && sm ? [null, ylit + sm[1]] : null);
-                    const vm = html.match(/(?:var|let|const)?\s*YWRzMQo\s*=\s*([^;]{0,200});/);
+                    const vm = html.match(/(?:var|let|const)?\s*YWRzMQo\s*=\s*(['"][^'"]*['"])/);
                     out.url_source = um ? um[1] : null;
                     out.YWRzMQo_def = vm ? vm[0].slice(0, 250) : null;
                     const idx = html.indexOf('url_source');
