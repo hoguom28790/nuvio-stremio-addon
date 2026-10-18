@@ -53,9 +53,20 @@ function asJson(data) {
     return data && typeof data === 'object' ? data : null;
 }
 
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// The API sits behind nginx rate limiting: one polite retry on 429
 async function getJson(url) {
-    const res = await axios.get(url, HTTP_OPTS);
-    return asJson(res.data) || {};
+    for (let attempt = 0; ; attempt++) {
+        try {
+            const res = await axios.get(url, HTTP_OPTS);
+            return asJson(res.data) || {};
+        } catch (err) {
+            const status = err && err.response && err.response.status;
+            if (status === 429 && attempt === 0) { await sleep(800); continue; }
+            throw err;
+        }
+    }
 }
 
 /** List items live in `items` (documented shape); `data.items` is accepted too. */
@@ -86,10 +97,10 @@ function toMeta(type, item) {
         id: `nguonc:${item.slug}`,
         type: type === 'series' ? 'series' : 'movie',
         name: item.name || 'Không tên',
-        poster: absUrl(item.thumb_url || item.poster_url),
-        background: absUrl(item.poster_url || item.thumb_url),
+        poster: absUrl(item.thumb_url_webp || item.thumb_url || item.poster_url_webp || item.poster_url),
+        background: absUrl(item.poster_url_webp || item.poster_url || item.thumb_url_webp || item.thumb_url),
         posterShape: 'poster',
-        description: `${item.original_name || item.origin_name || ''}${info ? `\n${info}` : ''}\n⚡ NguonC`
+        description: `${item.original_name || item.origin_name || ''}${item.year ? ` (${item.year})` : ''}${info ? `\n${info}` : ''}\n⚡ NguonC`
     };
 }
 
@@ -118,7 +129,7 @@ async function getCatalog(type, extra = {}) {
             const cacheKey = `nguonc:search:${type}:${term}:${skip}`;
             const cached = cache.get(cacheKey);
             if (cached) return cached;
-            const ranked = await searchRanked(term, type === 'series' ? 'series' : 'movie', searchItems, { prefix: 'nguonc' });
+            const ranked = await searchRanked(term, type === 'series' ? 'series' : 'movie', searchItems, { prefix: 'nguonc', pages: 1, extraQueries: 1 });
             const metas = ranked.slice(skip, skip + 24).map(it => toMeta(type, it));
             if (metas.length) cache.set(cacheKey, metas, 600);
             return metas;
@@ -220,13 +231,14 @@ async function getMeta(type, id) {
             id: `nguonc:${slug}`,
             type: isSeries ? 'series' : 'movie',
             name: movie.name,
-            poster: absUrl(movie.thumb_url || movie.poster_url),
-            background: absUrl(movie.poster_url || movie.thumb_url),
+            poster: absUrl(movie.thumb_url_webp || movie.thumb_url || movie.poster_url_webp || movie.poster_url),
+            background: absUrl(movie.poster_url_webp || movie.poster_url || movie.thumb_url_webp || movie.thumb_url),
             description: String(movie.description || movie.content || '').replace(/<[^>]*>?/gm, '').trim(),
-            releaseInfo: year,
+            releaseInfo: String(movie.year || year || ''),
             genres: genres.length ? genres : ['Phim'],
             director: splitNames(movie.director),
             cast: splitNames(movie.casts || movie.actor),
+            imdb_id: movie.imdb && (movie.imdb.id || (typeof movie.imdb === 'string' ? movie.imdb : undefined)) || undefined,
             videos: videos.length ? videos : undefined
         };
         cache.set(cacheKey, meta, 3600);

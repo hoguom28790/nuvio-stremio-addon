@@ -11,7 +11,7 @@ const cache = require('./cache');
 
 const CINEMETA = 'https://v3-cinemeta.strem.io';
 const MAX_CANDIDATES = 8;
-const EXTRA_QUERIES = 2; // extra site queries made with the best Cinemeta titles
+const EXTRA_QUERIES = 2; // default: extra site queries made with the best Cinemeta titles
 
 function normalize(s) {
     return String(s || '')
@@ -77,8 +77,10 @@ function itemNames(item) {
  * Score one site item. `ctx` = { nq, tokens, candidates, idQuery }. Higher = better; -1 = drop.
  */
 function scoreItem(item, ctx) {
-    const imdb = item && item.imdb && item.imdb.id ? String(item.imdb.id).toLowerCase() : '';
-    const tmdb = item && item.tmdb && item.tmdb.id ? String(item.tmdb.id) : '';
+    // `imdb` / `tmdb` are objects ({id}) on most sites; accept a bare id too
+    const idOf = v => (v && typeof v === 'object' ? v.id : v);
+    const imdb = item && idOf(item.imdb) ? String(idOf(item.imdb)).toLowerCase() : '';
+    const tmdb = item && idOf(item.tmdb) ? String(idOf(item.tmdb)) : '';
     if (ctx.idQuery) {
         if (ctx.idQuery.imdb) return imdb === ctx.idQuery.imdb ? 10000 : -1;
         if (ctx.idQuery.tmdb) return tmdb === ctx.idQuery.tmdb ? 10000 : -1;
@@ -126,6 +128,7 @@ async function searchRanked(query, type, fetchItems, opts = {}) {
     const q = String(query || '').trim();
     if (!q) return [];
     const pages = opts.pages || 2;
+    const extraQueries = opts.extraQueries === undefined ? EXTRA_QUERIES : opts.extraQueries; // sites that rate-limit use fewer
     const cacheKey = `rank:${opts.prefix || ''}:${type}:${normalize(q)}`;
     const cached = cache.get(cacheKey);
     if (cached) return cached;
@@ -139,7 +142,7 @@ async function searchRanked(query, type, fetchItems, opts = {}) {
         if (info) { candidates = [info]; keywords.length = 0; keywords.push(info.name); }
     } else if (!idQuery) {
         candidates = await cinemetaSearch(q, type);
-        for (const c of candidates.slice(0, EXTRA_QUERIES)) {
+        for (const c of candidates.slice(0, extraQueries)) {
             if (normalize(c.name) !== normalize(q) && !keywords.some(k => normalize(k) === normalize(c.name))) keywords.push(c.name);
         }
     }
