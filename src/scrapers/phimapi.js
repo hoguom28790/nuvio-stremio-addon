@@ -4,6 +4,7 @@ const axios = require('axios');
 const cache = require('../utils/cache');
 const { parseFilter } = require('../utils/filterHelper');
 const { findEpisode } = require('../utils/episodeHelper');
+const { searchRanked } = require('../utils/searchRank');
 
 const BASE_URL = 'https://phimapi.com';
 const CDN_URL = 'https://phimimg.com';
@@ -47,6 +48,32 @@ function buildRequests(extra, skip, opts) {
     return [q(opts.fallbackPath)];
 }
 
+function toMeta(prefix, type, item, cdn, opts) {
+    return {
+        id: `${prefix}:${item.slug}`,
+        type: type === 'series' ? 'series' : 'movie',
+        name: item.name || 'Không tên',
+        poster: formatPoster(item.poster_url || item.thumb_url || '', cdn),
+        posterShape: 'poster',
+        description: opts.describe ? opts.describe(item) : (item.origin_name || '')
+    };
+}
+
+/**
+ * Keyword search ranked through IMDb/TMDB: the site's own order buries the title that was meant (see utils/searchRank).
+ * Two site pages per keyword are fetched; the ranked list is paged by `skip`.
+ */
+async function searchCatalog(prefix, type, term, skip, opts) {
+    const fetchItems = async (kw, page) => {
+        const r = await axios.get(`${BASE_URL}/v1/api/tim-kiem?keyword=${encodeURIComponent(kw)}&page=${page}&limit=${LIMIT}`, { timeout: 10000 });
+        const data = r.data || {};
+        const cdn = data.data?.APP_DOMAIN_CDN_IMAGE || CDN_URL;
+        return (data.data?.items || data.items || []).map(it => ({ ...it, __cdn: cdn }));
+    };
+    const ranked = await searchRanked(term, type === 'series' ? 'series' : 'movie', fetchItems, { prefix });
+    return ranked.slice(skip, skip + LIMIT).map(item => toMeta(prefix, type, item, item.__cdn, opts));
+}
+
 /** Catalog for any phimapi-based source. `describe(item)` builds the description line(s). */
 async function getCatalog(prefix, type, extra = {}, opts = {}) {
     try {
@@ -54,6 +81,13 @@ async function getCatalog(prefix, type, extra = {}, opts = {}) {
         const cacheKey = `${prefix}:catalog:${type}:${JSON.stringify(extra)}`;
         const cached = cache.get(cacheKey);
         if (cached) return cached;
+
+        const term = extra.search ? String(extra.search).trim() : '';
+        if (term) {
+            const metas = await searchCatalog(prefix, type, term, skip, opts);
+            if (metas.length) cache.set(cacheKey, metas, 600);
+            return metas;
+        }
 
         const urls = buildRequests(extra, skip, opts);
         const responses = await Promise.all(urls.map(u =>
@@ -68,14 +102,7 @@ async function getCatalog(prefix, type, extra = {}, opts = {}) {
             for (const item of items) {
                 if (!item || !item.slug || seen.has(item.slug)) continue;
                 seen.add(item.slug);
-                metas.push({
-                    id: `${prefix}:${item.slug}`,
-                    type: type === 'series' ? 'series' : 'movie',
-                    name: item.name || 'Không tên',
-                    poster: formatPoster(item.poster_url || item.thumb_url || '', cdn),
-                    posterShape: 'poster',
-                    description: opts.describe ? opts.describe(item) : (item.origin_name || '')
-                });
+                metas.push(toMeta(prefix, type, item, cdn, opts));
             }
         }
         if (metas.length) cache.set(cacheKey, metas, 600);

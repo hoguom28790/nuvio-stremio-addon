@@ -5,10 +5,11 @@ const hentaiz = require('./scrapers/hentaiz');
 const javhd = require('./scrapers/javhd');
 const vlxx = require('./scrapers/vlxx');
 const avdb = require('./scrapers/avdb');
-const missav = require('./scrapers/missav');
+const sexmup = require('./scrapers/sexmup');
+const javhay = require('./scrapers/javhay');
 const kkphim = require('./scrapers/kkphim');
 const vsmov = require('./scrapers/vsmov');
-import { vnFetchText } from './utils/vnSocketFetch';
+import { vnFetchText, vnProbe } from './utils/vnSocketFetch';
 
 // The same bundle also runs on Render (Dockerfile -> Node). There, raw sockets are unavailable (the Node proxy pool
 // in vnProxyFetcher.js is used instead) and "delegate to Render" would be Render calling itself.
@@ -112,7 +113,7 @@ const CORS_HEADERS = {
 
 const RENDER_BASE = 'https://nuvio-stremio-addon-1.onrender.com';
 
-// Segment bridge through Render for upstreams that refuse Cloudflare IPs (MissAV/surrit) or whose tokens are
+// Segment bridge through Render for upstreams that refuse Cloudflare IPs or whose tokens are
 // bound to Render's IP (Render-minted AVDB/helvid playlists). Successful responses are cached at the edge.
 async function proxyViaRender(renderUrl) {
     try {
@@ -359,24 +360,24 @@ export default {
         // 4. JavHD Segment Unwrapper (Direct Cloudflare Edge streaming with PNG-header unwrapping)
         if (pathname === '/javhd/segment.ts') {
             const segUrl = url.searchParams.get('url');
-            const res = await handleSegmentProxy(segUrl, 'https://javhdz.wtf/');
+            const res = await handleSegmentProxy(segUrl, 'https://javhdz.one/');
             const ref = url.searchParams.get('r');
             if (res.status < 400 || !ref) return res;
             // Signed tiktokcdn URL expired -> fresh playlist (via VN proxy) -> same segment index
             const fresh = await refreshSegmentUrl('javhd', ref, segUrl, ([slug, quality]) =>
                 javhd.getM3u8(slug, quality, host, env, { ...VN_FETCH, fresh: true }));
-            return fresh ? handleSegmentProxy(fresh, 'https://javhdz.wtf/') : res;
+            return fresh ? handleSegmentProxy(fresh, 'https://javhdz.one/') : res;
         }
 
         // 4b. JavHD Poster Proxy (Edge cached with 7 days TTL, CORS enabled, bypasses ISP blocks)
         if (pathname.startsWith('/javhd/poster/')) {
             const filename = pathname.replace('/javhd/poster/', '');
-            const targetUrl = `https://javhdz.wtf/data/${filename}`;
+            const targetUrl = `https://javhdz.one/data/${filename}`;
             try {
                 const upstream = await fetch(targetUrl, {
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                        'Referer': 'https://javhdz.wtf/'
+                        'Referer': 'https://javhdz.one/'
                     },
                     cf: {
                         cacheEverything: true,
@@ -395,6 +396,172 @@ export default {
                 }
             } catch (err) {}
             return Response.redirect(targetUrl, 302);
+        }
+
+        // 4c. Javtiful Poster Proxy (Edge cached 7 days, sends the site Referer)
+        if (pathname.startsWith('/javtiful/poster/')) {
+            const rel = pathname.replace('/javtiful/poster/', '');
+            if (!/^[A-Za-z0-9_\-./]+\.(?:jpg|jpeg|png|webp)$/i.test(rel) || rel.includes('..')) {
+                return new Response('Bad poster path', { status: 400, headers: CORS_HEADERS });
+            }
+            const targetUrl = `https://javtiful.com/uploads/uploads/${rel}`;
+            try {
+                const upstream = await fetch(targetUrl, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                        'Referer': 'https://javtiful.com/'
+                    },
+                    cf: { cacheEverything: true, cacheTtl: 604800 }
+                });
+                if (upstream.ok) {
+                    return new Response(upstream.body, {
+                        headers: {
+                            ...CORS_HEADERS,
+                            'Content-Type': upstream.headers.get('content-type') || 'image/jpeg',
+                            'Cache-Control': 'public, max-age=604800, immutable',
+                            'CDN-Cache-Control': 'public, max-age=604800'
+                        }
+                    });
+                }
+                return new Response(`Upstream ${upstream.status}`, { status: 502, headers: CORS_HEADERS });
+            } catch (err) {
+                return new Response(`Poster error: ${err.message}`, { status: 502, headers: CORS_HEADERS });
+            }
+        }
+
+        // 4d. HoHoJ Poster Proxy (Edge cached 7 days)
+        if (pathname.startsWith('/hohoj/poster/')) {
+            const rel = pathname.replace('/hohoj/poster/', '');
+            if (!/^[A-Za-z0-9_\-./]+\.(?:jpg|jpeg|png|webp)$/i.test(rel) || rel.includes('..')) {
+                return new Response('Bad poster path', { status: 400, headers: CORS_HEADERS });
+            }
+            const targetUrl = `https://cdn-1.ggjav.com/media/${rel}`;
+            try {
+                const upstream = await fetch(targetUrl, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                        'Referer': 'https://hohoj.tv/'
+                    },
+                    cf: { cacheEverything: true, cacheTtl: 604800 }
+                });
+                if (upstream.ok) {
+                    return new Response(upstream.body, {
+                        headers: {
+                            ...CORS_HEADERS,
+                            'Content-Type': upstream.headers.get('content-type') || 'image/jpeg',
+                            'Cache-Control': 'public, max-age=604800, immutable',
+                            'CDN-Cache-Control': 'public, max-age=604800'
+                        }
+                    });
+                }
+                return new Response(`Upstream ${upstream.status}`, { status: 502, headers: CORS_HEADERS });
+            } catch (err) {
+                return new Response(`Poster error: ${err.message}`, { status: 502, headers: CORS_HEADERS });
+            }
+        }
+
+        // 4e. Sex Mụp Xinh: poster proxy, rewritten playlist, PNG-header unwrapper (segments limited to the site's own CDNs)
+        if (pathname.startsWith('/sexmup/poster/')) {
+            const slug = pathname.replace('/sexmup/poster/', '').replace(/\.jpg$/i, '');
+            if (!/^[A-Za-z0-9_-]+$/.test(slug)) return new Response('Bad poster path', { status: 400, headers: CORS_HEADERS });
+            const targetUrl = `https://sexmupxinh.net/file/cover/${slug}.jpg`;
+            try {
+                const upstream = await fetch(targetUrl, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                        'Referer': 'https://sexmupxinh.net/'
+                    },
+                    cf: { cacheEverything: true, cacheTtl: 604800 }
+                });
+                if (upstream.ok) {
+                    return new Response(upstream.body, {
+                        headers: {
+                            ...CORS_HEADERS,
+                            'Content-Type': upstream.headers.get('content-type') || 'image/jpeg',
+                            'Cache-Control': 'public, max-age=604800, immutable',
+                            'CDN-Cache-Control': 'public, max-age=604800'
+                        }
+                    });
+                }
+                return new Response(`Upstream ${upstream.status}`, { status: 502, headers: CORS_HEADERS });
+            } catch (err) {
+                return new Response(`Poster error: ${err.message}`, { status: 502, headers: CORS_HEADERS });
+            }
+        }
+
+        if (pathname === '/sexmup/play.m3u8') {
+            const slug = url.searchParams.get('slug') || '';
+            if (!/^[A-Za-z0-9_-]+$/.test(slug)) return new Response('Bad slug', { status: 400, headers: CORS_HEADERS });
+            try {
+                const body = await sexmup.getM3u8(slug, host);
+                return new Response(body, {
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8', 'Cache-Control': 'no-store' }
+                });
+            } catch (err) {
+                return new Response(`Sexmup playlist error: ${err.message}`, { status: 502, headers: CORS_HEADERS });
+            }
+        }
+
+        if (pathname === '/sexmup/segment.ts') {
+            const segUrl = url.searchParams.get('url') || '';
+            let segHost = '';
+            try { segHost = new URL(segUrl).hostname; } catch (e) { /* invalid */ }
+            if (!/(^|\.)(sanstreamplay\.xyz|sanplaystream\.com)$/i.test(segHost)) {
+                return new Response('Segment host not allowed', { status: 403, headers: CORS_HEADERS });
+            }
+            return handleSegmentProxy(segUrl, 'https://v1.sanplaystream.com/');
+        }
+
+        // 4f. JavHay: poster proxy (.jpg/.webp first, .avif as fallback), rewritten playlist, PNG-header unwrapper
+        if (pathname.startsWith('/javhay/poster/')) {
+            const rel = pathname.replace('/javhay/poster/', '');
+            const pm = rel.match(/^(\d{4}\/\d{2}\/[A-Za-z0-9_-]+)\.(avif|jpg|jpeg|webp|png)$/i);
+            if (!pm) return new Response('Bad poster path', { status: 400, headers: CORS_HEADERS });
+            const headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Referer': 'https://javhay.buzz/'
+            };
+            const exts = [...new Set(['jpg', 'webp', pm[2].toLowerCase()])];
+            for (const ext of exts) {
+                try {
+                    const upstream = await fetch(`https://javhay.buzz/wp-content/uploads/${pm[1]}.${ext}`, { headers, cf: { cacheEverything: true, cacheTtl: 604800 } });
+                    const type = upstream.headers.get('content-type') || '';
+                    if (upstream.ok && /^image\//i.test(type)) {
+                        return new Response(upstream.body, {
+                            headers: {
+                                ...CORS_HEADERS,
+                                'Content-Type': type,
+                                'Cache-Control': 'public, max-age=604800, immutable',
+                                'CDN-Cache-Control': 'public, max-age=604800'
+                            }
+                        });
+                    }
+                } catch (err) { /* try next extension */ }
+            }
+            return new Response('Poster not found', { status: 404, headers: CORS_HEADERS });
+        }
+
+        if (pathname === '/javhay/play.m3u8') {
+            const slug = url.searchParams.get('slug') || '';
+            if (!/^[A-Za-z0-9_-]+$/.test(slug)) return new Response('Bad slug', { status: 400, headers: CORS_HEADERS });
+            try {
+                const body = await javhay.getM3u8(slug, host);
+                return new Response(body, {
+                    headers: { ...CORS_HEADERS, 'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8', 'Cache-Control': 'no-store' }
+                });
+            } catch (err) {
+                return new Response(`JavHay playlist error: ${err.message}`, { status: 502, headers: CORS_HEADERS });
+            }
+        }
+
+        if (pathname === '/javhay/segment.ts') {
+            const segUrl = url.searchParams.get('url') || '';
+            let segHost = '';
+            try { segHost = new URL(segUrl).hostname; } catch (e) { /* invalid */ }
+            if (!/(^|\.)(fqcdn\.top|tiktokcdn\.com)$/i.test(segHost)) {
+                return new Response('Segment host not allowed', { status: 403, headers: CORS_HEADERS });
+            }
+            return handleSegmentProxy(segUrl, 'https://javhay.buzz/');
         }
 
         // 5. VLXX Segment Unwrapper
@@ -426,13 +593,6 @@ export default {
             return handleSegmentProxy(rawTarget, 'https://upload18.com/');
         }
 
-        // 5d. MissAV Segment Proxy (surrit.com refuses Cloudflare IPs -> bridge through Render, cached at the edge)
-        if (pathname === '/missav/segment.ts') {
-            const rawUrl = url.searchParams.get('url');
-            if (!rawUrl) return new Response('Missing url parameter', { status: 400, headers: CORS_HEADERS });
-            if (!IS_CF_WORKER) return handleSegmentProxy(rawUrl, 'https://missav.ai/');
-            return proxyViaRender(`${RENDER_BASE}/missav/segment.ts?stream=1&url=${encodeURIComponent(rawUrl)}`);
-        }
 
         // 5e. HentaiZ Segment (PNG-wrapped TS on c1.animez.top: needs haiten.org Referer, no CORS upstream)
         if (pathname === '/hentaiz/segment.ts') {
@@ -484,6 +644,50 @@ export default {
             return proxyViaRender(renderUrl);
         }
 
+
+        // JavHD diagnostics: reports each stage from the Worker (page, CDN playlist direct, VN proxies, Render)
+        if (pathname === '/javhd/debug') {
+            const diag = { stages: {} };
+            const hdr = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': 'https://javhdz.one/' };
+            const probe = async (label, fn) => {
+                const t0 = Date.now();
+                try { diag.stages[label] = { ...(await fn()), ms: Date.now() - t0 }; }
+                catch (e) { diag.stages[label] = { error: e.message, ms: Date.now() - t0 }; }
+            };
+            const brief = async (u, init = {}) => {
+                const r = await fetch(u, { ...init, headers: hdr, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+                const t = await r.text();
+                return { status: r.status, len: t.length, head: t.slice(0, 160).replace(/\s+/g, ' ') };
+            };
+            let slug = url.searchParams.get('slug');
+            try {
+                await javhd.ensureStaticCatalog();
+                const cat = await javhd.getCatalog('javhd-latest', 'movie', {});
+                diag.catalogCount = cat.length;
+                if (!slug && cat[0]) slug = String(cat[0].id).replace(/^javhd:/, '');
+                const raw = await javhd.ensureStaticCatalog();
+                const item = raw.find(x => x.slug === slug);
+                diag.hasStaticStreamUrl = !!(item && item.streamUrl);
+                if (item && item.streamUrl) diag.masterUrl = item.streamUrl;
+            } catch (e) { diag.catalogError = e.message; }
+            diag.slug = slug;
+            let master = url.searchParams.get('m3u8') || diag.masterUrl;
+            if (!master && slug) {
+                const st = await javhd.getStream(`javhd:${slug}`, 'movie', host);
+                diag.streamsCount = st.length;
+            }
+            await probe('page', () => brief(`https://javhdz.one/${slug}.html`));
+            if (master) {
+                await probe('cdnDirect', () => brief(master));
+                if (IS_CF_WORKER) await probe('vnProxies', async () => ({ results: await vnProbe(master, { headers: hdr }) }));
+            }
+            await probe('render', () => brief(`${RENDER_BASE}/javhd/stream/${slug}/1080.m3u8?cfhost=${encodeURIComponent(host)}`));
+            await probe('playlist', async () => {
+                const p = await javhd.getM3u8(slug, '1080', host, env, { ...VN_FETCH, fresh: true });
+                return { len: p.length, head: p.slice(0, 200) };
+            });
+            return new Response(JSON.stringify(diag, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+        }
 
         // 6. JavHD M3U8 Stream
         const javhdMatch = pathname.match(/^\/javhd\/stream\/([^/]+)\/([^/]+)\.m3u8$/);
@@ -585,6 +789,455 @@ export default {
             }
         }
 
+        // fs1.app (Jable clone) diagnostics: page -> hlsUrl -> playlist from the Worker
+        if (pathname === '/fs1/debug') {
+            const slug = url.searchParams.get('slug') || 'start-617';
+            const hdr = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': 'https://fs1.app/' };
+            const out = { slug };
+            try {
+                const pr = await fetch(`https://fs1.app/videos/${encodeURIComponent(slug)}/`, { headers: hdr, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                const html = await pr.text();
+                out.page = { status: pr.status, length: html.length };
+                const m = html.match(/var\s+hlsUrl\s*=\s*['"]([^'"]+)['"]/);
+                out.hlsUrl = m ? m[1] : null;
+                const t = html.match(/<title>([^<]*)<\/title>/);
+                out.title = t ? t[1] : null;
+                if (out.hlsUrl) {
+                    const mr = await fetch(out.hlsUrl, { headers: hdr, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                    const mt = await mr.text();
+                    out.playlist = { status: mr.status, length: mt.length, contentType: mr.headers.get('content-type'), cors: mr.headers.get('access-control-allow-origin'), head: mt.slice(0, 400) };
+                    const mr2 = await fetch(out.hlsUrl, { headers: { 'User-Agent': hdr['User-Agent'] }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                    out.playlistNoReferer = { status: mr2.status };
+                }
+            } catch (e) { out.error = e.message; }
+            return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
+        // Generic page scanner: fetch a URL from the Worker and list only player-related findings (keeps output small)
+        if (pathname === '/debug/scan') {
+            const target = url.searchParams.get('url');
+            if (!target) return new Response('Missing url parameter', { status: 400, headers: CORS_HEADERS });
+            try {
+                const r = await fetch(target, {
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': url.searchParams.get('referer') || new URL(target).origin + '/' },
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined
+                });
+                const html = await r.text();
+                const uniq = (arr) => [...new Set(arr)].slice(0, 25);
+                const media = uniq(html.match(/(?:https?:)?\\?\/\\?\/[^"'\s<>\\]+\.(?:m3u8|mp4|mpd)[^"'\s<>\\]*/g) || []);
+                const iframes = uniq([...html.matchAll(/<iframe[^>]+src=["']([^"']+)["']/gi)].map(m => m[1]));
+                let keys = /m3u8|\.mp4|video_url|video_embed|data-src-video|player|source|stream|embed|hls|file["']?\s*:/i;
+                const q = url.searchParams.get('q');
+                if (q) { try { keys = new RegExp(q, 'i'); } catch (e) {} }
+                const lines = html.split('\n').map(l => l.trim()).filter(l => l && keys.test(l) && !/^<(link|meta|style)/i.test(l) && !/embed-responsive/.test(l)).map(l => { const m = l.match(keys); const i = Math.max(0, (m ? m.index : 0) - 120); return l.slice(i, i + 320); }).slice(0, 40);
+                return new Response(JSON.stringify({ target, status: r.status, length: html.length, media, iframes, lines }, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+            } catch (e) {
+                return new Response(JSON.stringify({ target, error: e.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+            }
+        }
+
+        // Hohoj diagnostics: embed m3u8 + playlist/segment probe, plus list-page structure
+        if (pathname === '/hohoj/debug') {
+            const id = url.searchParams.get('id') || '60919';
+            const listPath = url.searchParams.get('list') || '/';
+            const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+            const out = { id };
+            const get = async (u, headers = {}) => fetch(u, { headers: { 'User-Agent': UA, ...headers }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+            try {
+                const er = await get(`https://hohoj.tv/embed?id=${encodeURIComponent(id)}`, { 'Referer': `https://hohoj.tv/video?id=${encodeURIComponent(id)}` });
+                const eh = await er.text();
+                out.embedStatus = er.status;
+                const m = eh.match(/var\s+videoSrc\s*=\s*["']([^"']+)["']/);
+                out.videoSrc = m ? m[1] : null;
+                if (out.videoSrc) {
+                    const probe = async (headers) => {
+                        try {
+                            const pr = await get(out.videoSrc, headers);
+                            const txt = await pr.text();
+                            const h = (n) => pr.headers.get(n);
+                            const lines = txt.split('\n').map(l => l.trim()).filter(Boolean);
+                            const seg = lines.find(l => !l.startsWith('#'));
+                            return { status: pr.status, type: h('content-type'), cors: h('access-control-allow-origin'), head: txt.slice(0, 500), firstUri: seg, lineCount: lines.length };
+                        } catch (e) { return { error: e.message }; }
+                    };
+                    out.playlistWithReferer = await probe({ 'Referer': 'https://hohoj.tv/' });
+                    out.playlistNoReferer = await probe({});
+                    const first = out.playlistNoReferer.firstUri || out.playlistWithReferer.firstUri;
+                    if (first) {
+                        const segUrl = new URL(first, out.videoSrc).href;
+                        out.segmentUrl = segUrl;
+                        try {
+                            const sr = await get(segUrl, { 'Range': 'bytes=0-511' });
+                            const buf = await sr.arrayBuffer();
+                            out.segment = { status: sr.status, type: sr.headers.get('content-type'), bytes: buf.byteLength, cors: sr.headers.get('access-control-allow-origin') };
+                        } catch (e) { out.segment = { error: e.message }; }
+                        try {
+                            const sr = await get(segUrl, { 'Range': 'bytes=0-511', 'Referer': 'https://hohoj.tv/' });
+                            out.segmentWithReferer = { status: sr.status };
+                        } catch (e) { out.segmentWithReferer = { error: e.message }; }
+                    }
+                }
+            } catch (e) { out.error = e.message; }
+            try {
+                const lr = await get(new URL(listPath, 'https://hohoj.tv').href, { 'Referer': 'https://hohoj.tv/' });
+                const html = await lr.text();
+                const nth = Math.max(0, parseInt(url.searchParams.get('nth') || '0', 10) || 0);
+                const idxs = [...html.matchAll(/video\?id=\d+/g)].map(m => m.index);
+                const vi = idxs.length ? idxs[Math.min(nth, idxs.length - 1)] : -1;
+                out.list = {
+                    totalVideoLinks: idxs.length,
+                    status: lr.status,
+                    title: (html.match(/<title>([\s\S]*?)<\/title>/i) || [])[1],
+                    sample: vi >= 0 ? html.slice(Math.max(0, vi - 500), vi + 1100) : null,
+                    pagination: [...new Set([...html.matchAll(/href="([^"#]*[?&]page=\d+[^"]*)"/g)].map(m => m[1]))].slice(0, 8),
+                    menu: [...new Set([...html.matchAll(/href="(\/[^"#]*)"/g)].map(m => m[1]))].filter(h => !/video\?id=|resources|^\/embed/.test(h)).slice(0, 50),
+                    searchForms: [...html.matchAll(/<form[^>]*>[\s\S]{0,300}/gi)].map(m => m[0].replace(/\s+/g, ' ').slice(0, 300)).filter(f => /search|keyword|query/i.test(f)).slice(0, 3),
+                    searchScript: (() => { const a = html.indexOf('#search-input'); return a >= 0 ? html.slice(Math.max(0, a - 1500), a + 1000).replace(/\s+/g, ' ') : null; })(),
+                    searchFn: (() => { const a = html.search(/function\s+search\s*\(/); return a >= 0 ? html.slice(a, a + 900).replace(/\s+/g, ' ') : null; })(),
+                    extraInfo: (() => { const a = html.indexOf('/extra_info'); return a >= 0 ? html.slice(Math.max(0, a - 50), a + 500).replace(/\s+/g, ' ') : null; })(),
+                    searchInput: (html.match(/<input[^>]*id="search-input"[^>]*>/i) || [])[0],
+                    pageLinks: [...new Set([...html.matchAll(/href="([^"#]*(?:page|p|pg)=\d+[^"]*)"/g)].map(m => m[1]))].slice(0, 8)
+                };
+            } catch (e) { out.list = { error: e.message }; }
+            return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
+        // JavHay self-test: runs the whole playback chain inside the Worker and reports each stage
+        if (pathname === '/javhay/selftest') {
+            const slug = url.searchParams.get('slug') || 'co-thu-ky-xinh-xan-vua-goi-chong-vua-bi-sep-du';
+            const out = { slug, host, stages: {} };
+            const stage = async (name, fn) => {
+                const t0 = Date.now();
+                try { out.stages[name] = { ok: true, ...(await fn()), ms: Date.now() - t0 }; }
+                catch (e) { out.stages[name] = { ok: false, error: e.message, ms: Date.now() - t0 }; }
+            };
+            await stage('playerApi', async () => {
+                const { pid, raw } = await javhay.fetchPlayerApi(slug);
+                const text = String(raw);
+                const i = text.indexOf('.m3u8');
+                return { pid, bytes: text.length, head: text.slice(0, 400), aroundM3u8: i >= 0 ? text.slice(Math.max(0, i - 120), i + 40) : null, found: javhay.findM3u8(text) };
+            });
+            let playlist = null;
+            await stage('resolvePlaylist', async () => { playlist = await javhay.resolvePlaylist(slug); return { playlist }; });
+            let rewritten = null;
+            await stage('getM3u8', async () => {
+                rewritten = await javhay.getM3u8(slug, host);
+                const lines = rewritten.split('\n').filter(Boolean);
+                return { lines: lines.length, head: rewritten.slice(0, 500), firstSegment: lines.find(l => !l.startsWith('#')) };
+            });
+            await stage('segment', async () => {
+                const first = rewritten && rewritten.split('\n').map(l => l.trim()).find(l => l && !l.startsWith('#'));
+                if (!first) throw new Error('no segment line');
+                const segUrl = new URL(first).searchParams.get('url');
+                const res = await handleSegmentProxy(segUrl, 'https://javhay.buzz/');
+                const buf = new Uint8Array(await res.arrayBuffer());
+                const sync = [];
+                for (let i = 0; i + 376 < buf.length && sync.length < 3; i++) { if (buf[i] === 0x47 && buf[i + 188] === 0x47 && buf[i + 376] === 0x47) sync.push(i); }
+                return { status: res.status, contentType: res.headers.get('content-type'), bytes: buf.length, first8: [...buf.slice(0, 8)].map(b => b.toString(16).padStart(2, '0')).join(' '), startsWithTs: buf[0] === 0x47, tsSyncAt: sync, error: res.ok ? undefined : new TextDecoder().decode(buf.slice(0, 200)) };
+            });
+            return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
+        // Javhay diagnostics: /wp-json/fb/v1/player/ answer for a post id and server
+        if (pathname === '/javhay/debug') {
+            const id = url.searchParams.get('id') || '4722';
+            const page = url.searchParams.get('page') || 'https://javhay.buzz/co-thu-ky-xinh-xan-vua-goi-chong-vua-bi-sep-du/';
+            const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+            const out = { id };
+            const brief = async (label, u, init) => {
+                try {
+                    const r = await fetch(u, { ...init, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                    const txt = await r.text();
+                    out[label] = { status: r.status, type: r.headers.get('content-type'), len: txt.length, body: txt.slice(0, 1800) };
+                } catch (e) { out[label] = { error: e.message }; }
+            };
+            const base = { 'User-Agent': UA, 'Referer': page, 'X-Requested-With': 'XMLHttpRequest' };
+            for (const server of ['1', '2']) {
+                await brief(`get_server${server}`, `https://javhay.buzz/wp-json/fb/v1/player/?id=${encodeURIComponent(id)}&server=${server}`, { headers: base });
+                await brief(`post_server${server}`, 'https://javhay.buzz/wp-json/fb/v1/player/', { method: 'POST', headers: { ...base, 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, body: new URLSearchParams({ id, server }).toString() });
+            }
+            return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
+        // Generic list-page structure probe: sample around a needle, pagination links, menu links, search forms
+        if (pathname === '/debug/list') {
+            const target = url.searchParams.get('url');
+            if (!target) return new Response('Missing url parameter', { status: 400, headers: CORS_HEADERS });
+            let needle;
+            try { needle = new RegExp(url.searchParams.get('needle') || 'href="[^"]*/phim/', 'g'); } catch (e) { needle = /href="[^"]*\/phim\//g; }
+            const nth = Math.max(0, parseInt(url.searchParams.get('nth') || '0', 10) || 0);
+            try {
+                const r = await fetch(target, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': new URL(target).origin + '/' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                const html = await r.text();
+                const idxs = [...html.matchAll(needle)].map(m => m.index);
+                const at = idxs.length ? idxs[Math.min(nth, idxs.length - 1)] : -1;
+                const hrefs = [...new Set([...html.matchAll(/href="([^"#]+)"/g)].map(m => m[1]))];
+                const out = {
+                    target, finalUrl: r.url, status: r.status, length: html.length,
+                    title: (html.match(/<title>([\s\S]*?)<\/title>/i) || [])[1],
+                    matches: idxs.length,
+                    sample: at >= 0 ? html.slice(Math.max(0, at - 400), at + 1300) : null,
+                    pageLinks: hrefs.filter(h => /[?&](?:page|p|paged)=\d+|\/page\/\d+|\/trang[-/]?\d+|\/p\d+/i.test(h)).slice(0, 10),
+                    menu: hrefs.filter(h => !/\.(?:css|js|jpg|png|svg|ico|webp)/i.test(h)).slice(0, 60),
+                    forms: [...html.matchAll(/<form[^>]*>[\s\S]{0,350}/gi)].map(m => m[0].replace(/\s+/g, ' ').slice(0, 350)).filter(f => /search|tim|keyword|query|name="s"|name="q"/i.test(f)).slice(0, 3)
+                };
+                return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+            } catch (e) {
+                return new Response(JSON.stringify({ target, error: e.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+            }
+        }
+
+        // Generic HLS probe: master -> variant -> first segment, with/without Referer
+        if (pathname === '/debug/hls') {
+            const target = url.searchParams.get('url');
+            if (!target) return new Response('Missing url parameter', { status: 400, headers: CORS_HEADERS });
+            const referer = url.searchParams.get('referer');
+            const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+            const out = { target };
+            const get = (u, headers = {}) => fetch(u, { headers: { 'User-Agent': UA, ...headers }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+            const firstUri = (txt) => txt.split('\n').map(l => l.trim()).find(l => l && !l.startsWith('#'));
+            try {
+                for (const withRef of [true, false]) {
+                    if (withRef && !referer) continue;
+                    const key = withRef ? 'withReferer' : 'noReferer';
+                    const h = withRef ? { Referer: referer } : {};
+                    const step = {};
+                    try {
+                        const mr = await get(target, h);
+                        const mt = await mr.text();
+                        step.master = { status: mr.status, type: mr.headers.get('content-type'), cors: mr.headers.get('access-control-allow-origin'), head: mt.slice(0, 400) };
+                        const v = firstUri(mt);
+                        if (mr.ok && v) {
+                            const vUrl = new URL(v, target).href;
+                            step.variantUrl = vUrl.slice(0, 200);
+                            const isMedia = /#EXTINF/.test(mt);
+                            let segSrc = isMedia ? mt : null, base = target;
+                            if (!isMedia) {
+                                const vr = await get(vUrl, h);
+                                const vt = await vr.text();
+                                step.variant = { status: vr.status, cors: vr.headers.get('access-control-allow-origin'), head: vt.slice(0, 400), lines: vt.split('\n').length };
+                                segSrc = vt; base = vUrl;
+                            }
+                            const sv = segSrc && firstUri(segSrc);
+                            if (sv) {
+                                const segUrl = new URL(sv, base).href;
+                                step.segmentUrl = segUrl.slice(0, 200);
+                                const sr = await get(segUrl, { Range: 'bytes=0-511', ...h });
+                                const buf = await sr.arrayBuffer();
+                                const u8 = new Uint8Array(buf);
+                                const hex = [...u8.slice(0, 16)].map(b => b.toString(16).padStart(2, '0')).join(' ');
+                                const sync = []; for (let i = 0; i + 188 < u8.length && sync.length < 3; i++) { if (u8[i] === 0x47 && u8[i + 188] === 0x47) sync.push(i); }
+                                step.segment = { status: sr.status, type: sr.headers.get('content-type'), bytes: buf.byteLength, cors: sr.headers.get('access-control-allow-origin'), first16: hex, tsSyncAt: sync, range: sr.headers.get('content-range') };
+                            }
+                        }
+                    } catch (e) { step.error = e.message; }
+                    out[key] = step;
+                }
+            } catch (e) { out.error = e.message; }
+            return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
+        // Sexmupxinh diagnostics: pid of a movie page + the /player-proxy.php answer
+        if (pathname === '/sexmup/debug') {
+            const target = url.searchParams.get('url') || 'https://sexmupxinh.net/phim/tinh-vung-trom-de-me-voi-me-dam-ban-than';
+            const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+            const out = { target };
+            try {
+                const r = await fetch(target, { headers: { 'User-Agent': UA, 'Referer': 'https://sexmupxinh.net/' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                const html = await r.text();
+                out.status = r.status;
+                const pidLines = html.split('\n').map(l => l.trim()).filter(l => /\bpid\b/.test(l)).map(l => l.slice(0, 300)).slice(0, 8);
+                out.pidLines = pidLines;
+                const pm = html.match(/\bpid\s*=\s*['"]?([\w-]+)['"]?/) || html.match(/data-(?:pid|id)=["']([\w-]+)["']/);
+                out.pid = url.searchParams.get('pid') || (pm && pm[1]) || null;
+                if (out.pid) {
+                    const pr = await fetch(`https://sexmupxinh.net/player-proxy.php?id=${encodeURIComponent(out.pid)}&_ts=${Date.now()}`, { headers: { 'User-Agent': UA, 'Referer': target, 'X-Requested-With': 'XMLHttpRequest' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                    const txt = await pr.text();
+                    out.proxy = { status: pr.status, type: pr.headers.get('content-type'), len: txt.length, body: txt.slice(0, 1500) };
+                }
+            } catch (e) { out.error = e.message; }
+            return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
+        // Hohoj URL variants: which list/search URLs does the site answer to the Worker?
+        if (pathname === '/hohoj/variants') {
+            const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+            const paths = (url.searchParams.get('paths') || '').split('|').filter(Boolean);
+            const defaults = [
+                '/lang_en/?p=2',
+                '/lang_en/main_ctg?id=1&p=2',
+                '/lang_en/search?type=uncensored',
+                '/lang_en/search?text=AVSA',
+                '/lang_en/model?id=43',
+                '/lang_en/extra_info',
+                '/extra_info'
+            ];
+            const BROWSER = { 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', 'Accept-Language': 'en-US,en;q=0.9', 'Upgrade-Insecure-Requests': '1' };
+            const results = [];
+            for (const path of (paths.length ? paths : defaults)) {
+                for (const variant of ['plain', 'browserAccept']) {
+                    try {
+                        const r = await fetch(new URL(path, 'https://hohoj.tv').href, { headers: { 'User-Agent': UA, 'Referer': 'https://hohoj.tv/', ...(variant === 'browserAccept' ? BROWSER : {}) }, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+                        const html = await r.text();
+                        const ids = [...html.matchAll(/video\?id=(\d+)/g)].map(m => m[1]);
+                        results.push({ path, variant, status: r.status, type: r.headers.get('content-type'), len: html.length, videoLinks: ids.length, firstIds: ids.slice(0, 3), head: ids.length ? undefined : html.replace(/\s+/g, ' ').slice(0, 160) });
+                    } catch (e) { results.push({ path, variant, error: e.message }); }
+                }
+            }
+            return new Response(JSON.stringify(results, null, 1), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
+        // Javtiful list structure: sample cards, pagination, menu links, search form
+        if (pathname === '/javtiful/list') {
+            const target = url.searchParams.get('url') || 'https://javtiful.com/vn/videos';
+            try {
+                const r = await fetch(target, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': 'https://javtiful.com/' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                const html = await r.text();
+                const parts = html.split(/(?=<[a-z]+[^>]*class="[^"]*\bvideo-card\b[^"]*")/).slice(1, 3).map(s => s.slice(0, 1800));
+                const hrefs = [...new Set([...html.matchAll(/href="([^"#]+)"/g)].map(m => m[1]))];
+                const pag = hrefs.filter(h => /[?&]page=|\/page\/|\/\d+$/.test(h) && !/video\//.test(h)).slice(0, 12);
+                const menu = hrefs.filter(h => /^\/(vn|en)?\/?(videos|categories|category|genre|tag|search|trending|popular|new|latest|hot|top)/i.test(h) || /\/(categories|category|search|trending|popular|newest|latest|hot|top)/i.test(h)).slice(0, 60);
+                const forms = [...html.matchAll(/<form[^>]*>[\s\S]{0,400}/gi)].map(m => m[0].replace(/\s+/g, ' ').slice(0, 400)).filter(f => /search/i.test(f)).slice(0, 3);
+                const cardCount = (html.match(/<article class="video-card/g) || []).length;
+                const title = (html.match(/<title>([\s\S]*?)<\/title>/i) || [])[1];
+                const head = parts.length ? undefined : html.replace(/\s+/g, ' ').slice(0, 600);
+                const videoLinks = [...new Set([...html.matchAll(/href="(\/(?:vn|en)\/video\/\d+\/[^"]+)"/g)].map(m => m[1]))].slice(0, 10);
+                const vi = html.search(/\/(?:vn|en)\/video\/\d+\//);
+                const sample = vi >= 0 ? html.slice(Math.max(0, vi - 300), vi + 1200) : undefined;
+                const noResult = (html.match(/[^>]{0,80}(?:không tìm thấy|no results?|not found|0 kết quả)[^<]{0,80}/i) || [])[0];
+                return new Response(JSON.stringify({ target, finalUrl: r.url, status: r.status, length: html.length, title, cardCount, videoLinks, noResult, sample, cards: parts, head: parts.length || sample ? undefined : head, pagination: pag, menu, searchForms: forms }, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+            } catch (e) {
+                return new Response(JSON.stringify({ target, error: e.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+            }
+        }
+
+        // Javtiful diagnostics: <video id="front-player"> + playerSources of a movie page, then probe the first source
+        if (pathname === '/javtiful/debug') {
+            const target = url.searchParams.get('url') || 'https://javtiful.com/vn/video/114709/tikb-229';
+            const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+            const out = { target };
+            try {
+                const r = await fetch(target, { headers: { 'User-Agent': UA, 'Referer': 'https://javtiful.com/' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                const html = await r.text();
+                out.status = r.status;
+                const vm = html.match(/<video[^>]*id="front-player"[\s\S]*?<\/video>/i);
+                out.videoTag = vm ? vm[0].slice(0, 3000) : null;
+                let sources = null;
+                const i = html.indexOf('"playerSources"');
+                if (i >= 0) {
+                    const a = html.indexOf('[', i);
+                    let depth = 0, end = -1;
+                    for (let k = a; k < html.length && k < a + 20000; k++) {
+                        const ch = html[k];
+                        if (ch === '[') depth++;
+                        else if (ch === ']') { depth--; if (depth === 0) { end = k; break; } }
+                    }
+                    if (a >= 0 && end > a) { try { sources = JSON.parse(html.slice(a, end + 1)); } catch (e) { out.parseError = e.message; out.raw = html.slice(a, a + 1500); } }
+                }
+                out.playerSources = sources ? sources.slice(0, 6) : null;
+                const first = sources && sources[0] && sources[0].src;
+                if (first) {
+                    const probe = async (headers) => {
+                        try {
+                            const pr = await fetch(first, { headers: { 'User-Agent': UA, 'Range': 'bytes=0-1023', ...headers }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                            const buf = await pr.arrayBuffer();
+                            const txt = new TextDecoder().decode(buf.slice(0, 300));
+                            const h = (n) => pr.headers.get(n);
+                            return { status: pr.status, type: h('content-type'), len: h('content-length'), range: h('content-range'), accept: h('accept-ranges'), cors: h('access-control-allow-origin'), head: /^#EXTM3U/.test(txt) ? txt : txt.replace(/[^\x20-\x7e]/g, '.').slice(0, 80) };
+                        } catch (e) { return { error: e.message }; }
+                    };
+                    out.probeWithReferer = await probe({ 'Referer': 'https://javtiful.com/' });
+                    out.probeNoReferer = await probe({});
+                }
+            } catch (e) { out.error = e.message; }
+            return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
+        // HAYAV diagnostics: inline player-loader script + source tokens of a movie page
+        if (pathname === '/hayav/debug') {
+            const target = url.searchParams.get('url') || 'https://hayav.com/video/chinese-subtitles/abf-375c/';
+            try {
+                const r = await fetch(target, {
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': 'https://hayav.com/' },
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined
+                });
+                const html = await r.text();
+                const sm = html.match(/<script id="hayav-player-pilot-script"[^>]*>([\s\S]*?)<\/script>/i);
+                const tokens = [...html.matchAll(/<[^>]*data-hayav-player-token=["'][^>]*>/gi)].map(m => m[0].slice(0, 400)).slice(0, 10);
+                if (url.searchParams.get('probe')) {
+                    const toks = [...new Set([...html.matchAll(/data-hayav-player-token=["']([^"']+)["']/g)].map(m => m[1]))].slice(0, 6);
+                    const sources = [];
+                    for (const token of toks) {
+                        try {
+                            const pr = await fetch('https://hayav.com/wp-admin/admin-ajax.php', {
+                                method: 'POST',
+                                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'Referer': target, 'Origin': 'https://hayav.com' },
+                                body: new URLSearchParams({ action: 'hayav_player_pilot_source', token }).toString(),
+                                signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined
+                            });
+                            const txt = await pr.text();
+                            let h = txt;
+                            try { const j = JSON.parse(txt); h = (j && j.data && j.data.html) || txt; } catch (e) {}
+                            sources.push({ status: pr.status, html: String(h).slice(0, 1200) });
+                        } catch (e) { sources.push({ error: e.message }); }
+                    }
+                    return new Response(JSON.stringify({ target, status: r.status, sources }, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+                }
+                return new Response(JSON.stringify({ target, status: r.status, script: sm ? sm[1].slice(0, 6000) : null, tokens }, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+            } catch (e) {
+                return new Response(JSON.stringify({ target, error: e.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+            }
+        }
+
+        // AVDB diagnostics: API item, 18plusok mirror, upload18 embed from the Worker, Render
+        if (pathname === '/avdb/debug') {
+            const id = url.searchParams.get('id') || '';
+            const diag = { stages: {} };
+            const probe = async (label, fn) => {
+                const t0 = Date.now();
+                try { diag.stages[label] = { ...(await fn()), ms: Date.now() - t0 }; }
+                catch (e) { diag.stages[label] = { error: e.message, ms: Date.now() - t0 }; }
+            };
+            const brief = async (u, headers = { 'User-Agent': 'Mozilla/5.0' }) => {
+                const r = await fetch(u, { headers, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+                const t = await r.text();
+                return { status: r.status, len: t.length, head: t.slice(0, 200).replace(/\s+/g, ' ') };
+            };
+            let item = null;
+            await probe('api', async () => {
+                const r = await fetch(`https://avdbapi.com/api.php/provide/vod?ac=detail&ids=${encodeURIComponent(id)}`, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+                const j = await r.json();
+                item = j && j.list && j.list[0];
+                return { status: r.status, found: !!item, episodes: item && item.episodes, keys: item && Object.keys(item) };
+            });
+            const ep = item && item.episodes && item.episodes.server_data && Object.values(item.episodes.server_data)[0];
+            const slug = ep && ep.link_embed ? ep.link_embed.split('/').pop() : (item && item.slug) || '';
+            await probe('provide1', async () => {
+                const r = await fetch(`https://avdbapi.com/api.php/provide1/vod?ac=detail&ids=${encodeURIComponent(id)}`, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+                const j = await r.json();
+                const it = j && j.list && j.list[0];
+                return { status: r.status, vod_play_from: it && it.vod_play_from, vod_play_url: it && it.vod_play_url };
+            });
+            await probe('mirror', async () => {
+                const r = await fetch(`https://18plusok.vercel.app/eyJoaWRlRnJvbUhvbWUiOnRydWV9/stream/movie/avdb:${encodeURIComponent(id)}.json`, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+                const j = await r.json();
+                const s0 = j && j.streams && j.streams[0];
+                diag.mirrorStream = s0 || null;
+                return { status: r.status, streams: (j.streams || []).length };
+            });
+            if (diag.mirrorStream && diag.mirrorStream.url) {
+                const ph = (diag.mirrorStream.behaviorHints && diag.mirrorStream.behaviorHints.proxyHeaders && diag.mirrorStream.behaviorHints.proxyHeaders.request) || { 'Referer': 'https://upload18.org/' };
+                await probe('helvidFromWorker', () => brief(diag.mirrorStream.url, { 'User-Agent': 'Mozilla/5.0', ...ph }));
+                await probe('helvidNoHeaders', () => brief(diag.mirrorStream.url, { 'User-Agent': 'Mozilla/5.0' }));
+            }
+            if (slug) {
+                await probe('embedCom', () => brief(`https://upload18.com/play/index/${slug}`));
+                await probe('embedOrg', () => brief(`https://upload18.org/play/index/${slug}`));
+            }
+            await probe('render', () => brief(`${RENDER_BASE}/avdb/stream/${encodeURIComponent(slug)}.m3u8?cfhost=${encodeURIComponent(host)}&id=${encodeURIComponent(id)}`));
+            return new Response(JSON.stringify(diag, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
         // 8c. AVDB M3U8 Stream
         const avdbMatch = pathname.match(/^\/avdb\/stream\/([^/]+)\.m3u8$/);
         if (avdbMatch) {
@@ -622,56 +1275,6 @@ export default {
                 }
             };
             return fresh ? build() : edgeCached(request, ctx, 600, build);
-        }
-
-        // 8d. MissAV M3U8 Stream
-        const missavMatch = pathname.match(/^\/missav\/stream\/([^/]+)(?:\/([^/]+))?\.m3u8$/);
-        if (missavMatch) {
-            const [, slug, quality = '1080'] = missavMatch;
-            const resolveHost = host;
-
-            // 1. Delegate to Render (Render resolves playlist with zero video bandwidth)
-            const renderUrl = `https://nuvio-stremio-addon-1.onrender.com/missav/stream/${encodeURIComponent(slug)}/${quality}.m3u8?cfhost=${encodeURIComponent(resolveHost)}`;
-            if (IS_CF_WORKER) try {
-                const renderRes = await fetch(renderUrl, {
-                    headers: { 'User-Agent': 'Mozilla/5.0' },
-                    cf: {
-                        cacheEverything: true,
-                        cacheTtl: 1800
-                    },
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined
-                });
-                if (renderRes.ok) {
-                    const renderText = await renderRes.text();
-                    if (renderText && renderText.includes('#EXTM3U')) {
-                        return new Response(renderText, {
-                            headers: {
-                                ...CORS_HEADERS,
-                                'Content-Type': 'application/vnd.apple.mpegurl',
-                                'Cache-Control': 'public, max-age=1800, s-maxage=1800, stale-while-revalidate=3600',
-                                'CDN-Cache-Control': 'public, max-age=1800'
-                            }
-                        });
-                    }
-                }
-            } catch (renderErr) {
-                console.warn('[MissAV Render Delegation Error]:', renderErr.message);
-            }
-
-            // 2. Fallback to local missav.getM3u8
-            try {
-                const playlist = await missav.getM3u8(slug, quality, resolveHost);
-                return new Response(playlist, {
-                    headers: {
-                        ...CORS_HEADERS,
-                        'Content-Type': 'application/vnd.apple.mpegurl',
-                        'Cache-Control': 'public, max-age=1800, s-maxage=1800, stale-while-revalidate=3600',
-                        'CDN-Cache-Control': 'public, max-age=1800'
-                    }
-                });
-            } catch (err) {
-                return new Response('Error generating playlist: ' + err.message, { status: 500, headers: CORS_HEADERS });
-            }
         }
 
         // 8c3. VSMOV playlist: resolve the embed page's signed master at play time, route segments through /vsmov/seg.ts
@@ -850,7 +1453,7 @@ export default {
         }
 
         if (pathname === '/debug/test-render') {
-            const target = url.searchParams.get('url') || 'https://javhdz.bz/';
+            const target = url.searchParams.get('url') || 'https://javhdz.one/';
             const customReferer = url.searchParams.get('referer');
             const customUa = url.searchParams.get('ua');
             const customOrigin = url.searchParams.get('origin');
@@ -957,8 +1560,8 @@ export default {
                 }
             }
 
-            // Fallback / Delegation to Render for adult resources that may be blocked on Cloudflare edge IPs (MissAV, JavHD, VLXX, AVDB)
-            const isAdultSource = id && (id.startsWith('missav') || id.startsWith('javhd') || id.startsWith('vlxx') || id.startsWith('avdb'));
+            // Fallback / Delegation to Render for adult resources that may be blocked on Cloudflare edge IPs (JavHD, VLXX, AVDB)
+            const isAdultSource = id && (id.startsWith('javhd') || id.startsWith('vlxx') || id.startsWith('avdb'));
             const isEmpty = !resp || 
                 (resource === 'catalog' && (!resp.metas || resp.metas.length === 0)) ||
                 (resource === 'meta' && (!resp.meta || !resp.meta.name)) ||

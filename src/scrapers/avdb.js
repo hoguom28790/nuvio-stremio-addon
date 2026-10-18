@@ -209,6 +209,26 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
         const typeName = item.type_name || '1080p';
         const streams = [];
 
+        // Some items carry the real playlist in the embed link's `s=` query parameter -> play it directly
+        const linkEmbed = item.episodes?.server_data && Object.values(item.episodes.server_data)[0]?.link_embed;
+        const sMatch = linkEmbed && String(linkEmbed).match(/[?&]s=([^&#]+)/);
+        if (sMatch) {
+            let direct = '';
+            try { direct = decodeURIComponent(sMatch[1]); } catch (e) {}
+            if (/^https?:\/\/.+\.m3u8(\?|$)/i.test(direct)) {
+                streams.push({
+                    name: `🎯 [Direct m3u8] AVDB • ${typeName}`,
+                    title: `${item.name || item.movie_code}\n🎯 Link phát trực tiếp từ API (tham số s=)`,
+                    url: direct,
+                    behaviorHints: {
+                        notWebReady: false,
+                        bingeGroup: `avdb-direct-${slug}`,
+                        proxyHeaders: { request: { 'Referer': 'https://upload18.org/', 'User-Agent': USER_AGENT } }
+                    }
+                });
+            }
+        }
+
         // Stream 1: Cloudflare Edge Proxy (Hỗ trợ 100% Stremio Web và mọi trình duyệt)
         streams.push({
             name: `🛡️ [Proxy Edge] AVDB • ${typeName}`,
@@ -245,7 +265,7 @@ async function getStream(id, type, host = 'hophimaddon.hophim-4g6qbubt.workers.d
         // The Proxy Edge stream pulls every helvid segment through Render (helvid refuses Cloudflare IPs), which costs
         // Render bandwidth. Apps that honour proxyHeaders (Android TV, Stremio/Nuvio apps) play VIP Direct with zero
         // server bandwidth -> list it first; browsers fall back to Proxy Edge.
-        streams.sort((a, b) => Number(b.name.includes('VIP Direct')) - Number(a.name.includes('VIP Direct')));
+        streams.sort((a, b) => Number(/VIP Direct|Direct m3u8/.test(b.name)) - Number(/VIP Direct|Direct m3u8/.test(a.name)));
 
         return streams;
     } catch (err) {

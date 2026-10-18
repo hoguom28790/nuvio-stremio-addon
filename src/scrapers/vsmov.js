@@ -1,6 +1,7 @@
 const axios = require('axios');
 const cache = require('../utils/cache');
 const { findEpisode } = require('../utils/episodeHelper');
+const { searchRanked } = require('../utils/searchRank');
 
 const API = 'https://vsmov.com/api';
 const HTTP_OPTS = { timeout: 10000, headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0' } };
@@ -61,8 +62,40 @@ function resolveRequest(type, extra) {
     return { url: `${API}/danh-sach/${slug}?page=${Math.floor(skip / size) + 1}` };
 }
 
+function toMeta(type, item) {
+    return {
+        id: `vsmov:${item.slug}`,
+        type: type === 'series' ? 'series' : 'movie',
+        name: item.name || 'Không tên',
+        poster: item.poster_url || item.thumb_url || '',
+        posterShape: 'poster',
+        description: `${item.origin_name || ''} (${item.year || ''})\n⚡ VSMOV`
+    };
+}
+
+/** Keyword search ranked through IMDb/TMDB (see utils/searchRank); the ranked list is paged by `skip`. */
+async function searchCatalog(type, term, skip) {
+    const fetchItems = async (kw, page) => {
+        const res = await axios.get(`${API}/tim-kiem?keyword=${encodeURIComponent(kw)}&limit=24&page=${page}`, HTTP_OPTS);
+        const data = res.data || {};
+        return data.items || (data.data && data.data.items) || [];
+    };
+    const ranked = await searchRanked(term, type === 'series' ? 'series' : 'movie', fetchItems, { prefix: 'vsmov' });
+    return ranked.slice(skip, skip + 24).map(item => toMeta(type, item));
+}
+
 async function getCatalog(type, extra = {}) {
     try {
+        const term = extra.search && String(extra.search).trim();
+        if (term) {
+            const skip = parseInt(extra.skip, 10) || 0;
+            const cacheKey = `vsmov:search:${type}:${term}:${skip}`;
+            const cached = cache.get(cacheKey);
+            if (cached) return cached;
+            const metas = await searchCatalog(type, term, skip);
+            if (metas.length) cache.set(cacheKey, metas, 600);
+            return metas;
+        }
         const { url } = resolveRequest(type, extra);
         const cacheKey = `vsmov:catalog:${type}:${url}`;
         const cached = cache.get(cacheKey);
@@ -76,14 +109,7 @@ async function getCatalog(type, extra = {}) {
         for (const item of items) {
             if (!item || !item.slug || seen.has(item.slug)) continue;
             seen.add(item.slug);
-            metas.push({
-                id: `vsmov:${item.slug}`,
-                type: type === 'series' ? 'series' : 'movie',
-                name: item.name || 'Không tên',
-                poster: item.poster_url || item.thumb_url || '',
-                posterShape: 'poster',
-                description: `${item.origin_name || ''} (${item.year || ''})\n⚡ VSMOV`
-            });
+            metas.push(toMeta(type, item));
         }
         if (metas.length) cache.set(cacheKey, metas, 600);
         return metas;

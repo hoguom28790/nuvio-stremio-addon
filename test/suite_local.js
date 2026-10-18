@@ -90,23 +90,6 @@ async function runLocalSuite() {
             assert(r.headers.location.includes('/avdb/segment.ts?url='));
         });
 
-        // 7. Bandwidth Protection: /missav/segment.ts redirects 302 to CF Worker
-        await testCase('7. /missav/segment.ts redirects 302 to Cloudflare Worker', async () => {
-            const r = await axios.get(`${BASE}/missav/segment.ts?url=https%3A%2F%2Ftest.com%2Fvideo.ts`, {
-                maxRedirects: 0,
-                validateStatus: (status) => status === 302
-            });
-            assert.strictEqual(r.status, 302);
-            assert(r.headers.location.includes('/missav/segment.ts?url='));
-        });
-
-        // 8. MissAV M3U8 endpoint
-        await testCase('8. /missav/stream/fays-017/1080.m3u8 returns 200 OK with #EXTM3U', async () => {
-            const r = await axios.get(`${BASE}/missav/stream/fays-017/1080.m3u8`, { timeout: 10000 });
-            assert.strictEqual(r.status, 200);
-            assert(r.data.includes('#EXTM3U'), 'Must include #EXTM3U');
-        });
-
         // 9. JavHD M3U8 endpoint (Must return 200 flat media playlist with unwrapped segments, NO master playlist)
         await testCase('9. /javhd/stream/toi-da-so-bim-chi-gai-tsubasa-mai-4017/1080.m3u8 returns flat media playlist with 0 #EXT-X-STREAM-INF', async () => {
             const r = await axios.get(`${BASE}/javhd/stream/toi-da-so-bim-chi-gai-tsubasa-mai-4017/1080.m3u8`, { timeout: 10000 });
@@ -133,15 +116,6 @@ async function runLocalSuite() {
             assert(r.data.includes('#EXTM3U'), 'Must include #EXTM3U');
         });
 
-        // 11. Stremio stream resource endpoint for MissAV
-        await testCase('11. Stremio stream endpoint /stream/movie/missav:siro-5719.json', async () => {
-            const r = await axios.get(`${BASE}/stream/movie/missav:siro-5719.json`, { timeout: 10000 });
-            assert.strictEqual(r.status, 200);
-            assert(Array.isArray(r.data.streams) && r.data.streams.length > 0, 'Must return streams');
-            const vip = r.data.streams.find(s => s.name.includes('VIP Direct CDN'));
-            assert(vip, 'Must have VIP Direct CDN stream');
-        });
-
         // 12. Stremio catalog endpoint for JavHD (verifying clean posters without wsrv.nl)
         await testCase('12. Stremio catalog endpoint /catalog/movie/javhd-latest.json has clean posters', async () => {
             const r = await axios.get(`${BASE}/catalog/movie/javhd-latest.json`, { timeout: 10000 });
@@ -150,7 +124,7 @@ async function runLocalSuite() {
             const first = r.data.metas[0];
             assert(!first.poster.includes('wsrv.nl'), 'Must not use wsrv.nl');
             assert(!first.poster.includes('javhdz.bz'), 'Must not use dead javhdz.bz');
-            assert(first.poster.includes('/javhd/poster/') || first.poster.includes('javhdz.wtf'), 'Must use live or edge poster URL');
+            assert(first.poster.includes('/javhd/poster/') || first.poster.includes('javhdz.one'), 'Must use live or edge poster URL');
         });
 
         // 13. AVDB Segment streaming via stream=1 (Verifying Render bridge returns 200 and MPEG-TS)
@@ -163,25 +137,6 @@ async function runLocalSuite() {
             assert(firstSegMatch, 'Must find raw helvid url');
             const rawHelvidUrl = decodeURIComponent(firstSegMatch[1]);
             const segRes = await axios.get(`${BASE}/avdb/segment.ts?stream=1&url=${encodeURIComponent(rawHelvidUrl)}`, {
-                responseType: 'arraybuffer',
-                timeout: 15000
-            });
-            assert.strictEqual(segRes.status, 200);
-            assert.strictEqual(segRes.headers['access-control-allow-origin'], '*', 'Segment must have CORS');
-            assert.strictEqual(segRes.headers['content-type'], 'video/mp2t');
-            assert(segRes.data.length > 1000, 'Segment body must be non-empty video chunk');
-        });
-
-        // 14. MissAV Segment streaming via stream=1 (Verifying surrit bridge returns 200 and MPEG-TS)
-        await testCase('14. MissAV Segment streaming (/missav/segment.ts?stream=1)', async () => {
-            const plRes = await axios.get(`${BASE}/missav/stream/fays-017/1080.m3u8`, { timeout: 10000 });
-            assert.strictEqual(plRes.headers['access-control-allow-origin'], '*', 'Playlist must have CORS');
-            const lines = plRes.data.split('\n').filter(l => l.includes('/missav/segment.ts'));
-            assert(lines.length > 0, 'Must have missav segment URLs');
-            const firstSegMatch = lines[0].match(/url=([^&\s]+)/);
-            assert(firstSegMatch, 'Must find raw surrit url');
-            const rawSurritUrl = decodeURIComponent(firstSegMatch[1]);
-            const segRes = await axios.get(`${BASE}/missav/segment.ts?stream=1&url=${encodeURIComponent(rawSurritUrl)}`, {
                 responseType: 'arraybuffer',
                 timeout: 15000
             });

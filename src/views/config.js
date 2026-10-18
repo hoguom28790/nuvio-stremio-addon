@@ -721,7 +721,7 @@ function renderConfigPage(host, initialConfig = {}) {
     </div>
 
     <!-- Khối khóa mặc định -->
-    <div id="tgk-locked" class="tgk-lock-box" style="${activeSources.some(s => ['hentaiz', 'javhd', 'vlxx', 'avdb', 'missav'].includes(s)) ? 'display: none;' : ''}">
+    <div id="tgk-locked" class="tgk-lock-box" style="${activeSources.some(s => ['hentaiz', 'javhd', 'vlxx', 'avdb', 'fs1', 'javtiful', 'hohoj', 'sexmup', 'javhay'].includes(s)) ? 'display: none;' : ''}">
       <div style="font-size: 0.9rem; color: #ff8fab; font-weight: 600;">
         🔒 Mục này đã được khóa bảo vệ. Vui lòng nhập mật mã để mở khóa các nguồn:
       </div>
@@ -732,7 +732,7 @@ function renderConfigPage(host, initialConfig = {}) {
     </div>
 
     <!-- Khối nguồn phim sau khi mở khóa -->
-    <div id="tgk-unlocked" style="${activeSources.some(s => ['hentaiz', 'javhd', 'vlxx', 'avdb', 'missav'].includes(s)) ? 'display: block;' : 'display: none;'} margin-top: 14px;">
+    <div id="tgk-unlocked" style="${activeSources.some(s => ['hentaiz', 'javhd', 'vlxx', 'avdb', 'fs1', 'javtiful', 'hohoj', 'sexmup', 'javhay'].includes(s)) ? 'display: block;' : 'display: none;'} margin-top: 14px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
         <span style="font-size: 0.85rem; color: var(--text-muted);">Đã xác thực thành công. Chọn các nguồn bạn muốn bật:</span>
         <button type="button" class="btn-text-action" onclick="toggleAllAdultSources()">Chọn tất cả</button>
@@ -744,7 +744,7 @@ function renderConfigPage(host, initialConfig = {}) {
         </label>
         <label class="${sourceClass('javhd')}">
           <input type="checkbox" name="source" value="javhd" ${sourceChecked('javhd')} onchange="updateUI()">
-          <span>⚡ JavHD (javhdz.bz)</span>
+          <span>⚡ JavHD (javhdz.one)</span>
         </label>
         <label class="${sourceClass('vlxx')}">
           <input type="checkbox" name="source" value="vlxx" ${sourceChecked('vlxx')} onchange="updateUI()">
@@ -754,9 +754,25 @@ function renderConfigPage(host, initialConfig = {}) {
           <input type="checkbox" name="source" value="avdb" ${sourceChecked('avdb')} onchange="updateUI()">
           <span>⚡ AVDB (avdbapi.com)</span>
         </label>
-        <label class="${sourceClass('missav')}">
-          <input type="checkbox" name="source" value="missav" ${sourceChecked('missav')} onchange="updateUI()">
-          <span>⚡ MissAV (missav.ai)</span>
+        <label class="${sourceClass('fs1')}">
+          <input type="checkbox" name="source" value="fs1" ${sourceChecked('fs1')} onchange="updateUI()">
+          <span>⚡ Jable (fs1.app)</span>
+        </label>
+        <label class="${sourceClass('javtiful')}">
+          <input type="checkbox" name="source" value="javtiful" ${sourceChecked('javtiful')} onchange="updateUI()">
+          <span>⚡ Javtiful (javtiful.com)</span>
+        </label>
+        <label class="${sourceClass('hohoj')}">
+          <input type="checkbox" name="source" value="hohoj" ${sourceChecked('hohoj')} onchange="updateUI()">
+          <span>⚡ HoHoJ (hohoj.tv)</span>
+        </label>
+        <label class="${sourceClass('sexmup')}">
+          <input type="checkbox" name="source" value="sexmup" ${sourceChecked('sexmup')} onchange="updateUI()">
+          <span>⚡ Sex Mụp Xinh (sexmupxinh.net)</span>
+        </label>
+        <label class="${sourceClass('javhay')}">
+          <input type="checkbox" name="source" value="javhay" ${sourceChecked('javhay')} onchange="updateUI()">
+          <span>⚡ JavHay (javhay.buzz)</span>
         </label>
       </div>
     </div>
