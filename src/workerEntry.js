@@ -6,7 +6,6 @@ const javhd = require('./scrapers/javhd');
 const vlxx = require('./scrapers/vlxx');
 const avdb = require('./scrapers/avdb');
 const sexmup = require('./scrapers/sexmup');
-const nguonc = require('./scrapers/nguonc');
 const javhay = require('./scrapers/javhay');
 const kkphim = require('./scrapers/kkphim');
 const vsmov = require('./scrapers/vsmov');
@@ -900,74 +899,6 @@ export default {
                     pageLinks: [...new Set([...html.matchAll(/href="([^"#]*(?:page|p|pg)=\d+[^"]*)"/g)].map(m => m[1]))].slice(0, 8)
                 };
             } catch (e) { out.list = { error: e.message }; }
-            return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
-        }
-
-        // NguonC diagnostics: does the API answer the Worker, and does it have the shape the scraper expects?
-        if (pathname === '/nguonc/debug') {
-            const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-            const paths = (url.searchParams.get('paths') || '').split('|').filter(Boolean);
-            const defaults = [
-                '/films/phim-moi-cap-nhat?page=1',
-                '/films/phim-moi-cap-nhat?page=2',
-                '/films/danh-sach/phim-le?page=1',
-                '/films/danh-sach/phim-bo?page=1',
-                '/films/the-loai/hanh-dong?page=1',
-                '/films/quoc-gia/han-quoc?page=1',
-                '/films/nam-phat-hanh/2024?page=1',
-                '/films/search?keyword=confessions'
-            ];
-            const out = { api: nguonc.API, results: [] };
-            const describe = (data) => {
-                const items = nguonc.listItems(data);
-                const first = items[0] || null;
-                return {
-                    topKeys: Object.keys(data || {}).slice(0, 10),
-                    paginate: data && (data.paginate || data.pagination) || null,
-                    items: items.length,
-                    firstItemKeys: first ? Object.keys(first) : null,
-                    firstItem: first ? { name: first.name, slug: first.slug, original_name: first.original_name, thumb_url: first.thumb_url, poster_url: first.poster_url, quality: first.quality, language: first.language, total_episodes: first.total_episodes, current_episode: first.current_episode } : null
-                };
-            };
-            let firstSlug = null;
-            for (const path of (paths.length ? paths : defaults)) {
-                try {
-                    const r = await fetch(`${nguonc.API}${path}`, { headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Referer': 'https://phim.nguonc.com/' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
-                    const txt = await r.text();
-                    const data = nguonc.asJson(txt);
-                    const row = { path, status: r.status, type: r.headers.get('content-type'), len: txt.length };
-                    if (data) {
-                        Object.assign(row, describe(data));
-                        const f = nguonc.listItems(data)[0];
-                        if (!firstSlug && f && f.slug) firstSlug = f.slug;
-                    } else {
-                        row.blocked = /Attention Required|cf-error|Just a moment|Access denied/i.test(txt);
-                        row.head = txt.replace(/\s+/g, ' ').slice(0, 200);
-                    }
-                    out.results.push(row);
-                } catch (e) { out.results.push({ path, error: e.message }); }
-            }
-            const slug = url.searchParams.get('slug') || firstSlug;
-            if (slug) {
-                try {
-                    const r = await fetch(`${nguonc.API}/film/${encodeURIComponent(slug)}`, { headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Referer': 'https://phim.nguonc.com/' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
-                    const txt = await r.text();
-                    const data = nguonc.asJson(txt);
-                    const movie = data && (data.movie || (data.data && data.data.movie));
-                    const servers = (movie && movie.episodes) || (data && data.episodes) || [];
-                    const srv = servers[0] || null;
-                    const eps = srv ? (srv.items || srv.server_data || []) : [];
-                    out.detail = {
-                        slug, status: r.status, topKeys: Object.keys(data || {}).slice(0, 10),
-                        movieKeys: movie ? Object.keys(movie) : null,
-                        categorySample: movie && movie.category ? JSON.stringify(movie.category).slice(0, 500) : null,
-                        servers: servers.map(s => ({ server_name: s.server_name, keys: Object.keys(s), episodes: (s.items || s.server_data || []).length })),
-                        firstEpisodeKeys: eps[0] ? Object.keys(eps[0]) : null,
-                        firstEpisode: eps[0] ? { name: eps[0].name, slug: eps[0].slug, m3u8: eps[0].m3u8 || eps[0].link_m3u8 || null, embed: eps[0].embed || eps[0].link_embed || null } : null,
-                        head: data ? undefined : txt.replace(/\s+/g, ' ').slice(0, 200)
-                    };
-                } catch (e) { out.detail = { slug, error: e.message }; }
-            }
             return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
         }
 
