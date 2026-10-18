@@ -1,5 +1,6 @@
 const reference = require('../Reference.json');
 const vsmov = require('./scrapers/vsmov');
+const nguonc = require('./scrapers/nguonc');
 
 // Filter out tv/sports catalogs and removed sources
 const filteredCatalogs = reference.catalogs.filter(c => 
@@ -369,14 +370,25 @@ const javhayCatalogs = [
 ];
 
 const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs, ...fs1Catalogs, ...javtifulCatalogs, ...hohojCatalogs, ...sexmupCatalogs, ...javhayCatalogs];
-const allCatalogs = [...filteredCatalogs, ...adultCatalogs];
-const allPrefixes = ["tt", "kkphim:", "vsmov:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "fs1:", "javtiful:", "hohoj:", "sexmup:", "javhay:"];
+const nguoncCatalogs = [
+    { type: "movie", id: "nguonc-movie", name: "NguonC • Phim Lẻ" },
+    { type: "series", id: "nguonc-series", name: "NguonC • Phim Bộ" }
+].map(c => Object.assign({}, c, {
+    extra: [
+        { name: "search", isRequired: false },
+        { name: "skip", isRequired: false },
+        { name: "genre", isRequired: false, options: nguonc.CATALOG_OPTIONS }
+    ]
+}));
+
+const allCatalogs = [...filteredCatalogs, ...nguoncCatalogs, ...adultCatalogs];
+const allPrefixes = ["tt", "kkphim:", "vsmov:", "nguonc:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "fs1:", "javtiful:", "hohoj:", "sexmup:", "javhay:"];
 
 const baseManifest = {
     id: "org.hophim.stremio",
     version: "1.4.5",
     name: "Hồ Phim",
-    description: "Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ KKPhim, VSMOV",
+    description: "Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ KKPhim, VSMOV, NguonC",
     logo: "https://raw.githubusercontent.com/hoguom28790/nuvio-stremio-addon/master/logo.png",
     resources: [
         "catalog",

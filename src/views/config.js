@@ -709,6 +709,10 @@ function renderConfigPage(host, initialConfig = {}) {
         <input type="checkbox" name="source" value="vsmov" ${sourceChecked('vsmov')} onchange="updateUI()">
         <span>⚡ VSMOV (Phim Lẻ & Bộ)</span>
       </label>
+      <label class="${sourceClass('nguonc')}">
+        <input type="checkbox" name="source" value="nguonc" ${sourceChecked('nguonc')} onchange="updateUI()">
+        <span>⚡ NguonC (Phim Lẻ & Bộ)</span>
+      </label>
     </div>
   </div>
 

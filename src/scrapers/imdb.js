@@ -1,6 +1,7 @@
 const axios = require('axios');
 const kkphim = require('./kkphim');
 const vsmov = require('./vsmov');
+const nguonc = require('./nguonc');
 
 const cache = require('../utils/cache');
 const { findBestSeasonMatch } = require('../utils/episodeHelper');
@@ -114,6 +115,22 @@ async function getStream(id, type, config = {}) {
                         ? `vsmov:${bestMatch.slug}:${season}:${episode}`
                         : `vsmov:${bestMatch.slug}`;
                     proxyStreams.push(...await vsmov.getStream(vsId, type, config.host));
+                }
+            } catch (e) {
+                // ignore
+            }
+        }
+
+        // 3. NguonC (direct CDN HLS; only a film whose name / original title equals the IMDb title, so a loose hit never plays)
+        if (enabledSources.includes('nguonc') && prefCdn) {
+            try {
+                const hits = nguonc.matchTitle(await nguonc.search(title, 10), title);
+                const bestMatch = (type === 'series' && season) ? findBestSeasonMatch(hits, season) : hits[0];
+                if (bestMatch) {
+                    const ncId = (type === 'series' && episode)
+                        ? `nguonc:${bestMatch.slug}:${season}:${episode}`
+                        : `nguonc:${bestMatch.slug}`;
+                    cdnStreams.push(...await nguonc.getStream(ncId, type));
                 }
             } catch (e) {
                 // ignore
