@@ -1,5 +1,6 @@
 const axios = require('axios');
 const cache = require('../utils/cache');
+const { pagedList } = require('../utils/pagedList');
 
 const BASE_URL = 'https://fs1.app';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -84,29 +85,21 @@ function toMeta(item) {
 }
 
 async function getCatalog(catalogId, type, extra = {}) {
-    const page = extra.skip ? Math.floor(Number(extra.skip) / PAGE_SIZE) + 1 : 1;
     const search = extra.search ? String(extra.search).trim() : '';
     const base = search
         ? `/search/${encodeURIComponent(search)}/`
         : (GENRE_MAP[extra.genre] || '/latest-updates/');
+    const skip = parseInt(extra.skip, 10) || 0;
 
-    const cacheKey = `fs1:catalog:${base}:${page}`;
-    const cached = cache.get(cacheKey);
-    if (cached) return cached;
+    // KVS pages are `<base><n>/`; `?from=<n>` is the fallback form
+    const fetchPage = async (page) => {
+        let items = parseList(await fetchHtml(page <= 1 ? base : `${base}${page}/`));
+        if (items.length === 0 && page > 1) items = parseList(await fetchHtml(`${base}?from=${page}`));
+        return items.map(toMeta);
+    };
 
     try {
-        let items;
-        if (page <= 1) {
-            items = parseList(await fetchHtml(base));
-        } else {
-            items = parseList(await fetchHtml(`${base}${page}/`));
-            if (items.length === 0) {
-                items = parseList(await fetchHtml(`${base}?from=${page}`));
-            }
-        }
-        const metas = items.map(toMeta);
-        if (metas.length > 0) cache.set(cacheKey, metas, 900);
-        return metas;
+        return await pagedList({ key: `fs1:${base}`, skip, want: PAGE_SIZE, fetchPage });
     } catch (err) {
         console.error(`[FS1 Catalog Error] ${base}:`, err.message);
         return [];

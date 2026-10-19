@@ -1,5 +1,6 @@
 const axios = require('axios');
 const cache = require('../utils/cache');
+const { pagedList } = require('../utils/pagedList');
 
 const BASE_URL = 'https://javhdz.one';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -235,160 +236,94 @@ async function fetchPage(targetUrl) {
 }
 
 /**
- * Get catalog movies for JavHD
+ * Get catalog movies for JavHD: live pages of javhdz.one (paged with the shared pagedList), the static catalog only as
+ * an offline fallback.
  */
-/**
- * Get catalog movies for JavHD with live search and infinite pagination
- */
+function staticCatalogItems(extra, host) {
+    if (!cachedCatalog || !Array.isArray(cachedCatalog) || cachedCatalog.length === 0) return [];
+    const stripAccents = (s) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+    let results = [...cachedCatalog];
+
+    if (extra.search) {
+        const qLower = String(extra.search).trim().toLowerCase();
+        results = results.filter(m =>
+            (m.name && m.name.toLowerCase().includes(qLower)) ||
+            (m.slug && m.slug.toLowerCase().includes(qLower)) ||
+            (m.genres && m.genres.some(g => g.toLowerCase().includes(qLower))));
+    } else if (extra.genre) {
+        const gNorm = stripAccents(extra.genre);
+        if (gNorm !== 'tat ca' && gNorm !== 'moi cap nhat' && gNorm !== 'thinh hanh') {
+            if (gNorm.includes('khong che') || gNorm.includes('uncensored')) {
+                results = results.filter(m => (m.genres || []).some(genre => {
+                    const n = stripAccents(genre);
+                    return n.includes('khong che') || n.includes('uncensored');
+                }));
+            } else if (gNorm.includes('co che') || gNorm.includes('censored')) {
+                results = results.filter(m => (m.genres || []).some(genre => {
+                    const n = stripAccents(genre);
+                    return n.includes('censored') || n.includes('co che') || !n.includes('khong che');
+                }));
+            } else {
+                const keywords = gNorm.replace(/\([^)]*\)/g, '').trim().split(/\s+/).filter(Boolean);
+                results = results.filter(m => (m.genres || []).some(genre => {
+                    const n = stripAccents(genre);
+                    return keywords.every(kw => n.includes(kw));
+                }));
+            }
+        }
+    }
+    return results.map(m => ({
+        id: m.id,
+        type: 'movie',
+        name: m.name,
+        poster: formatPoster(m.poster, host),
+        posterShape: 'poster',
+        description: m.description
+    }));
+}
+
 async function getCatalog(catalogId, type, extra = {}, host = '') {
     try {
         await ensureStaticCatalog();
         const skip = parseInt(extra.skip, 10) || 0;
-        const page = Math.floor(skip / 18) + 1;
+        const search = extra.search ? String(extra.search).trim() : '';
 
-        // 1. LIVE SEARCH: Searches entire JavHD library + static catalog
-        if (extra.search) {
-            const query = extra.search.trim();
-            const cacheKey = `javhd:search:${encodeURIComponent(query)}:${page}:${host}`;
-            const cached = cache.get(cacheKey);
-            if (cached) return cached;
-
-            const searchMetas = [];
-            const seenSlugs = new Set();
-
-            // Live search on javhdz.one
-            try {
-                const searchUrl = page > 1 
-                    ? `${BASE_URL}/search/${encodeURIComponent(query)}/page/${page}/`
-                    : `${BASE_URL}/search/${encodeURIComponent(query)}/`;
-                const html = await fetchPage(searchUrl);
-                if (html) {
-                    const liveItems = parseMovieCards(html, host);
-                    for (const item of liveItems) {
-                        if (!seenSlugs.has(item.id)) {
-                            seenSlugs.add(item.id);
-                            searchMetas.push(item);
-                        }
-                    }
-                }
-            } catch (errSearch) {
-                console.warn('[JavHD] Live search error:', errSearch.message);
-            }
-
-            // Also search cached catalog on page 1 to ensure no misses
-            if (page === 1 && cachedCatalog && Array.isArray(cachedCatalog)) {
-                const qLower = query.toLowerCase();
-                const matchedStatic = cachedCatalog.filter(m =>
-                    (m.name && m.name.toLowerCase().includes(qLower)) ||
-                    (m.slug && m.slug.toLowerCase().includes(qLower)) ||
-                    (m.genres && m.genres.some(g => g.toLowerCase().includes(qLower)))
-                );
-                for (const m of matchedStatic) {
-                    if (!seenSlugs.has(m.id)) {
-                        seenSlugs.add(m.id);
-                        searchMetas.push({
-                            id: m.id,
-                            type: 'movie',
-                            name: m.name,
-                            poster: formatPoster(m.poster, host),
-                            posterShape: 'poster',
-                            description: m.description
-                        });
-                    }
-                }
-            }
-
-            if (searchMetas.length > 0) {
-                cache.set(cacheKey, searchMetas, 600);
-                return searchMetas;
-            }
-            return [];
-        }
-
-        // 2. CATEGORY / GENRE BROWSING
-        let targetUrl = '';
-        if (extra.genre && GENRE_MAP[extra.genre]) {
-            const mappedPath = GENRE_MAP[extra.genre].replace(/\/$/, '');
-            targetUrl = page > 1 ? `${BASE_URL}${mappedPath}/page/${page}/` : `${BASE_URL}${mappedPath}/`;
+        // Path of page `n` of the requested list (all of them are `<path>/page/<n>/`)
+        let listKey;
+        let pathFor;
+        if (search) {
+            listKey = `search:${search}`;
+            pathFor = page => `${BASE_URL}/search/${encodeURIComponent(search)}/${page > 1 ? `page/${page}/` : ''}`;
         } else {
-            switch (catalogId) {
-                case 'javhd-trending':
-                    targetUrl = page > 1 ? `${BASE_URL}/trending/page/${page}/` : `${BASE_URL}/trending/`;
-                    break;
-                case 'javhd-censored':
-                    targetUrl = page > 1 ? `${BASE_URL}/category/censored-2/page/${page}/` : `${BASE_URL}/category/censored-2/`;
-                    break;
-                case 'javhd-uncensored':
-                    targetUrl = page > 1 ? `${BASE_URL}/category/uncensored-3/page/${page}/` : `${BASE_URL}/category/uncensored-3/`;
-                    break;
-                case 'javhd-beauty':
-                    targetUrl = page > 1 ? `${BASE_URL}/category/beauty-4/page/${page}/` : `${BASE_URL}/category/beauty-4/`;
-                    break;
-                case 'javhd-latest':
-                default:
-                    targetUrl = page > 1 ? `${BASE_URL}/video/page/${page}/` : `${BASE_URL}/video/`;
-                    break;
-            }
-        }
-
-        const cacheKey = `javhd:catalog:${targetUrl}:${host}`;
-        const cached = cache.get(cacheKey);
-        if (cached && cached.length > 0) return cached;
-
-        // Try live fetch from javhdz.one
-        try {
-            const html = await fetchPage(targetUrl);
-            if (html) {
-                const liveItems = parseMovieCards(html, host);
-                if (liveItems && liveItems.length > 0) {
-                    cache.set(cacheKey, liveItems, 600);
-                    return liveItems;
+            let basePath;
+            if (extra.genre && GENRE_MAP[extra.genre]) {
+                basePath = GENRE_MAP[extra.genre].replace(/\/$/, '');
+            } else {
+                switch (catalogId) {
+                    case 'javhd-trending': basePath = '/trending'; break;
+                    case 'javhd-censored': basePath = '/category/censored-2'; break;
+                    case 'javhd-uncensored': basePath = '/category/uncensored-3'; break;
+                    case 'javhd-beauty': basePath = '/category/beauty-4'; break;
+                    case 'javhd-latest':
+                    default: basePath = '/video'; break;
                 }
             }
-        } catch (e) {
-            console.warn(`[JavHD] Live fetch failed for ${targetUrl}:`, e.message);
+            listKey = basePath;
+            pathFor = page => `${BASE_URL}${basePath}/${page > 1 ? `page/${page}/` : ''}`;
         }
 
-        // Fallback to static catalog if live fetch failed (e.g. offline)
-        if (cachedCatalog && Array.isArray(cachedCatalog) && cachedCatalog.length > 0) {
-            let results = [...cachedCatalog];
-            if (extra.genre) {
-                const stripAccents = (s) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
-                const gNorm = stripAccents(extra.genre);
-                if (gNorm !== 'tat ca' && gNorm !== 'moi cap nhat' && gNorm !== 'thinh hanh') {
-                    if (gNorm.includes('khong che') || gNorm.includes('uncensored')) {
-                        results = results.filter(m => (m.genres || []).some(genre => {
-                            const n = stripAccents(genre);
-                            return n.includes('khong che') || n.includes('uncensored');
-                        }));
-                    } else if (gNorm.includes('co che') || gNorm.includes('censored')) {
-                        results = results.filter(m => (m.genres || []).some(genre => {
-                            const n = stripAccents(genre);
-                            return n.includes('censored') || n.includes('co che') || !n.includes('khong che');
-                        }));
-                    } else {
-                        const keywords = gNorm.replace(/\([^)]*\)/g, '').trim().split(/\s+/).filter(Boolean);
-                        results = results.filter(m => (m.genres || []).some(genre => {
-                            const n = stripAccents(genre);
-                            return keywords.every(kw => n.includes(kw));
-                        }));
-                    }
-                }
-            }
-            const pageItems = results.slice(skip, skip + 18);
-            if (pageItems.length > 0) {
-                return pageItems.map(m => ({
-                    id: m.id,
-                    type: 'movie',
-                    name: m.name,
-                    poster: formatPoster(m.poster, host),
-                    posterShape: 'poster',
-                    description: m.description
-                }));
-            }
-        }
+        const livePage = async (page) => {
+            const html = await fetchPage(pathFor(page));
+            return html ? parseMovieCards(html, host) : [];
+        };
+        const args = { key: `javhd:${listKey}:${host}`, skip, want: 18, fetchPage: livePage };
 
-        return [];
+        // live site first; the static catalog only when the site gives nothing at all
+        const probe = await pagedList({ ...args, skip: 0, want: 1 });
+        if (probe.length > 0) return await pagedList(args);
+
+        console.warn(`[JavHD] Live list unavailable for ${listKey}, using the static catalog`);
+        return staticCatalogItems(extra, host).slice(skip, skip + 18);
     } catch (err) {
         console.error('[JavHD Catalog Error]:', err.message);
         return [];

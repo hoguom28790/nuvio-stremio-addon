@@ -1,5 +1,6 @@
 const axios = require('axios');
 const cache = require('../utils/cache');
+const { pagedList } = require('../utils/pagedList');
 
 const BASE_URL = 'https://javhay.buzz';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -118,26 +119,19 @@ function toMeta(item, host) {
 async function getCatalog(catalogId, type, extra = {}, host) {
     const search = extra.search ? String(extra.search).trim() : '';
     const base = search ? '/' : (GENRE_MAP[extra.genre] || GENRE_MAP['Mới Nhất']);
-    const sizeKey = `javhay:psize:${search ? 'search' : base}`;
-    const pageSize = cache.get(sizeKey) || DEFAULT_PAGE_SIZE;
-    const page = extra.skip ? Math.max(1, Math.round(Number(extra.skip) / pageSize) + 1) : 1;
+    const skip = parseInt(extra.skip, 10) || 0;
 
-    let url;
-    if (search) url = page > 1 ? `/page/${page}/?s=${encodeURIComponent(search)}` : `/?s=${encodeURIComponent(search)}`;
-    else url = page > 1 ? `${base}page/${page}/` : base;
-
-    const cacheKey = `javhay:catalog:${url}`;
-    const cached = cache.get(cacheKey);
-    if (cached) return cached;
+    const fetchPage = async (page) => {
+        let url;
+        if (search) url = page > 1 ? `/page/${page}/?s=${encodeURIComponent(search)}` : `/?s=${encodeURIComponent(search)}`;
+        else url = page > 1 ? `${base}page/${page}/` : base;
+        return parseList(await fetchHtml(url)).map(item => toMeta(item, host));
+    };
 
     try {
-        const items = parseList(await fetchHtml(url));
-        const metas = items.map(item => toMeta(item, host));
-        if (page === 1 && metas.length > 0) cache.set(sizeKey, metas.length, 86400);
-        if (metas.length > 0) cache.set(cacheKey, metas, 900);
-        return metas;
+        return await pagedList({ key: `javhay:${search ? `search:${search}` : base}`, skip, want: DEFAULT_PAGE_SIZE, fetchPage });
     } catch (err) {
-        console.error(`[Javhay Catalog Error] ${url}:`, err.message);
+        console.error(`[Javhay Catalog Error] ${base}:`, err.message);
         return [];
     }
 }

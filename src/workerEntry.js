@@ -959,6 +959,44 @@ export default {
             return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
         }
 
+        // Paging audit: walks catalogs the way Stremio does (skip += items received) and counts repeated movies
+        if (pathname === '/debug/paging') {
+            const ids = (url.searchParams.get('ids') || 'fs1-movie,javtiful-movie,hohoj-movie,sexmup-movie,javhay-movie').split(',').map(x => x.trim()).filter(Boolean);
+            const calls = Math.min(5, Math.max(1, parseInt(url.searchParams.get('pages') || '3', 10) || 3));
+            const genre = url.searchParams.get('genre') || undefined;
+            const search = url.searchParams.get('search') || undefined;
+            const report = [];
+            for (const id of ids) {
+                const type = id === 'hentaiz-anime' ? 'series' : 'movie';
+                const row = { id, type, calls: [] };
+                const seen = new Set();
+                let skip = 0, repeated = 0, total = 0;
+                for (let i = 0; i < calls; i++) {
+                    const t0 = Date.now();
+                    try {
+                        const extra = { skip: String(skip) };
+                        if (genre) extra.genre = genre;
+                        if (search) extra.search = search;
+                        const resp = await addonInterface.get('catalog', type, id, extra, { host });
+                        const metas = (resp && resp.metas) || [];
+                        const dup = metas.filter(m => seen.has(m.id)).length;
+                        metas.forEach(m => seen.add(m.id));
+                        repeated += dup; total += metas.length;
+                        row.calls.push({ skip, count: metas.length, repeatedInThisCall: dup, first: metas[0] && metas[0].name, ms: Date.now() - t0 });
+                        if (!metas.length) break;
+                        skip += metas.length;
+                    } catch (e) {
+                        row.calls.push({ skip, error: e.message, ms: Date.now() - t0 });
+                        break;
+                    }
+                }
+                row.total = total; row.unique = seen.size; row.repeated = repeated;
+                row.verdict = row.calls.some(c => c.error) ? 'ERROR' : (total === 0 ? 'EMPTY' : (repeated > 0 ? 'REPEATS' : 'OK'));
+                report.push(row);
+            }
+            return new Response(JSON.stringify(report, null, 1), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
         // Generic list-page structure probe: sample around a needle, pagination links, menu links, search forms
         if (pathname === '/debug/list') {
             const target = url.searchParams.get('url');
