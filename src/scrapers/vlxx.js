@@ -1,5 +1,6 @@
 const axios = require('axios');
 const cache = require('../utils/cache');
+const { pagedList } = require('../utils/pagedList');
 
 const BASE_URL = 'https://vlxx.phd';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -104,38 +105,31 @@ function parseVideoList(html) {
  */
 async function getCatalog(catalogId, type, extra = {}) {
     const skip = extra.skip ? parseInt(extra.skip, 10) || 0 : 0;
-    const page = Math.floor(skip / 30) + 1;
+    const search = extra.search ? String(extra.search).trim() : '';
 
-    let targetPath = CATEGORY_MAP[catalogId] || '/';
-
-    if (extra.search) {
-        const querySlug = slugify(extra.search);
-        targetPath = page === 1 ? `/search/${querySlug}/` : `/search/${querySlug}/${page}/`;
-    } else if (extra.genre) {
-        const cleanGenre = extra.genre.replace(/^Thể loại:\s*/i, '').trim().toLowerCase();
-        const genreSlug = slugify(cleanGenre);
-        if (GENRE_MAP[genreSlug]) {
-            const basePath = GENRE_MAP[genreSlug];
-            targetPath = page === 1 ? basePath : `${basePath}${page}/`;
-        } else if (page > 1) {
-            targetPath = targetPath === '/' ? `/new/${page}/` : `${targetPath}${page}/`;
+    // Path of page `n` of the requested list. Category lists paginate as `<path><n>/`; the home list as `/new/<n>/`.
+    let listKey;
+    let pathFor;
+    if (search) {
+        const querySlug = slugify(search);
+        listKey = `search:${querySlug}`;
+        pathFor = page => (page === 1 ? `/search/${querySlug}/` : `/search/${querySlug}/${page}/`);
+    } else {
+        let basePath = CATEGORY_MAP[catalogId] || '/';
+        if (extra.genre) {
+            const cleanGenre = extra.genre.replace(/^Thể loại:\s*/i, '').trim().toLowerCase();
+            const mapped = GENRE_MAP[slugify(cleanGenre)];
+            if (mapped) basePath = mapped;
         }
-    } else if (page > 1) {
-        targetPath = targetPath === '/' ? `/new/${page}/` : `${targetPath}${page}/`;
+        listKey = basePath;
+        pathFor = page => (page === 1 ? basePath : (basePath === '/' ? `/new/${page}/` : `${basePath}${page}/`));
     }
 
-    const cacheKey = `vlxx:catalog:${catalogId}:${targetPath}`;
-    const cached = cache.get(cacheKey);
-    if (cached) return cached;
-
-    try {
-        const res = await client.get(targetPath);
-        const items = parseVideoList(res.data);
-
-        const metas = items.map(item => {
+    const fetchPage = async (page) => {
+        const res = await client.get(pathFor(page));
+        return parseVideoList(res.data).map(item => {
             const genres = ['18+'];
             if (item.ribbon) genres.push(item.ribbon);
-
             return {
                 id: `vlxx:${item.slug}:${item.id}`,
                 name: item.title,
@@ -147,13 +141,12 @@ async function getCatalog(catalogId, type, extra = {}) {
                 genres: genres
             };
         });
+    };
 
-        if (metas.length > 0) {
-            cache.set(cacheKey, metas, 900); // 15 mins cache
-        }
-        return metas;
+    try {
+        return await pagedList({ key: `vlxx:${listKey}`, skip, want: 30, fetchPage, ttl: 900 });
     } catch (err) {
-        console.error(`[VLXX Catalog Error] ${targetPath}:`, err.message);
+        console.error(`[VLXX Catalog Error] ${listKey}:`, err.message);
         return [];
     }
 }

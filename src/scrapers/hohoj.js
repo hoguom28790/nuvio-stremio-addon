@@ -1,5 +1,6 @@
 const axios = require('axios');
 const cache = require('../utils/cache');
+const { pagedList } = require('../utils/pagedList');
 
 const BASE_URL = 'https://hohoj.tv';
 const LANG = '/lang_en';
@@ -109,25 +110,19 @@ async function getCatalog(catalogId, type, extra = {}, host) {
     if (extra.search && String(extra.search).trim()) return [];
 
     const base = GENRE_MAP[extra.genre] || GENRE_MAP['Mới Nhất'];
-    const singlePage = base === `${LANG}/`;
-    const sizeKey = `hohoj:psize:${base}`;
-    const pageSize = cache.get(sizeKey) || DEFAULT_PAGE_SIZE;
-    const page = extra.skip ? Math.max(1, Math.round(Number(extra.skip) / pageSize) + 1) : 1;
-    if (singlePage && page > 1) return [];
-    const url = page > 1 ? `${base}${base.includes('?') ? '&' : '?'}p=${page}` : base;
+    const singlePage = base === `${LANG}/`; // the home page has no pagination
+    const skip = parseInt(extra.skip, 10) || 0;
 
-    const cacheKey = `hohoj:catalog:${url}`;
-    const cached = cache.get(cacheKey);
-    if (cached) return cached;
+    const fetchPage = async (page) => {
+        if (singlePage && page > 1) return [];
+        const url = page > 1 ? `${base}${base.includes('?') ? '&' : '?'}p=${page}` : base;
+        return parseList(await fetchHtml(url)).map(item => toMeta(item, host));
+    };
 
     try {
-        const items = parseList(await fetchHtml(url));
-        const metas = items.map(item => toMeta(item, host));
-        if (page === 1 && metas.length > 0) cache.set(sizeKey, metas.length, 86400);
-        if (metas.length > 0) cache.set(cacheKey, metas, 900);
-        return metas;
+        return await pagedList({ key: `hohoj:${base}`, skip, want: DEFAULT_PAGE_SIZE, fetchPage });
     } catch (err) {
-        console.error(`[HoHoJ Catalog Error] ${url}:`, err.message);
+        console.error(`[HoHoJ Catalog Error] ${base}:`, err.message);
         return [];
     }
 }

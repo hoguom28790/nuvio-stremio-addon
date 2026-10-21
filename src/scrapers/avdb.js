@@ -1,5 +1,6 @@
 const axios = require('axios');
 const cache = require('../utils/cache');
+const { pagedList } = require('../utils/pagedList');
 
 const BASE_URL = 'https://avdbapi.com/api.php/provide/vod';
 const EMBED_BASE = 'https://upload18.org/play/index';
@@ -45,39 +46,34 @@ function slugify(str) {
 }
 
 async function getCatalog(catalogId, type, extra = {}) {
-    const cacheKey = `avdb:cat:${catalogId}:${JSON.stringify(extra)}`;
-    const cached = cache.get(cacheKey);
-    if (cached) return cached;
-
-    try {
-        let typeId = TYPE_MAPPING[catalogId] || 0;
-        if (extra.genre) {
-            const cleanGenre = slugify(extra.genre);
-            if (GENRE_MAP[cleanGenre] !== undefined) {
-                typeId = GENRE_MAP[cleanGenre];
-            }
+    let typeId = TYPE_MAPPING[catalogId] || 0;
+    if (extra.genre) {
+        const cleanGenre = slugify(extra.genre);
+        if (GENRE_MAP[cleanGenre] !== undefined) {
+            typeId = GENRE_MAP[cleanGenre];
         }
+    }
+    const search = extra.search ? String(extra.search).trim() : '';
+    const skip = parseInt(extra.skip, 10) || 0;
 
-        const page = extra.skip ? Math.floor(extra.skip / 24) + 1 : 1;
-
+    // Every list (browse and search) is paged with `pg`; before, a search sent no page so each scroll repeated page 1
+    const urlFor = (page) => {
         let url = `${BASE_URL}?ac=detail`;
-        if (extra.search) {
-            url += `&wd=${encodeURIComponent(extra.search)}`;
-        } else if (typeId > 0) {
-            url += `&t=${typeId}&pg=${page}`;
-        } else {
-            url += `&pg=${page}`;
-        }
+        if (search) url += `&wd=${encodeURIComponent(search)}&pg=${page}`;
+        else if (typeId > 0) url += `&t=${typeId}&pg=${page}`;
+        else url += `&pg=${page}`;
+        return url;
+    };
 
-        const res = await axios.get(url, {
+    const fetchPage = async (page) => {
+        const res = await axios.get(urlFor(page), {
             timeout: 10000,
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
         });
-
         const list = res.data?.list || [];
-        const metas = list.map(item => ({
+        return list.map(item => ({
             id: `avdb:${item.id}`,
             type: 'movie',
             name: item.name || item.movie_code || 'AVDB Video',
@@ -85,9 +81,10 @@ async function getCatalog(catalogId, type, extra = {}) {
             posterShape: 'poster',
             description: `Mã phim: ${item.movie_code || 'N/A'}\nThể loại: ${item.type_name || ''}\nThời lượng: ${item.time || ''}\nDiễn viên: ${Array.isArray(item.actor) ? item.actor.join(', ') : (item.actor || 'N/A')}`
         }));
+    };
 
-        cache.set(cacheKey, metas, 600);
-        return metas;
+    try {
+        return await pagedList({ key: `avdb:${search ? `search:${search}` : `t${typeId}`}`, skip, want: 24, fetchPage });
     } catch (err) {
         console.error(`[AVDB Catalog Error] ${catalogId}:`, err.message);
         return [];

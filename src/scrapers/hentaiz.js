@@ -87,6 +87,102 @@ function getSlugMap() {
     return slugMap || new Map();
 }
 
+// ---- New releases -------------------------------------------------------------------------------------------------
+// The static catalog is a snapshot and never learns about new episodes. The site's home page embeds its newest
+// episodes (SvelteKit streams them as object literals), so they are read from there at most every 15 minutes and put
+// in front of the catalog. Meta and streams of an episode the snapshot lacks are already resolved from the site.
+const LIVE_REFRESH_MS = 15 * 60 * 1000;
+const LIVE_RETRY_MS = 2 * 60 * 1000;
+let liveRefreshedAt = 0;
+let liveRefreshing = null;
+
+function jsString(raw) {
+    try { return JSON.parse(`"${raw}"`); } catch (e) { return raw; }
+}
+
+/** Episodes listed in the home page HTML: [{epId, title, slug, episodeNumber, poster, background, studios}] */
+function parseHomeEpisodes(html) {
+    const text = String(html || '');
+    const starts = [...text.matchAll(/\{id:"([A-Za-z0-9_-]{6,})",title:"((?:[^"\\]|\\.)*)",slug:"([a-z0-9][a-z0-9-]*)"/g)];
+    const out = [];
+    const seen = new Set();
+    starts.forEach((m, i) => {
+        const slug = m[3];
+        if (seen.has(slug)) return;
+        const end = Math.min(i + 1 < starts.length ? starts[i + 1].index : text.length, m.index + 1500);
+        const chunk = text.slice(m.index, end);
+        const num = chunk.slice(0, 400).match(/episodeNumber:(\d+)/); // only episodes carry this
+        if (!num) return;
+        seen.add(slug);
+        const poster = (chunk.match(/posterImage:\{filePath:"([^"]+)"/) || [])[1];
+        const backdrop = (chunk.match(/backdropImage:\{filePath:"([^"]+)"/) || [])[1];
+        const studios = [...chunk.matchAll(/studio:\{name:"((?:[^"\\]|\\.)*)"/g)].map(x => jsString(x[1]));
+        out.push({
+            epId: m[1],
+            title: jsString(m[2]),
+            slug,
+            episodeNumber: parseInt(num[1], 10),
+            poster: poster ? `${STORAGE_URL}${poster}` : undefined,
+            background: backdrop ? `${STORAGE_URL}${backdrop}` : undefined,
+            posterPath: poster || backdrop || '',
+            studios: studios.join(', ')
+        });
+    });
+    return out;
+}
+
+function liveEntry(ep) {
+    const y = ep.posterPath.match(/^\/(20\d{2})\//);
+    return {
+        id: `hentaiz:${ep.slug}`,
+        slug: ep.slug,
+        epId: ep.epId,
+        title: ep.title,
+        episodeNumber: ep.episodeNumber,
+        poster: ep.poster,
+        background: ep.background,
+        studios: ep.studios,
+        description: '',
+        genres: [],
+        releaseYear: y ? parseInt(y[1], 10) : new Date().getUTCFullYear(),
+        contentRating: 'CENSORED',
+        live: true
+    };
+}
+
+async function refreshLiveEpisodes() {
+    if (Date.now() - liveRefreshedAt < LIVE_REFRESH_MS) return;
+    if (liveRefreshing) return liveRefreshing;
+    liveRefreshing = (async () => {
+        let ok = false;
+        try {
+            const res = await client.get(`${BASE_URL}/`, { timeout: 8000, responseType: 'text', transformResponse: [d => d] });
+            const html = typeof res.data === 'string' ? res.data : '';
+            const known = getSlugMap();
+            const fresh = parseHomeEpisodes(html).filter(ep => !known.has(ep.slug)).map(liveEntry);
+            if (fresh.length > 0 && Array.isArray(cachedCatalog)) {
+                cachedCatalog = [...fresh, ...cachedCatalog];
+                initSlugMap();
+                cachedSeriesList = null;
+                cachedSeriesMap = null;
+                console.log(`[HentaiZ] ${fresh.length} new episode(s) from the home page`);
+            }
+            ok = html.length > 0;
+        } catch (e) {
+            console.error('[HentaiZ] Live refresh failed:', e.message);
+        } finally {
+            liveRefreshedAt = Date.now() - (ok ? 0 : LIVE_REFRESH_MS - LIVE_RETRY_MS);
+            liveRefreshing = null;
+        }
+    })();
+    return liveRefreshing;
+}
+
+async function ensureCatalog() {
+    await ensureStaticCatalog();
+    await refreshLiveEpisodes();
+}
+
 // Franchise definitions for multi-season/multi-part anime
 const FRANCHISES = [
     {
@@ -276,6 +372,7 @@ function getSeriesCatalog() {
             releaseInfo: yearStr,
             genres: Array.from(allGenres),
             isUncensored: isUncensored,
+            hasLive: matched.some(e => e.live),
             videos: videos
         };
 
@@ -351,6 +448,7 @@ function getSeriesCatalog() {
             releaseInfo: yearStr,
             genres: Array.from(allGenres),
             isUncensored: isUncensored,
+            hasLive: episodes.some(e => e.live),
             videos: videos
         };
 
@@ -448,11 +546,12 @@ function stripHtml(html) {
  * 1. GET CATALOG
  */
 async function getCatalog(type, extra = {}) {
-    await ensureStaticCatalog();
+    await ensureCatalog();
     const { seriesList } = getSeriesCatalog();
     const isMovie = type === 'movie';
 
-    let results = seriesList;
+    // Series with an episode that is new since the snapshot go first, even ahead of the pinned franchises
+    let results = [...seriesList.filter(s => s.hasLive), ...seriesList.filter(s => !s.hasLive)];
 
     // For movie catalog: filter to standalone single-episode movies/OVAs
     if (isMovie) {
@@ -508,7 +607,7 @@ async function getCatalog(type, extra = {}) {
  * 2. GET META
  */
 async function getMeta(type, id) {
-    await ensureStaticCatalog();
+    await ensureCatalog();
     const cleanId = id.replace(/^hentaiz:/, '').replace(/\.json$/, '');
     const slug = cleanId.split(':')[0];
 
@@ -674,7 +773,7 @@ async function fetchAndDecryptStreamData(videoId) {
  * 3. GET STREAM
  */
 async function getStream(id, type, host = 'hophimaddon.vercel.app') {
-    await ensureStaticCatalog();
+    await ensureCatalog();
     const cleanId = id.replace(/^hentaiz:/, '').replace(/\.json$/, '');
     let slug = cleanId.split(':')[0];
 
@@ -923,6 +1022,7 @@ async function getM3u8(videoId, quality, host = 'hophimaddon.hophim-4g6qbubt.wor
 }
 
 module.exports = {
+    parseHomeEpisodes,
     getCatalog,
     getMeta,
     getStream,

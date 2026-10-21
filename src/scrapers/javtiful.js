@@ -1,5 +1,6 @@
 const axios = require('axios');
 const cache = require('../utils/cache');
+const { pagedList } = require('../utils/pagedList');
 
 const BASE_URL = 'https://javtiful.com';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -108,12 +109,10 @@ function toMeta(item, host) {
 
 async function getCatalog(catalogId, type, extra = {}, host) {
     const search = extra.search ? String(extra.search).trim() : '';
-    const sizeKey = 'javtiful:psize';
-    const pageSize = cache.get(sizeKey) || DEFAULT_PAGE_SIZE;
-    const page = extra.skip ? Math.max(1, Math.round(Number(extra.skip) / pageSize) + 1) : 1;
+    const skip = parseInt(extra.skip, 10) || 0;
 
-    const params = new URLSearchParams();
     let path;
+    const params = new URLSearchParams();
     if (search) {
         path = '/vn/search';
         params.set('q', search);
@@ -122,22 +121,18 @@ async function getCatalog(catalogId, type, extra = {}, host) {
         const sort = GENRE_MAP[extra.genre];
         if (sort) params.set('sort', sort);
     }
-    if (page > 1) params.set('page', String(page));
-    const qs = params.toString();
-    const url = qs ? `${path}?${qs}` : path;
 
-    const cacheKey = `javtiful:catalog:${url}`;
-    const cached = cache.get(cacheKey);
-    if (cached) return cached;
+    const fetchPage = async (page) => {
+        const p = new URLSearchParams(params);
+        if (page > 1) p.set('page', String(page));
+        const qs = p.toString();
+        return parseList(await fetchHtml(qs ? `${path}?${qs}` : path)).map(item => toMeta(item, host));
+    };
 
     try {
-        const items = parseList(await fetchHtml(url));
-        const metas = items.map(item => toMeta(item, host));
-        if (page === 1 && metas.length > 0) cache.set(sizeKey, metas.length, 86400);
-        if (metas.length > 0) cache.set(cacheKey, metas, 900);
-        return metas;
+        return await pagedList({ key: `javtiful:${path}?${params.toString()}`, skip, want: DEFAULT_PAGE_SIZE, fetchPage });
     } catch (err) {
-        console.error(`[Javtiful Catalog Error] ${url}:`, err.message);
+        console.error(`[Javtiful Catalog Error] ${path}:`, err.message);
         return [];
     }
 }
