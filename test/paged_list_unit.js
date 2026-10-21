@@ -4,9 +4,10 @@ const cache = require('../src/utils/cache');
 const { pagedList } = require('../src/utils/pagedList');
 
 const fakeSite = (total, size, calls) => async (page) => {
-    if (calls) calls.push(page);
     const from = (page - 1) * size;
-    return Array.from({ length: Math.max(0, Math.min(size, total - from)) }, (_, i) => ({ id: `m${from + i}` }));
+    const items = Array.from({ length: Math.max(0, Math.min(size, total - from)) }, (_, i) => ({ id: `m${from + i}` }));
+    if (calls && items.length) calls.push(page); // fetches that returned movies (empty answers are never cached)
+    return items;
 };
 
 // Walk a catalog the way Stremio does: skip += number of items received, until an empty answer
@@ -45,19 +46,42 @@ async function walk(key, fetchPage, { coldEachCall = false, want = 24 } = {}) {
     const idsIgnoring = await walk('ignoring', ignoring);
     assert.deepStrictEqual(idsIgnoring, Array.from({ length: 10 }, (_, i) => `x${i}`));
 
+    // neighbouring pages that overlap (each page repeats the last 2 items of the previous one, or a pinned item)
+    for (const cold of [false, true]) {
+        cache.clear();
+        const size = 20, step = 18, total = 70;
+        const overlapping = async (page) => {
+            const from = (page - 1) * step;
+            return Array.from({ length: Math.max(0, Math.min(size, total - from)) }, (_, i) => ({ id: `o${from + i}` }));
+        };
+        const ids = await walk(`overlap-${cold}`, overlapping, { coldEachCall: cold });
+        assert.strictEqual(new Set(ids).size, ids.length, `overlapping pages: no repeats (cold ${cold})`);
+        assert.deepStrictEqual(ids, Array.from({ length: total }, (_, i) => `o${i}`), `overlapping pages: complete (cold ${cold})`);
+    }
+    // a pinned block repeated at the top of every page
+    cache.clear();
+    const pinned = async (page) => {
+        const from = (page - 1) * 22;
+        const body = Array.from({ length: Math.max(0, Math.min(22, 80 - from)) }, (_, i) => ({ id: `b${from + i}` }));
+        return body.length ? [{ id: 'pin1' }, { id: 'pin2' }, ...body] : [];
+    };
+    const idsPinned = await walk('pinned', pinned);
+    assert.strictEqual(new Set(idsPinned).size, idsPinned.length, 'pinned block shown once');
+    assert.strictEqual(idsPinned.length, 82, 'pinned block + every movie');
+
     // an empty first page is an empty catalog; failures do not throw
     cache.clear();
     assert.deepStrictEqual(await pagedList({ key: 'empty', skip: 0, fetchPage: async () => [] }), []);
     cache.clear();
     assert.deepStrictEqual(await pagedList({ key: 'boom', skip: 0, fetchPage: async () => { throw new Error('x'); } }), []);
 
-    // page cache: walking twice only refetches the trailing empty page (empty answers are deliberately not cached)
+    // page cache: walking twice never refetches a page that had movies
     cache.clear();
     const calls = [];
     await walk('cached', fakeSite(50, 24, calls));
     const firstRun = calls.length;
     await walk('cached', fakeSite(50, 24, calls));
-    assert.ok(calls.length <= firstRun + 1, 'second walk served from the page cache');
+    assert.strictEqual(calls.length, firstRun, 'second walk served from the page cache');
 
     console.log('paged_list_unit: all checks passed');
 })().catch(e => { console.error(e); process.exit(1); });
