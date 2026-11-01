@@ -32,15 +32,20 @@ const ACTRESSES = {
     'Li Nana': 'li-nana'
 };
 
-// Menu of the site. Lists paginate as <base>page/N/
+// Menu of the site (theme "javhaynew"). Lists paginate as <base>page/N/
 const GENRE_MAP = {
     'Mới Nhất': '/',
+    'Phim Sex JAV': '/phim-sex-jav/',
     'Loạn Luân': '/jav-loan-luan/',
+    'Hiếp Dâm': '/sex-hiep-dam/',
     'Trung Quốc': '/phim-sex-trung-quoc/',
     'Âu Mỹ': '/sex-au-my/',
     'Uncen (Không Che)': '/sex-khong-che/',
     'Vietsub': '/jav-vietsub/',
-    'Sex Hay': '/phim-sex-hay/'
+    'Sex Hay': '/phim-sex-hay/',
+    'Sex HD': '/sex-hd/',
+    'Vụng Trộm': '/jav-vung-trom/',
+    'Phim Sex Việt': '/phim-sex-viet/'
 };
 for (const [label, slug] of Object.entries(ACTRESSES)) GENRE_MAP[`👤 ${label}`] = `/dien-vien/${slug}/`;
 
@@ -49,6 +54,7 @@ function decode(str) {
         .replace(/<[^>]+>/g, '')
         .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'")
         .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#8211;/g, '–')
+        .replace(/&#(\d+);/g, (m, n) => { try { return String.fromCodePoint(parseInt(n, 10)); } catch (e) { return m; } })
         .replace(/\s+/g, ' ').trim();
 }
 
@@ -73,23 +79,35 @@ function parseId(id) {
     return m ? m[1] : null;
 }
 
+const POST_ANCHOR_RE = /<a\b[^>]*href="https?:\/\/(?:www\.)?javhay\.buzz\/([a-z0-9]+(?:-[a-z0-9]+){2,})\/"[^>]*>/g;
+const COVER_RE = /(https?:\/\/(?:www\.)?javhay\.buzz\/wp-content\/uploads\/\d{4}\/\d{2}\/([a-z0-9]+(?:-[a-z0-9]+)*?)(?:-\d{2,4}x\d{2,4})?\.(?:avif|jpe?g|webp|png))/;
+
 /**
- * Parse a list page: every `<div class="thumbBlock">` with `<a href="https://javhay.buzz/<slug>/" title="..">` + thumbnail.
+ * Parse a list page without depending on the theme's class names (it changed from `thumbBlock` to "javhaynew"): a movie
+ * is a link to `/<slug>/` for which the page also shows the cover `wp-content/uploads/<yyyy>/<mm>/<slug>[-WxH].<ext>`
+ * (categories, tags and menu links have no such cover). Results keep the order of first appearance.
  */
 function parseList(html) {
+    const text = String(html || '');
+    const covers = new Map(); // slug -> { src, alt }
+    for (const m of text.matchAll(/<img\b[^>]*>/g)) {
+        const tag = m[0];
+        const src = (tag.match(/\b(?:src|data-src|data-lazy-src)="([^"]+)"/g) || []).map(a => a.replace(/^[^"]*"|"$/g, '')).find(u => COVER_RE.test(u));
+        if (!src) continue;
+        const slug = src.match(COVER_RE)[2];
+        if (!covers.has(slug)) covers.set(slug, { src: src.match(COVER_RE)[1], alt: (tag.match(/\balt="([^"]*)"/) || [])[1] || '' });
+    }
+
     const items = [];
     const seen = new Set();
-    const blocks = String(html || '').split('class="thumbBlock"');
-    for (const block of blocks.slice(1)) {
-        const anchor = (block.match(/<a\s[^>]*href="https?:\/\/(?:www\.)?javhay\.buzz\/[A-Za-z0-9_-]+\/"[^>]*>/) || [])[0];
-        if (!anchor) continue;
-        const slug = (anchor.match(/href="https?:\/\/(?:www\.)?javhay\.buzz\/([A-Za-z0-9_-]+)\/"/) || [])[1];
-        const title = (anchor.match(/title="([^"]*)"/) || [])[1] || (block.match(/<img[^>]+alt="([^"]*)"/) || [])[1] || slug;
-        if (!slug || seen.has(slug)) continue;
+    for (const m of text.matchAll(POST_ANCHOR_RE)) {
+        const slug = m[1];
+        if (seen.has(slug) || !covers.has(slug)) continue;
         seen.add(slug);
-        const img = block.match(/<img[^>]+src="([^"]+)"/);
-        const label = block.match(/class="video-label">([^<]*)</);
-        items.push({ slug, title: decode(title), poster: img ? img[1] : '', label: label ? decode(label[1]) : '' });
+        const cover = covers.get(slug);
+        const title = (m[0].match(/\btitle="([^"]*)"/) || [])[1] || cover.alt || slug.replace(/-/g, ' ');
+        const label = (text.slice(m.index, m.index + 900).match(/class="(?:video-label|badge[^"]*)">([^<]{2,20})</) || [])[1];
+        items.push({ slug, title: decode(title), poster: cover.src, label: label ? decode(label) : '' });
     }
     return items;
 }
