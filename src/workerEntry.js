@@ -1223,6 +1223,44 @@ export default {
             return new Response(JSON.stringify(results, null, 1), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
         }
 
+        // Javtiful playback probe: page -> playback ticket -> POST /<lang>/video/<id>/playback, exactly as the site's player does
+        if (pathname === '/javtiful/probe') {
+            const target = url.searchParams.get('url') || 'https://javtiful.com/vi/video/115304/hikr-082';
+            const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+            const out = { target };
+            try {
+                const r = await fetch(target, { headers: { 'User-Agent': UA, 'Referer': 'https://javtiful.com/' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                const html = await r.text();
+                out.page = { status: r.status, length: html.length };
+                const setCookie = r.headers.get('set-cookie') || '';
+                const cookies = setCookie.split(/,(?=\s*[A-Za-z0-9_.-]+=)/).map(c => c.split(';')[0].trim()).filter(Boolean);
+                out.cookieNames = cookies.map(c => c.split('=')[0]);
+                const pm = html.match(/"playback":\{"endpoint":"([^"]+)","ticket":"([^"]+)"/);
+                if (!pm) { out.error = 'playback config not found in the page'; out.hint = (html.match(/.{0,80}playback.{0,160}/gi) || []).slice(0, 4); }
+                else {
+                    const endpoint = new URL(pm[1].replace(/\\\//g, '/'), 'https://javtiful.com').href;
+                    out.endpoint = endpoint;
+                    out.ticketShape = pm[2].split('.').map((x, i) => (i < 4 ? x : `${x.slice(0, 6)}…(${x.length})`)).join('.');
+                    const post = async (ticket) => {
+                        const pr = await fetch(endpoint, {
+                            method: 'POST',
+                            headers: { 'User-Agent': UA, 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest', 'Referer': target, 'Origin': 'https://javtiful.com', ...(cookies.length ? { 'Cookie': cookies.join('; ') } : {}) },
+                            body: 'ticket=' + encodeURIComponent(ticket),
+                            signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined
+                        });
+                        const txt = await pr.text();
+                        let json = null; try { json = JSON.parse(txt); } catch (e) { /* not JSON */ }
+                        return { status: pr.status, type: pr.headers.get('content-type'), length: txt.length, json: json ? redact(json) : undefined, body: json ? undefined : txt.slice(0, 600) };
+                    };
+                    const redact = (o) => JSON.parse(JSON.stringify(o, (k, v) => (typeof v === 'string' && v.length > 300 ? `${v.slice(0, 300)}…(${v.length})` : v)));
+                    out.post = await post(pm[2]);
+                    const renew = out.post.json && (out.post.json.renewTicket || (out.post.json.data && out.post.json.data.renewTicket));
+                    if (out.post.status === 409 && renew) out.postAfterRenew = await post(String(renew));
+                }
+            } catch (e) { out.error = e.message; }
+            return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
         // Javtiful list structure: sample cards, pagination, menu links, search form
         if (pathname === '/javtiful/list') {
             const target = url.searchParams.get('url') || 'https://javtiful.com/vi/videos';
