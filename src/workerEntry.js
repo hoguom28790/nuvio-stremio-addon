@@ -142,27 +142,8 @@ async function proxyViaRender(renderUrl) {
 // Hosts JavHay's segments live on (they moved from tiktokcdn.com to ibyteimg.com): the route is not an open proxy
 const JAVHAY_SEGMENT_HOSTS = /(^|\.)(fqcdn\.top|tiktokcdn\.com|ibyteimg\.com|fb-cdn-xx\.sbs)$/i;
 
-// AVIF -> JPEG for devices that cannot decode AVIF: wsrv.nl first (with a User-Agent, address without the scheme), then
-// Cloudflare's own image transformation. Returns the JPEG body or null.
-async function avifToJpeg(original) {
-    const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
-    const bare = original.replace(/^https?:\/\//, '');
-    const cache = { cacheEverything: true, cacheTtlByStatus: { '200-299': 604800, '400-599': 0 } };
-    const attempts = [
-        () => fetch(`https://wsrv.nl/?url=${encodeURIComponent(bare)}&output=jpg&q=82&w=640`, { headers: { 'User-Agent': UA }, cf: cache }),
-        () => fetch(`https://wsrv.nl/?url=${encodeURIComponent(original)}&output=jpg&q=82&w=640`, { headers: { 'User-Agent': UA }, cf: cache }),
-        () => fetch(original, { headers: { 'User-Agent': UA, 'Referer': 'https://javhay.buzz/' }, cf: { image: { format: 'jpeg', width: 640, quality: 82 }, ...cache } })
-    ];
-    for (const run of attempts) {
-        try {
-            const res = await run();
-            if (res.ok && /^image\/jpe?g/i.test(res.headers.get('content-type') || '')) return res.body;
-        } catch (e) { /* next converter */ }
-    }
-    return null;
-}
-
-// Names to try for a JavHay cover (relative to /wp-content/uploads/): jpg and webp are friendlier than avif, and the
+// Names to try for a JavHay cover (relative to /wp-content/uploads/): jpg and webp are friendlier than avif (older posts
+// exist as AVIF only: wsrv.nl blocks the domain and Cloudflare's resizer rejects AVIF, so those stay AVIF), and the
 // size suffix of a thumbnail (-768x513) may be missing on the site, so the plain name is tried as well.
 function javhayPosterNames(rel) {
     const m = String(rel).match(/^(\d{4}\/\d{2}\/)([A-Za-z0-9_-]+?)(-\d{2,4}x\d{2,4})?\.(avif|jpe?g|webp|png)$/i);
@@ -558,20 +539,6 @@ export default {
             };
             for (const name of names) {
                 const original = `https://javhay.buzz/wp-content/uploads/${name}`;
-                if (/\.avif$/i.test(name)) {
-                    // many devices cannot decode AVIF: turn it into a JPEG (cached at the edge); fall back to the AVIF itself
-                    const jpeg = await avifToJpeg(original);
-                    if (jpeg) {
-                        return new Response(jpeg, {
-                            headers: {
-                                ...CORS_HEADERS,
-                                'Content-Type': 'image/jpeg',
-                                'Cache-Control': 'public, max-age=604800, immutable',
-                                'CDN-Cache-Control': 'public, max-age=604800'
-                            }
-                        });
-                    }
-                }
                 try {
                     const upstream = await fetch(original, { headers, cf: { cacheEverything: true, cacheTtlByStatus: { '200-299': 604800, '404': 600, '500-599': 0 } } });
                     const type = upstream.headers.get('content-type') || '';
@@ -1080,29 +1047,7 @@ export default {
                             }
                             out2.push(entry);
                         }
-                        const avifEntry = out2.find(e => e.ok && /avif ->/.test(e.tried[e.tried.length - 1] || ''));
-                        let avifConversion = null;
-                        if (avifEntry) {
-                            const orig = `https://javhay.buzz/wp-content/uploads/${avifEntry.poster}`;
-                            const bare = orig.replace(/^https?:\/\//, '');
-                            const tries = {
-                                wsrv_noUA: () => fetch(`https://wsrv.nl/?url=${encodeURIComponent(orig)}&output=jpg&q=82&w=640`),
-                                wsrv_UA: () => fetch(`https://wsrv.nl/?url=${encodeURIComponent(orig)}&output=jpg&q=82&w=640`, { headers: { 'User-Agent': UA } }),
-                                wsrv_bareUrl: () => fetch(`https://wsrv.nl/?url=${encodeURIComponent(bare)}&output=jpg&q=82&w=640`, { headers: { 'User-Agent': UA } }),
-                                weserv_UA: () => fetch(`https://images.weserv.nl/?url=${encodeURIComponent(bare)}&output=jpg&q=82&w=640`, { headers: { 'User-Agent': UA } }),
-                                cfImage: () => fetch(orig, { headers: { 'User-Agent': UA, 'Referer': 'https://javhay.buzz/' }, cf: { image: { format: 'jpeg', width: 640, quality: 82 } } })
-                            };
-                            avifConversion = { poster: avifEntry.poster, tries: {} };
-                            for (const [name, run] of Object.entries(tries)) {
-                                try {
-                                    const cr = await Promise.race([run(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 9000))]);
-                                    const bytes = new Uint8Array(await cr.arrayBuffer());
-                                    const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8;
-                                    avifConversion.tries[name] = { status: cr.status, type: cr.headers.get('content-type'), bytes: bytes.length, isJpeg, body: isJpeg || bytes.length > 400 ? undefined : new TextDecoder().decode(bytes) };
-                                } catch (e) { avifConversion.tries[name] = { error: e.message }; }
-                            }
-                        }
-                        return { items: out2, failing: out2.filter(e => !e.ok).length, avifOnly: out2.filter(e => e.ok && /avif ->/.test(e.tried[e.tried.length - 1] || '')).length, avifConversion };
+                        return { items: out2, failing: out2.filter(e => !e.ok).length, avifOnly: out2.filter(e => e.ok && /avif ->/.test(e.tried[e.tried.length - 1] || '')).length };
                     });
                     if (items[0] || guessSlug) {
                         const slug = items[0] ? items[0].slug : guessSlug;
