@@ -537,8 +537,26 @@ export default {
                 'Referer': 'https://javhay.buzz/'
             };
             for (const name of names) {
+                const original = `https://javhay.buzz/wp-content/uploads/${name}`;
+                if (/\.avif$/i.test(name)) {
+                    // many devices cannot decode AVIF: turn it into a JPEG (cached at the edge); fall back to the AVIF itself
+                    try {
+                        const conv = await fetch(`https://wsrv.nl/?url=${encodeURIComponent(original)}&output=jpg&q=82&w=640`, { cf: { cacheEverything: true, cacheTtlByStatus: { '200-299': 604800, '400-599': 0 } } });
+                        const ctype = conv.headers.get('content-type') || '';
+                        if (conv.ok && /^image\/jpe?g/i.test(ctype)) {
+                            return new Response(conv.body, {
+                                headers: {
+                                    ...CORS_HEADERS,
+                                    'Content-Type': 'image/jpeg',
+                                    'Cache-Control': 'public, max-age=604800, immutable',
+                                    'CDN-Cache-Control': 'public, max-age=604800'
+                                }
+                            });
+                        }
+                    } catch (err) { /* serve the AVIF as it is */ }
+                }
                 try {
-                    const upstream = await fetch(`https://javhay.buzz/wp-content/uploads/${name}`, { headers, cf: { cacheEverything: true, cacheTtlByStatus: { '200-299': 604800, '404': 600, '500-599': 0 } } });
+                    const upstream = await fetch(original, { headers, cf: { cacheEverything: true, cacheTtlByStatus: { '200-299': 604800, '404': 600, '500-599': 0 } } });
                     const type = upstream.headers.get('content-type') || '';
                     if (upstream.ok && /^image\//i.test(type)) {
                         return new Response(upstream.body, {
@@ -1045,7 +1063,17 @@ export default {
                             }
                             out2.push(entry);
                         }
-                        return { items: out2, failing: out2.filter(e => !e.ok).length };
+                        let avifConversion = null;
+                        const avifEntry = out2.find(e => e.ok && /avif ->/.test(e.tried[e.tried.length - 1] || ''));
+                        if (avifEntry) {
+                            const orig = `https://javhay.buzz/wp-content/uploads/${avifEntry.poster}`;
+                            try {
+                                const cr = await fetch(`https://wsrv.nl/?url=${encodeURIComponent(orig)}&output=jpg&q=82&w=640`, { signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                                const b = new Uint8Array(await cr.arrayBuffer());
+                                avifConversion = { poster: avifEntry.poster, status: cr.status, type: cr.headers.get('content-type'), bytes: b.length, isJpeg: b[0] === 0xff && b[1] === 0xd8 };
+                            } catch (e) { avifConversion = { error: e.message }; }
+                        }
+                        return { items: out2, failing: out2.filter(e => !e.ok).length, avifOnly: out2.filter(e => e.ok && /avif ->/.test(e.tried[e.tried.length - 1] || '')).length, avifConversion };
                     });
                     if (items[0] || guessSlug) {
                         const slug = items[0] ? items[0].slug : guessSlug;

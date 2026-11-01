@@ -242,8 +242,8 @@ async function requestPlayback(pb, pageUrl, cookie) {
 
 /**
  * Sources of a movie: the playback endpoint (current site), or `playerSources` / <source> tags in the page (old site).
- * The signed MP4 link lives an hour, so the stream is cached for 10 minutes only. The player fetches it straight from the
- * site's CDN, no Worker bandwidth.
+ * The signed MP4 link lives an hour, so the stream is cached for 10 minutes only. It answers 302 to a presigned R2 URL (no
+ * Referer needed) that the player follows by itself: no Worker bandwidth.
  */
 async function getStream(id) {
     const p = parseId(id);
@@ -273,8 +273,7 @@ async function getStream(id) {
             url: s.src,
             behaviorHints: {
                 notWebReady: false,
-                bingeGroup: `javtiful-${s.size || 'mp4'}`,
-                proxyHeaders: { request: { 'User-Agent': USER_AGENT, 'Referer': `${BASE_URL}/` } }
+                bingeGroup: `javtiful-${s.size || 'mp4'}`
             }
         }));
         cache.set(cacheKey, streams, 600);
