@@ -33,8 +33,8 @@ const SOURCES = [
     {
         name: 'javtiful', size: 12, mod: '../src/scrapers/javtiful',
         call: (m, skip) => m.getCatalog('javtiful-movie', 'movie', { skip }, 'w.dev'),
-        match: u => (u.startsWith('/vn/videos') ? num(/[?&]page=(\d+)/, u) || 1 : null),
-        card: i => `<article class="video-card"><a href="/vn/video/${1000 + i}/slug-${i}" class="video-card__thumbnail"><img data-front-lazy-src="/uploads/uploads/videos/thumbs/2026/10/17/${i}.jpg"></a><a href="/vn/video/${1000 + i}/slug-${i}" class="video-card__title" title="Title ${i}">T</a></article>`,
+        match: u => (u.startsWith('/vi/videos') ? num(/[?&]page=(\d+)/, u) || 1 : null),
+        card: i => `<article class="video-card"><a href="/vi/video/${1000 + i}/slug-${i}" class="video-card__thumbnail"><img data-front-lazy-src="/uploads/uploads/videos/thumbs/2026/10/17/${i}.jpg"></a><a href="/vi/video/${1000 + i}/slug-${i}" class="video-card__title" title="Title ${i}">T</a></article>`,
         wrap: c => c
     },
     {

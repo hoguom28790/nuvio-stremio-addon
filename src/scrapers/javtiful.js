@@ -5,6 +5,8 @@ const { pagedList } = require('../utils/pagedList');
 const BASE_URL = 'https://javtiful.com';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const DEFAULT_PAGE_SIZE = 24;
+// Language segment of the site's paths. It was /vn/ and is now /vi/ (the old one redirects); the parser accepts any.
+const LANG = 'vi';
 
 const client = axios.create({
     baseURL: BASE_URL,
@@ -12,7 +14,7 @@ const client = axios.create({
     headers: { 'User-Agent': USER_AGENT, 'Referer': `${BASE_URL}/` }
 });
 
-// Sort options of /vn/videos?sort=<value>
+// Sort options of /<lang>/videos?sort=<value>
 const GENRE_MAP = {
     'Mới Nhất': '',
     'Hot Hôm Nay': 'popular_today',
@@ -57,7 +59,7 @@ function parseId(id) {
 }
 
 /**
- * Parse a list page: every `<article class="video-card">` linking to /vn/video/<id>/<slug>. Partner (ad) cards are skipped.
+ * Parse a list page: every `<article class="video-card">` linking to /<lang>/video/<id>/<slug>. Partner (ad) cards are skipped.
  */
 function parseList(html) {
     const items = [];
@@ -65,7 +67,7 @@ function parseList(html) {
     const blocks = String(html || '').split('<article class="video-card');
     for (const block of blocks.slice(1)) {
         if (block.slice(0, 40).includes('video-card--partner')) continue;
-        const link = block.match(/href="\/(?:vn|en)\/video\/(\d+)\/([^"?#]+)"/);
+        const link = block.match(/href="(?:https?:\/\/(?:www\.)?javtiful\.com)?\/(?:[a-z]{2}\/)?video\/(\d+)\/([^"?#]+)"/);
         if (!link) continue;
         const key = link[1];
         if (seen.has(key)) continue;
@@ -114,10 +116,10 @@ async function getCatalog(catalogId, type, extra = {}, host) {
     let path;
     const params = new URLSearchParams();
     if (search) {
-        path = '/vn/search';
+        path = `/${LANG}/search`;
         params.set('q', search);
     } else {
-        path = '/vn/videos';
+        path = `/${LANG}/videos`;
         const sort = GENRE_MAP[extra.genre];
         if (sort) params.set('sort', sort);
     }
@@ -145,7 +147,7 @@ async function getMeta(type, id, host) {
     if (cached) return cached;
 
     try {
-        const html = await fetchHtml(`/vn/video/${p.vid}/${encodeURIComponent(p.slug)}`);
+        const html = await fetchHtml(`/${LANG}/video/${p.vid}/${encodeURIComponent(p.slug)}`);
         const og = (prop) => {
             const m = html.match(new RegExp(`<meta[^>]+property="og:${prop}"[^>]+content="([^"]*)"`, 'i'))
                 || html.match(new RegExp(`<meta[^>]+content="([^"]*)"[^>]+property="og:${prop}"`, 'i'));
@@ -210,7 +212,7 @@ async function getStream(id) {
     if (cached) return cached;
 
     try {
-        const html = await fetchHtml(`/vn/video/${p.vid}/${encodeURIComponent(p.slug)}`);
+        const html = await fetchHtml(`/${LANG}/video/${p.vid}/${encodeURIComponent(p.slug)}`);
         const sources = parseSources(html).sort((a, b) => (Number(b.size) || 0) - (Number(a.size) || 0));
         if (!sources.length) return [];
         const h1 = (html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/) || [])[1];

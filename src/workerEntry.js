@@ -975,15 +975,15 @@ export default {
             for (const id of ids) {
                 const row = out[id] = {};
                 if (id === 'javtiful') {
-                    const listUrl = 'https://javtiful.com/vn/videos';
+                    const listUrl = 'https://javtiful.com/vi/videos';
                     let items = [];
                     row.list = await timed(async () => {
                         const { html, info } = await page(listUrl, 'https://javtiful.com/');
                         items = javtiful.parseList(html);
-                        return { ...info, parsedItems: items.length, cardMarkers: (html.match(/<article class="video-card/g) || []).length, head: items.length ? undefined : html.replace(/\s+/g, ' ').slice(0, 300), videoLinks: items.length ? undefined : [...new Set([...html.matchAll(/href="([^"#]*\/video\/[^"#]*)"/g)].map(m => m[1]))].slice(0, 5) };
+                        return { ...info, parsedItems: items.length, cardMarkers: (html.match(/<article class="video-card/g) || []).length, sampleCard: items.length ? undefined : (html.match(/<article class="video-card[\s\S]{0,1200}/) || [])[0], head: items.length ? undefined : html.replace(/\s+/g, ' ').slice(0, 300), videoLinks: items.length ? undefined : [...new Set([...html.matchAll(/href="([^"#]*\/video\/[^"#]*)"/g)].map(m => m[1]))].slice(0, 5) };
                     });
                     if (items[0]) {
-                        const detail = `https://javtiful.com/vn/video/${items[0].vid}/${items[0].slug}`;
+                        const detail = `https://javtiful.com/vi/video/${items[0].vid}/${items[0].slug}`;
                         let src = null;
                         row.detail = await timed(async () => {
                             const { html, info } = await page(detail, listUrl);
@@ -1002,13 +1002,19 @@ export default {
                 } else if (id === 'javhay') {
                     const listUrl = 'https://javhay.buzz/';
                     let items = [];
+                    let guessSlug = null;
                     row.list = await timed(async () => {
                         const { html, info } = await page(listUrl, 'https://javhay.buzz/');
                         items = javhay.parseList(html);
-                        return { ...info, parsedItems: items.length, cardMarkers: (html.match(/class="thumbBlock"/g) || []).length, head: items.length ? undefined : html.replace(/\s+/g, ' ').slice(0, 300), links: items.length ? undefined : [...new Set([...html.matchAll(/href="(https?:\/\/[^"#]+)"/g)].map(m => m[1]))].slice(0, 8) };
+                        // a theme change breaks the card parser: find permalinks (/<slug>/ with several hyphens) another way
+                        const SKIP = /^(page|tag|category|dien-vien|wp-content|wp-json|wp-includes|feed|phim-sex-|sex-|jav-|lien-he|sitemap)/;
+                        const permalinks = [...new Set([...html.matchAll(/href="https?:\/\/javhay\.buzz\/([a-z0-9]+(?:-[a-z0-9]+){3,})\/"/g)].map(m => m[1]))].filter(sl => !SKIP.test(sl));
+                        if (!items.length && permalinks.length) guessSlug = permalinks[0];
+                        const at = guessSlug ? html.indexOf(`/${guessSlug}/`) : -1;
+                        return { ...info, parsedItems: items.length, cardMarkers: (html.match(/class="thumbBlock"/g) || []).length, permalinkCandidates: permalinks.slice(0, 5), sampleAroundFirstPermalink: at >= 0 ? html.slice(Math.max(0, at - 700), at + 900) : undefined, categoryLinks: items.length ? undefined : [...new Set([...html.matchAll(/href="(https?:\/\/javhay\.buzz\/[a-z0-9-]+\/)"/g)].map(m => m[1]))].filter(u => /\/(?:phim-sex|sex-|jav-)/.test(u)).slice(0, 12), head: items.length ? undefined : html.replace(/\s+/g, ' ').slice(0, 200) };
                     });
-                    if (items[0]) {
-                        const slug = items[0].slug;
+                    if (items[0] || guessSlug) {
+                        const slug = items[0] ? items[0].slug : guessSlug;
                         row.detail = await timed(async () => {
                             const { html, info } = await page(`https://javhay.buzz/${slug}/`, listUrl);
                             return { ...info, slug, dataIds: [...html.matchAll(/data-id="(\d+)"/g)].map(m => m[1]).slice(0, 4), hasPlayerDiv: /id="video-player"/.test(html) };
@@ -1212,20 +1218,20 @@ export default {
 
         // Javtiful list structure: sample cards, pagination, menu links, search form
         if (pathname === '/javtiful/list') {
-            const target = url.searchParams.get('url') || 'https://javtiful.com/vn/videos';
+            const target = url.searchParams.get('url') || 'https://javtiful.com/vi/videos';
             try {
                 const r = await fetch(target, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': 'https://javtiful.com/' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
                 const html = await r.text();
                 const parts = html.split(/(?=<[a-z]+[^>]*class="[^"]*\bvideo-card\b[^"]*")/).slice(1, 3).map(s => s.slice(0, 1800));
                 const hrefs = [...new Set([...html.matchAll(/href="([^"#]+)"/g)].map(m => m[1]))];
                 const pag = hrefs.filter(h => /[?&]page=|\/page\/|\/\d+$/.test(h) && !/video\//.test(h)).slice(0, 12);
-                const menu = hrefs.filter(h => /^\/(vn|en)?\/?(videos|categories|category|genre|tag|search|trending|popular|new|latest|hot|top)/i.test(h) || /\/(categories|category|search|trending|popular|newest|latest|hot|top)/i.test(h)).slice(0, 60);
+                const menu = hrefs.filter(h => /^\/([a-z]{2})?\/?(videos|categories|category|genre|tag|search|trending|popular|new|latest|hot|top)/i.test(h) || /\/(categories|category|search|trending|popular|newest|latest|hot|top)/i.test(h)).slice(0, 60);
                 const forms = [...html.matchAll(/<form[^>]*>[\s\S]{0,400}/gi)].map(m => m[0].replace(/\s+/g, ' ').slice(0, 400)).filter(f => /search/i.test(f)).slice(0, 3);
                 const cardCount = (html.match(/<article class="video-card/g) || []).length;
                 const title = (html.match(/<title>([\s\S]*?)<\/title>/i) || [])[1];
                 const head = parts.length ? undefined : html.replace(/\s+/g, ' ').slice(0, 600);
-                const videoLinks = [...new Set([...html.matchAll(/href="(\/(?:vn|en)\/video\/\d+\/[^"]+)"/g)].map(m => m[1]))].slice(0, 10);
-                const vi = html.search(/\/(?:vn|en)\/video\/\d+\//);
+                const videoLinks = [...new Set([...html.matchAll(/href="(\/(?:[a-z]{2}\/)?video\/\d+\/[^"]+)"/g)].map(m => m[1]))].slice(0, 10);
+                const vi = html.search(/\/(?:[a-z]{2}\/)?video\/\d+\//);
                 const sample = vi >= 0 ? html.slice(Math.max(0, vi - 300), vi + 1200) : undefined;
                 const noResult = (html.match(/[^>]{0,80}(?:không tìm thấy|no results?|not found|0 kết quả)[^<]{0,80}/i) || [])[0];
                 return new Response(JSON.stringify({ target, finalUrl: r.url, status: r.status, length: html.length, title, cardCount, videoLinks, noResult, sample, cards: parts, head: parts.length || sample ? undefined : head, pagination: pag, menu, searchForms: forms }, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
@@ -1236,7 +1242,7 @@ export default {
 
         // Javtiful diagnostics: <video id="front-player"> + playerSources of a movie page, then probe the first source
         if (pathname === '/javtiful/debug') {
-            const target = url.searchParams.get('url') || 'https://javtiful.com/vn/video/114709/tikb-229';
+            const target = url.searchParams.get('url') || 'https://javtiful.com/vi/video/114709/tikb-229';
             const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
             const out = { target };
             try {
