@@ -330,12 +330,17 @@ const sexmupCatalogs = [
 
 const javhayGenres = [
     "Mới Nhất",
+    "Phim Sex JAV",
     "Loạn Luân",
+    "Hiếp Dâm",
     "Trung Quốc",
     "Âu Mỹ",
     "Uncen (Không Che)",
     "Vietsub",
     "Sex Hay",
+    "Sex HD",
+    "Vụng Trộm",
+    "Phim Sex Việt",
     "👤 Shen Nana",
     "👤 Yua Mikami",
     "👤 Tsumugi Akari",

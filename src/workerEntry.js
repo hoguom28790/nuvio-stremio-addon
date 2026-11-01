@@ -139,6 +139,9 @@ async function proxyViaRender(renderUrl) {
     }
 }
 
+// Hosts JavHay's segments live on (they moved from tiktokcdn.com to ibyteimg.com): the route is not an open proxy
+const JAVHAY_SEGMENT_HOSTS = /(^|\.)(fqcdn\.top|tiktokcdn\.com|ibyteimg\.com|fb-cdn-xx\.sbs)$/i;
+
 // Video segment unwrapper function (strips 95-byte PNG header with streaming & unlimited bandwidth)
 async function handleSegmentProxy(targetUrl, referer) {
     if (!targetUrl) return new Response('Missing url query parameter', { status: 400, headers: CORS_HEADERS });
@@ -559,7 +562,7 @@ export default {
             const segUrl = url.searchParams.get('url') || '';
             let segHost = '';
             try { segHost = new URL(segUrl).hostname; } catch (e) { /* invalid */ }
-            if (!/(^|\.)(fqcdn\.top|tiktokcdn\.com)$/i.test(segHost)) {
+            if (!JAVHAY_SEGMENT_HOSTS.test(segHost)) {
                 return new Response('Segment host not allowed', { status: 403, headers: CORS_HEADERS });
             }
             return handleSegmentProxy(segUrl, 'https://javhay.buzz/');
@@ -930,6 +933,8 @@ export default {
                 const first = rewritten && rewritten.split('\n').map(l => l.trim()).find(l => l && !l.startsWith('#'));
                 if (!first) throw new Error('no segment line');
                 const segUrl = new URL(first).searchParams.get('url');
+                const segHostAllowed = JAVHAY_SEGMENT_HOSTS.test(new URL(segUrl).hostname);
+                if (!segHostAllowed) throw new Error(`segment host ${new URL(segUrl).hostname} is not in the allowlist`);
                 const res = await handleSegmentProxy(segUrl, 'https://javhay.buzz/');
                 const buf = new Uint8Array(await res.arrayBuffer());
                 const sync = [];
@@ -989,7 +994,9 @@ export default {
                             const { html, info } = await page(detail, listUrl);
                             const sources = javtiful.parseSources(html);
                             src = sources[0] && sources[0].src;
-                            return { ...info, url: detail, sources: sources.length, firstSourceHost: src ? new URL(src).host : null, playerHints: sources.length ? undefined : (html.match(/[^"'\s]{0,60}(?:m3u8|\.mp4|playerSources|data-src)[^"'\s]{0,60}/gi) || []).slice(0, 6) };
+                            const vi = html.search(/<video\b/i);
+                            const hints = sources.length ? undefined : [...new Set((html.match(/.{0,100}(?:playerSources|fast-stream|stream-url|data-stream|data-hls|data-source|\/api\/|player-config|\.m3u8|manifest).{0,140}/gi) || []).map(x => x.replace(/\s+/g, ' ')))].slice(0, 10);
+                            return { ...info, url: detail, sources: sources.length, firstSourceHost: src ? new URL(src).host : null, videoSample: sources.length || vi < 0 ? undefined : html.slice(Math.max(0, vi - 200), vi + 1500), scriptHints: hints, previewOnlyMp4: sources.length ? undefined : (html.match(/https?:\/\/[^"'\s]+\.mp4/g) || []).filter(u => !/preview/i.test(u)).slice(0, 4) };
                         });
                         if (src) {
                             row.stream = await timed(async () => {

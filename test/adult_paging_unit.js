@@ -55,7 +55,7 @@ const SOURCES = [
         name: 'javhay', size: 20, mod: '../src/scrapers/javhay',
         call: (m, skip) => m.getCatalog('javhay-movie', 'movie', { skip, genre: 'Vietsub' }, 'w.dev'),
         match: u => (u.startsWith('/jav-vietsub/') ? num(/\/page\/(\d+)\/$/, u) || 1 : null),
-        card: i => `<div class="thumbBlock"><div class="thumbInside"><a href="https://javhay.buzz/slug-${i}/" title="Title ${i}"><img src="https://javhay.buzz/wp-content/uploads/2021/05/slug-${i}-500x350.avif"></a></div></div>`,
+        card: i => `<div class="thumbBlock"><div class="thumbInside"><a href="https://javhay.buzz/slug-a-${i}/" title="Title ${i}"><img src="https://javhay.buzz/wp-content/uploads/2021/05/slug-a-${i}-500x350.avif"></a></div></div>`,
         wrap: c => c
     },
     {
