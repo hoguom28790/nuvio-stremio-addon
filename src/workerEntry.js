@@ -7,6 +7,7 @@ const vlxx = require('./scrapers/vlxx');
 const avdb = require('./scrapers/avdb');
 const sexmup = require('./scrapers/sexmup');
 const javhay = require('./scrapers/javhay');
+const javtiful = require('./scrapers/javtiful');
 const kkphim = require('./scrapers/kkphim');
 const vsmov = require('./scrapers/vsmov');
 import { vnFetchText, vnProbe } from './utils/vnSocketFetch';
@@ -957,6 +958,90 @@ export default {
                 await brief(`post_server${server}`, 'https://javhay.buzz/wp-json/fb/v1/player/', { method: 'POST', headers: { ...base, 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, body: new URLSearchParams({ id, server }).toString() });
             }
             return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
+        // Site health: why does a source not load? Runs list -> detail -> stream the way the scrapers do and reports each step
+        if (pathname === '/debug/sites') {
+            const ids = (url.searchParams.get('ids') || 'javtiful,javhay').split(',').map(x => x.trim()).filter(Boolean);
+            const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+            const BLOCK = /Attention Required|Just a moment|cf-chl|cf-error|Access denied|Checking your browser|challenge-platform|Enable JavaScript and cookies/i;
+            const timed = async (fn) => { const t0 = Date.now(); try { return { ...(await fn()), ms: Date.now() - t0 }; } catch (e) { return { error: e.message, ms: Date.now() - t0 }; } };
+            const page = async (u, referer) => {
+                const r = await fetch(u, { headers: { 'User-Agent': UA, 'Referer': referer, 'Accept': 'text/html,application/xhtml+xml' }, redirect: 'follow', signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                const html = await r.text();
+                return { r, html, info: { status: r.status, finalUrl: r.url, type: r.headers.get('content-type'), length: html.length, title: ((html.match(/<title>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/\s+/g, ' ').trim().slice(0, 120), blocked: BLOCK.test(html) || [403, 429, 503].includes(r.status) } };
+            };
+            const out = {};
+            for (const id of ids) {
+                const row = out[id] = {};
+                if (id === 'javtiful') {
+                    const listUrl = 'https://javtiful.com/vn/videos';
+                    let items = [];
+                    row.list = await timed(async () => {
+                        const { html, info } = await page(listUrl, 'https://javtiful.com/');
+                        items = javtiful.parseList(html);
+                        return { ...info, parsedItems: items.length, cardMarkers: (html.match(/<article class="video-card/g) || []).length, head: items.length ? undefined : html.replace(/\s+/g, ' ').slice(0, 300), videoLinks: items.length ? undefined : [...new Set([...html.matchAll(/href="([^"#]*\/video\/[^"#]*)"/g)].map(m => m[1]))].slice(0, 5) };
+                    });
+                    if (items[0]) {
+                        const detail = `https://javtiful.com/vn/video/${items[0].vid}/${items[0].slug}`;
+                        let src = null;
+                        row.detail = await timed(async () => {
+                            const { html, info } = await page(detail, listUrl);
+                            const sources = javtiful.parseSources(html);
+                            src = sources[0] && sources[0].src;
+                            return { ...info, url: detail, sources: sources.length, firstSourceHost: src ? new URL(src).host : null, playerHints: sources.length ? undefined : (html.match(/[^"'\s]{0,60}(?:m3u8|\.mp4|playerSources|data-src)[^"'\s]{0,60}/gi) || []).slice(0, 6) };
+                        });
+                        if (src) {
+                            row.stream = await timed(async () => {
+                                const r = await fetch(src, { headers: { 'User-Agent': UA, 'Range': 'bytes=0-1023' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                                const buf = await r.arrayBuffer();
+                                return { status: r.status, type: r.headers.get('content-type'), bytes: buf.byteLength };
+                            });
+                        }
+                    }
+                } else if (id === 'javhay') {
+                    const listUrl = 'https://javhay.buzz/';
+                    let items = [];
+                    row.list = await timed(async () => {
+                        const { html, info } = await page(listUrl, 'https://javhay.buzz/');
+                        items = javhay.parseList(html);
+                        return { ...info, parsedItems: items.length, cardMarkers: (html.match(/class="thumbBlock"/g) || []).length, head: items.length ? undefined : html.replace(/\s+/g, ' ').slice(0, 300), links: items.length ? undefined : [...new Set([...html.matchAll(/href="(https?:\/\/[^"#]+)"/g)].map(m => m[1]))].slice(0, 8) };
+                    });
+                    if (items[0]) {
+                        const slug = items[0].slug;
+                        row.detail = await timed(async () => {
+                            const { html, info } = await page(`https://javhay.buzz/${slug}/`, listUrl);
+                            return { ...info, slug, dataIds: [...html.matchAll(/data-id="(\d+)"/g)].map(m => m[1]).slice(0, 4), hasPlayerDiv: /id="video-player"/.test(html) };
+                        });
+                        let playlist = null;
+                        row.playerApi = await timed(async () => {
+                            const { pid, raw } = await javhay.fetchPlayerApi(slug);
+                            const text = String(raw);
+                            playlist = javhay.findM3u8(text);
+                            return { pid, bytes: text.length, head: text.slice(0, 200), foundPlaylist: playlist };
+                        });
+                        if (playlist) {
+                            row.playlist = await timed(async () => {
+                                const r = await fetch(playlist, { headers: { 'User-Agent': UA, 'Referer': 'https://javhay.buzz/' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                                const txt = await r.text();
+                                const seg = txt.split('\n').map(l => l.trim()).find(l => l && !l.startsWith('#'));
+                                let segment = null;
+                                if (seg) {
+                                    try {
+                                        const sr = await fetch(new URL(seg, playlist).href, { headers: { 'User-Agent': UA, 'Referer': 'https://javhay.buzz/', 'Range': 'bytes=0-511' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                                        const b = new Uint8Array(await sr.arrayBuffer());
+                                        segment = { host: new URL(seg, playlist).host, status: sr.status, first4: [...b.slice(0, 4)].map(x => x.toString(16).padStart(2, '0')).join(' ') };
+                                    } catch (e) { segment = { error: e.message }; }
+                                }
+                                return { status: r.status, host: new URL(playlist).host, head: txt.slice(0, 120), segment };
+                            });
+                        }
+                    }
+                } else {
+                    row.error = 'unknown id (use javtiful or javhay)';
+                }
+            }
+            return new Response(JSON.stringify(out, null, 1), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
         }
 
         // Paging audit: walks catalogs the way Stremio does (skip += items received) and counts repeated movies
