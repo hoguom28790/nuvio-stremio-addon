@@ -201,8 +201,49 @@ function parseSources(html) {
 }
 
 /**
- * The page embeds a direct MP4 on its own CDN (fast-stream.jav.si): Range works from the Worker and no Referer is needed.
- * The player fetches it straight from the CDN, so there's no Worker bandwidth. The link carries a signed path -> short cache.
+ * Since 2026-11 the page no longer lists its sources: it carries a playback ticket
+ * (`"playback":{"endpoint":"/vi/video/<id>/playback","ticket":"p1...."}`) that the site's own player POSTs to the endpoint
+ * (`ticket=<ticket>`, answer: {success, sources:[{src, size, label}]}; a 409 brings `renewTicket`). The ticket is part
+ * of the public page, no browser-side computation is involved.
+ */
+function parsePlayback(html) {
+    const m = String(html || '').match(/"playback":\{"endpoint":"([^"]+)","ticket":"([^"]+)"/);
+    return m ? { endpoint: absUrl(m[1].replace(/\\\//g, '/')), ticket: m[2] } : null;
+}
+
+function cookieHeader(res) {
+    const raw = (res.headers && res.headers.get && res.headers.get('set-cookie')) || '';
+    return raw.split(/,(?=\s*[A-Za-z0-9_.-]+=)/).map(c => c.split(';')[0].trim()).filter(Boolean).join('; ');
+}
+
+async function requestPlayback(pb, pageUrl, cookie) {
+    const post = async (ticket) => {
+        const res = await fetch(pb.endpoint, {
+            method: 'POST',
+            headers: {
+                'User-Agent': USER_AGENT,
+                'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+                'X-Requested-With': 'XMLHttpRequest',
+                'Referer': pageUrl,
+                'Origin': BASE_URL,
+                ...(cookie ? { Cookie: cookie } : {})
+            },
+            body: `ticket=${encodeURIComponent(ticket)}`
+        });
+        let json = null;
+        try { json = await res.json(); } catch (e) { /* not JSON */ }
+        return { status: res.status, json };
+    };
+    let r = await post(pb.ticket);
+    if (r.status === 409 && r.json && r.json.renewTicket) r = await post(String(r.json.renewTicket));
+    const sources = r.json && r.json.success && Array.isArray(r.json.sources) ? r.json.sources : [];
+    return sources.filter(s => s && s.src).map(s => ({ ...s, src: absUrl(s.src) }));
+}
+
+/**
+ * Sources of a movie: the playback endpoint (current site), or `playerSources` / <source> tags in the page (old site).
+ * The signed MP4 link lives an hour, so the stream is cached for 10 minutes only. The player fetches it straight from the
+ * site's CDN, no Worker bandwidth.
  */
 async function getStream(id) {
     const p = parseId(id);
@@ -212,9 +253,18 @@ async function getStream(id) {
     if (cached) return cached;
 
     try {
-        const html = await fetchHtml(`/${LANG}/video/${p.vid}/${encodeURIComponent(p.slug)}`);
-        const sources = parseSources(html).sort((a, b) => (Number(b.size) || 0) - (Number(a.size) || 0));
+        const pageUrl = `${BASE_URL}/${LANG}/video/${p.vid}/${encodeURIComponent(p.slug)}`;
+        const res = await fetch(pageUrl, { headers: { 'User-Agent': USER_AGENT, 'Referer': `${BASE_URL}/` } });
+        const html = await res.text();
+
+        let sources = parseSources(html).map(s => ({ ...s, src: absUrl(s.src) }));
+        if (!sources.length) {
+            const pb = parsePlayback(html);
+            if (pb) sources = await requestPlayback(pb, pageUrl, cookieHeader(res));
+        }
+        sources.sort((a, b) => (Number(b.size) || 0) - (Number(a.size) || 0));
         if (!sources.length) return [];
+
         const h1 = (html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/) || [])[1];
         const title = decode(h1) || p.slug.toUpperCase();
         const streams = sources.map((s) => ({
@@ -223,7 +273,8 @@ async function getStream(id) {
             url: s.src,
             behaviorHints: {
                 notWebReady: false,
-                bingeGroup: `javtiful-${s.size || 'mp4'}`
+                bingeGroup: `javtiful-${s.size || 'mp4'}`,
+                proxyHeaders: { request: { 'User-Agent': USER_AGENT, 'Referer': `${BASE_URL}/` } }
             }
         }));
         cache.set(cacheKey, streams, 600);
@@ -234,4 +285,4 @@ async function getStream(id) {
     }
 }
 
-module.exports = { getCatalog, getMeta, getStream, parseList, parseSources, GENRE_MAP };
+module.exports = { getCatalog, getMeta, getStream, parseList, parseSources, parsePlayback, GENRE_MAP };

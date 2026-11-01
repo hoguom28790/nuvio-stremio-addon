@@ -142,6 +142,17 @@ async function proxyViaRender(renderUrl) {
 // Hosts JavHay's segments live on (they moved from tiktokcdn.com to ibyteimg.com): the route is not an open proxy
 const JAVHAY_SEGMENT_HOSTS = /(^|\.)(fqcdn\.top|tiktokcdn\.com|ibyteimg\.com|fb-cdn-xx\.sbs)$/i;
 
+// Names to try for a JavHay cover (relative to /wp-content/uploads/): jpg and webp are friendlier than avif, and the
+// size suffix of a thumbnail (-768x513) may be missing on the site, so the plain name is tried as well.
+function javhayPosterNames(rel) {
+    const m = String(rel).match(/^(\d{4}\/\d{2}\/)([A-Za-z0-9_-]+?)(-\d{2,4}x\d{2,4})?\.(avif|jpe?g|webp|png)$/i);
+    if (!m) return [];
+    const [, dir, stem, size = '', ext] = m;
+    const names = [`${dir}${stem}${size}.jpg`, `${dir}${stem}${size}.webp`, `${dir}${stem}${size}.${ext.toLowerCase()}`];
+    if (size) names.push(`${dir}${stem}.jpg`, `${dir}${stem}.webp`, `${dir}${stem}.${ext.toLowerCase()}`);
+    return [...new Set(names)];
+}
+
 // Video segment unwrapper function (strips 95-byte PNG header with streaming & unlimited bandwidth)
 async function handleSegmentProxy(targetUrl, referer) {
     if (!targetUrl) return new Response('Missing url query parameter', { status: 400, headers: CORS_HEADERS });
@@ -519,16 +530,15 @@ export default {
         // 4f. JavHay: poster proxy (.jpg/.webp first, .avif as fallback), rewritten playlist, PNG-header unwrapper
         if (pathname.startsWith('/javhay/poster/')) {
             const rel = pathname.replace('/javhay/poster/', '');
-            const pm = rel.match(/^(\d{4}\/\d{2}\/[A-Za-z0-9_-]+)\.(avif|jpg|jpeg|webp|png)$/i);
-            if (!pm) return new Response('Bad poster path', { status: 400, headers: CORS_HEADERS });
+            const names = javhayPosterNames(rel);
+            if (!names.length) return new Response('Bad poster path', { status: 400, headers: CORS_HEADERS });
             const headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                 'Referer': 'https://javhay.buzz/'
             };
-            const exts = [...new Set(['jpg', 'webp', pm[2].toLowerCase()])];
-            for (const ext of exts) {
+            for (const name of names) {
                 try {
-                    const upstream = await fetch(`https://javhay.buzz/wp-content/uploads/${pm[1]}.${ext}`, { headers, cf: { cacheEverything: true, cacheTtl: 604800 } });
+                    const upstream = await fetch(`https://javhay.buzz/wp-content/uploads/${name}`, { headers, cf: { cacheEverything: true, cacheTtlByStatus: { '200-299': 604800, '404': 600, '500-599': 0 } } });
                     const type = upstream.headers.get('content-type') || '';
                     if (upstream.ok && /^image\//i.test(type)) {
                         return new Response(upstream.body, {
@@ -540,9 +550,9 @@ export default {
                             }
                         });
                     }
-                } catch (err) { /* try next extension */ }
+                } catch (err) { /* try the next name */ }
             }
-            return new Response('Poster not found', { status: 404, headers: CORS_HEADERS });
+            return new Response('Poster not found', { status: 404, headers: { ...CORS_HEADERS, 'Cache-Control': 'public, max-age=300' } });
         }
 
         if (pathname === '/javhay/play.m3u8') {
@@ -1020,6 +1030,23 @@ export default {
                         const at = guessSlug ? html.indexOf(`/${guessSlug}/`) : -1;
                         return { ...info, parsedItems: items.length, cardMarkers: (html.match(/class="thumbBlock"/g) || []).length, permalinkCandidates: permalinks.slice(0, 5), sampleAroundFirstPermalink: at >= 0 ? html.slice(Math.max(0, at - 700), at + 900) : undefined, categoryLinks: items.length ? undefined : [...new Set([...html.matchAll(/href="(https?:\/\/javhay\.buzz\/[a-z0-9-]+\/)"/g)].map(m => m[1]))].filter(u => /\/(?:phim-sex|sex-|jav-)/.test(u)).slice(0, 12), head: items.length ? undefined : html.replace(/\s+/g, ' ').slice(0, 200) };
                     });
+                    row.posters = await timed(async () => {
+                        const out2 = [];
+                        for (const it of items.slice(0, 8)) {
+                            const pm = String(it.poster || '').match(/\/wp-content\/uploads\/(.+)$/);
+                            const entry = { slug: it.slug.slice(0, 40), poster: pm ? pm[1] : it.poster, tried: [] };
+                            for (const name of pm ? javhayPosterNames(pm[1]) : []) {
+                                try {
+                                    const pr = await fetch(`https://javhay.buzz/wp-content/uploads/${name}`, { headers: { 'User-Agent': UA, 'Referer': 'https://javhay.buzz/' }, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+                                    const type = pr.headers.get('content-type') || '';
+                                    entry.tried.push(`${name.split('/').pop()} -> ${pr.status} ${type.split(';')[0]}`);
+                                    if (pr.ok && /^image\//i.test(type)) { entry.ok = true; break; }
+                                } catch (e) { entry.tried.push(`${name.split('/').pop()} -> ${e.message}`); }
+                            }
+                            out2.push(entry);
+                        }
+                        return { items: out2, failing: out2.filter(e => !e.ok).length };
+                    });
                     if (items[0] || guessSlug) {
                         const slug = items[0] ? items[0].slug : guessSlug;
                         row.detail = await timed(async () => {
@@ -1256,6 +1283,30 @@ export default {
                     out.post = await post(pm[2]);
                     const renew = out.post.json && (out.post.json.renewTicket || (out.post.json.data && out.post.json.data.renewTicket));
                     if (out.post.status === 409 && renew) out.postAfterRenew = await post(String(renew));
+                    const src = ((out.postAfterRenew || out.post).json || {}).sources;
+                    if (Array.isArray(src) && src[0] && src[0].src) {
+                        // does the signed MP4 link answer the Worker, and does it redirect to a CDN?
+                        const mediaUrl = new URL(src[0].src, 'https://javtiful.com').href;
+                        const media = async (headers) => {
+                            try {
+                                const mr = await fetch(mediaUrl, { headers: { 'User-Agent': UA, 'Range': 'bytes=0-1023', ...headers }, redirect: 'manual', signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                                const loc = mr.headers.get('location');
+                                const row = { status: mr.status, type: mr.headers.get('content-type'), length: mr.headers.get('content-length'), range: mr.headers.get('content-range'), accept: mr.headers.get('accept-ranges'), cors: mr.headers.get('access-control-allow-origin'), locationHost: loc ? new URL(loc, mediaUrl).host : undefined };
+                                if (loc) {
+                                    const fr = await fetch(new URL(loc, mediaUrl).href, { headers: { 'User-Agent': UA, 'Range': 'bytes=0-1023', ...headers }, redirect: 'manual', signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                                    const b = new Uint8Array(await fr.arrayBuffer());
+                                    row.afterRedirect = { status: fr.status, type: fr.headers.get('content-type'), range: fr.headers.get('content-range'), first12: [...b.slice(0, 12)].map(x => x.toString(16).padStart(2, '0')).join(' ') };
+                                } else {
+                                    const b = new Uint8Array(await mr.arrayBuffer());
+                                    row.first12 = [...b.slice(0, 12)].map(x => x.toString(16).padStart(2, '0')).join(' ');
+                                }
+                                return row;
+                            } catch (e) { return { error: e.message }; }
+                        };
+                        out.mediaHost = new URL(mediaUrl).host;
+                        out.mediaWithReferer = await media({ 'Referer': 'https://javtiful.com/' });
+                        out.mediaNoReferer = await media({});
+                    }
                 }
             } catch (e) { out.error = e.message; }
             return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
