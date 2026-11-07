@@ -2,6 +2,8 @@ const fs = require('fs');
 const path = require('path');
 
 const BASE_URL = 'https://javhdz.one';
+// Movies without a stream link that are filled in per run (newest first)
+const MAX_BACKFILL_PER_RUN = 120;
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 async function fetchHtml(url) {
@@ -148,9 +150,24 @@ async function updateCatalog() {
         }
     }
 
-    if (newlyAdded.length > 0) {
-        console.log(`Adding ${newlyAdded.length} new movies to top of catalog...`);
+    // Movies stored without a stream link (the page could not be read at the time) are never retried by the loop above, yet
+    // the addon can only play a movie that has one: when the live site is closed to the Worker this catalog is all it has.
+    // Fill the newest ones in on every run, a bounded number so a run stays short.
+    const missing = [...newlyAdded, ...existingMovies].filter(m => !m.streamUrl).slice(0, MAX_BACKFILL_PER_RUN);
+    let backfilled = 0;
+    for (const m of missing) {
+        const detail = await scrapeDetail(m.slug);
+        if (detail.streamUrl) {
+            m.streamUrl = detail.streamUrl;
+            if (detail.genres.length > 0 && (!m.genres || m.genres.length <= 3)) m.genres = detail.genres;
+            backfilled++;
+        }
+    }
+    if (missing.length > 0) console.log(`Stream link backfill: ${backfilled}/${missing.length} movies filled in.`);
+
+    if (newlyAdded.length > 0 || backfilled > 0) {
         const updatedList = [...newlyAdded, ...existingMovies];
+        console.log(`Adding ${newlyAdded.length} new movies to top of catalog (${backfilled} stream links backfilled)...`);
         fs.writeFileSync(catalogPath, JSON.stringify(updatedList, null, 2), 'utf8');
         console.log(`Successfully updated ${catalogPath}. Total movies: ${updatedList.length}`);
     } else {
