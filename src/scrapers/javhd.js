@@ -190,48 +190,27 @@ function parseMovieCards(html, host = '') {
     return metas;
 }
 
-// Fallback direct / proxy fetch page
+// Fetch a page of the site with an ordinary browser User-Agent. javhdz.one answers Cloudflare's "Attention Required" (403) to
+// the Worker's IP range; the addon does not disguise itself to get around that (no crawler User-Agents, no third-party reader):
+// an empty string means "the site did not let us in" and the callers fall back to the auto-updated catalog.
 async function fetchPage(targetUrl) {
-    const userAgents = [
-        'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
-        'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
-        'curl/7.88.1',
-        'Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)',
-        USER_AGENT
-    ];
-
-    for (const ua of userAgents) {
-        try {
-            const res = await client.get(targetUrl, {
-                headers: {
-                    'User-Agent': ua,
-                    'Referer': `${BASE_URL}/`,
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language': 'vi,en-US;q=0.9,en;q=0.8'
-                },
-                timeout: 1500
-            });
-            const html = typeof res.data === 'string' ? res.data : '';
-            if (html && !html.includes('Attention Required') && !html.includes('Cloudflare</title>') && (html.includes('movie-item') || html.includes('window.atob') || html.includes('<h1'))) {
-                return html;
-            }
-        } catch (e) {
-            // continue next attempt
-        }
-    }
-
     try {
-        const proxyUrl = `https://r.jina.ai/${targetUrl}`;
-        const resProxy = await axios.get(proxyUrl, {
-            headers: { 'X-Return-Format': 'html' },
-            timeout: 5000
+        const res = await client.get(targetUrl, {
+            headers: {
+                'User-Agent': USER_AGENT,
+                'Referer': `${BASE_URL}/`,
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'vi,en-US;q=0.9,en;q=0.8'
+            },
+            timeout: 6000
         });
-        const html = typeof resProxy.data === 'string' ? resProxy.data : '';
-        if (html && (html.includes('movie-item') || html.includes('window.atob') || html.includes('<h1'))) {
+        const html = typeof res.data === 'string' ? res.data : '';
+        if (html && !html.includes('Attention Required') && !html.includes('Cloudflare</title>') && (html.includes('movie-item') || html.includes('window.atob') || html.includes('<h1'))) {
             return html;
         }
-    } catch (errProxy) {}
-
+    } catch (e) {
+        // blocked or unreachable
+    }
     return '';
 }
 
@@ -242,7 +221,8 @@ async function fetchPage(targetUrl) {
 function staticCatalogItems(extra, host) {
     if (!cachedCatalog || !Array.isArray(cachedCatalog) || cachedCatalog.length === 0) return [];
     const stripAccents = (s) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
-    let results = [...cachedCatalog];
+    // only movies with a stream link: without the live page there is no other way to play one
+    let results = cachedCatalog.filter(m => m && m.streamUrl);
 
     if (extra.search) {
         const qLower = String(extra.search).trim().toLowerCase();

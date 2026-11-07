@@ -979,7 +979,7 @@ export default {
 
         // Site health: why does a source not load? Runs list -> detail -> stream the way the scrapers do and reports each step
         if (pathname === '/debug/sites') {
-            const ids = (url.searchParams.get('ids') || 'javtiful,javhay').split(',').map(x => x.trim()).filter(Boolean);
+            const ids = (url.searchParams.get('ids') || 'javtiful,javhay,javhd').split(',').map(x => x.trim()).filter(Boolean);
             const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
             const BLOCK = /Attention Required|Just a moment|cf-chl|cf-error|Access denied|Checking your browser|challenge-platform|Enable JavaScript and cookies/i;
             const timed = async (fn) => { const t0 = Date.now(); try { return { ...(await fn()), ms: Date.now() - t0 }; } catch (e) { return { error: e.message, ms: Date.now() - t0 }; } };
@@ -1079,8 +1079,80 @@ export default {
                             });
                         }
                     }
+                } else if (id === 'javhd') {
+                    // JavHD, read with an ordinary browser User-Agent only: does the site answer it, do the posters load,
+                    // does the page still carry the base64 stream (`window.atob`), does the playlist answer
+                    const base = 'https://javhdz.one';
+                    const get = async (u) => {
+                        const r = await fetch(u, { headers: { 'User-Agent': UA, 'Referer': `${base}/`, 'Accept': 'text/html,application/xhtml+xml', 'Accept-Language': 'vi,en-US;q=0.9,en;q=0.8' }, redirect: 'follow', signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+                        return { r, html: await r.text() };
+                    };
+                    let items = [];
+                    row.list = await timed(async () => {
+                        const { r, html } = await get(`${base}/video/`);
+                        items = javhd.parseMovieCards(html, host);
+                        return {
+                            status: r.status, finalUrl: r.url, length: html.length,
+                            title: ((html.match(/<title>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/\s+/g, ' ').trim().slice(0, 100),
+                            blocked: BLOCK.test(html) || [403, 429, 503].includes(r.status),
+                            parsedItems: items.length, hasMovieItem: html.includes('movie-item'),
+                            head: items.length ? undefined : html.replace(/\s+/g, ' ').slice(0, 250),
+                            htmlLinks: items.length ? undefined : [...new Set([...html.matchAll(/href="([^"#]+\.html)"/g)].map(m => m[1]))].slice(0, 5),
+                            sampleAroundFirstHtmlLink: items.length ? undefined : (() => { const i = html.search(/href="[^"#]+\.html"/); return i >= 0 ? html.slice(Math.max(0, i - 300), i + 700) : undefined; })()
+                        };
+                    });
+                    // when the site refuses the Worker, fall back to what the auto-updated catalog knows
+                    let first = items[0] || null;
+                    if (!first) {
+                        row.staticCatalog = await timed(async () => {
+                            await javhd.ensureStaticCatalog();
+                            const cat = await javhd.getCatalog('javhd-latest', 'movie', {}, host);
+                            return { items: cat.length, firstId: cat[0] && cat[0].id, firstPoster: cat[0] && cat[0].poster };
+                        });
+                    }
+                    if (first) {
+                        const slug = first.id.replace(/^javhd:/, '');
+                        row.poster = await timed(async () => {
+                            const m = String(first.poster).match(/\/data\/(.+)$/);
+                            const res = { posterUrl: first.poster };
+                            if (m) {
+                                const pr = await fetch(`${base}/data/${m[1]}`, { headers: { 'User-Agent': UA, 'Referer': `${base}/` }, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+                                const b = new Uint8Array(await pr.arrayBuffer());
+                                res.fromSite = { status: pr.status, type: pr.headers.get('content-type'), bytes: b.length, first4: [...b.slice(0, 4)].map(x => x.toString(16).padStart(2, '0')).join(' ') };
+                            }
+                            return res;
+                        });
+                        let master = null;
+                        row.detail = await timed(async () => {
+                            const { r, html } = await get(`${base}/${slug}.html`);
+                            const am = html.match(/window\.atob\(["']([^"']+)["']\)/i);
+                            if (am) { try { master = atob(am[1].trim()).trim(); } catch (e) { /* bad base64 */ } }
+                            return {
+                                url: `${base}/${slug}.html`, status: r.status, blocked: BLOCK.test(html) || [403, 429, 503].includes(r.status), length: html.length,
+                                hasAtob: !!am, masterHost: master ? (() => { try { return new URL(master).host; } catch (e) { return 'invalid'; } })() : null,
+                                playerHints: am ? undefined : [...new Set((html.match(/.{0,80}(?:m3u8|playlist|atob|embed|iframe).{0,120}/gi) || []).map(x => x.replace(/\s+/g, ' ')))].slice(0, 8)
+                            };
+                        });
+                        if (master && /^https?:/.test(master)) {
+                            row.playlist = await timed(async () => {
+                                const pr = await fetch(master, { headers: { 'User-Agent': UA, 'Referer': `${base}/` }, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+                                const txt = await pr.text();
+                                const seg = txt.split('\n').map(l => l.trim()).find(l => l && !l.startsWith('#'));
+                                let segment = null;
+                                if (seg) {
+                                    try {
+                                        const su = new URL(seg, master).href;
+                                        const sr = await fetch(su, { headers: { 'User-Agent': UA, 'Referer': `${base}/`, 'Range': 'bytes=0-511' }, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+                                        const b = new Uint8Array(await sr.arrayBuffer());
+                                        segment = { host: new URL(su).host, status: sr.status, first4: [...b.slice(0, 4)].map(x => x.toString(16).padStart(2, '0')).join(' ') };
+                                    } catch (e) { segment = { error: e.message }; }
+                                }
+                                return { status: pr.status, head: txt.slice(0, 160).replace(/\s+/g, ' '), segment };
+                            });
+                        }
+                    }
                 } else {
-                    row.error = 'unknown id (use javtiful or javhay)';
+                    row.error = 'unknown id (use javtiful, javhay or javhd)';
                 }
             }
             return new Response(JSON.stringify(out, null, 1), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
