@@ -853,6 +853,23 @@ export default {
             }
         }
 
+        // VLXX AI: cover proxy (the site's thumbs, fetched with its Referer, cached at the edge)
+        if (pathname.startsWith('/vlxxai/poster/')) {
+            const name = pathname.replace('/vlxxai/poster/', '');
+            if (!/^[A-Za-z0-9_.-]+\.(?:webp|jpe?g|png)$/i.test(name)) return new Response('Bad poster path', { status: 400, headers: CORS_HEADERS });
+            try {
+                const upstream = await fetch(`https://vlxxai.com/uploads/thumbs/${name}`, {
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36', 'Referer': 'https://vlxxai.com/' },
+                    cf: { cacheEverything: true, cacheTtlByStatus: { '200-299': 604800, '404': 600, '500-599': 0 } }
+                });
+                const type = upstream.headers.get('content-type') || '';
+                if (!upstream.ok || !/^image\//i.test(type)) return new Response('Poster not found', { status: upstream.status === 200 ? 404 : upstream.status, headers: { ...CORS_HEADERS, 'Cache-Control': 'public, max-age=300' } });
+                return new Response(upstream.body, { headers: { ...CORS_HEADERS, 'Content-Type': type, 'Cache-Control': 'public, max-age=604800, immutable', 'CDN-Cache-Control': 'public, max-age=604800' } });
+            } catch (err) {
+                return new Response(`Poster error: ${err.message}`, { status: 502, headers: CORS_HEADERS });
+            }
+        }
+
         // VLXX AI: playlist of one episode. Apps get a redirect to the CDN playlist; browsers (they send an Origin header and
         // the CDN has no CORS) get the playlist through this Worker, whose segment/playlist URLs point back here.
         const vlxxaiHls = async (target) => {
@@ -894,7 +911,7 @@ export default {
             const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
             const out = { slug, ep };
             try {
-                const meta = await vlxxai.getMeta('movie', `vlxxai:${slug}`);
+                const meta = await vlxxai.getMeta('movie', `vlxxai:${slug}`, host);
                 out.meta = meta ? { name: meta.name, poster: meta.poster, description: meta.description } : null;
                 const player = await vlxxai.fetchPlayer(slug, parseInt(url.searchParams.get('index') || '0', 10) || 0);
                 out.player = player ? JSON.parse(JSON.stringify(player, (k, v) => (typeof v === 'string' && v.length > 300 ? v.slice(0, 300) + '…' : v))) : null;

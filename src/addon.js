@@ -103,7 +103,7 @@ builder.defineCatalogHandler(async ({ type, id, extra = {}, config = {} }) => {
         }
 
         if (id.startsWith('vlxxai-') && isSourceEnabled('vlxxai', config)) {
-            return { metas: await vlxxai.getCatalog(id, type, extra) };
+            return { metas: await vlxxai.getCatalog(id, type, extra, config.host) };
         }
 
         if (id.startsWith('avdb-') && (isSourceEnabled('avdb', config) || isSourceEnabled(id.replace('-', '_'), config))) {
@@ -168,7 +168,7 @@ builder.defineMetaHandler(async ({ type, id, config = {} }) => {
             if (meta) return { meta };
         }
         if (id.startsWith('vlxxai:')) {
-            const meta = await vlxxai.getMeta(type, id);
+            const meta = await vlxxai.getMeta(type, id, config.host);
             if (meta) return { meta };
         }
     } catch (e) {

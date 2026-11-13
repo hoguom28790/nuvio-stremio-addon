@@ -57,6 +57,13 @@ function edgeBaseOf(host) {
     return edgeHost.includes('://') ? edgeHost : `https://${edgeHost}`;
 }
 
+/** Covers go through the edge (/vlxxai/poster/<file>): the site's image host is not reliably reachable from apps. */
+function posterUrl(url, host) {
+    const edge = edgeBaseOf(host);
+    const m = String(url || '').match(/\/uploads\/thumbs\/([A-Za-z0-9_.-]+\.(?:webp|jpe?g|png))$/i);
+    return edge && m ? `${edge}/vlxxai/poster/${m[1]}` : url;
+}
+
 function parseId(id) {
     const m = String(id).replace(/\.json$/, '').match(/^vlxxai:([A-Za-z0-9_-]+)(?::(\d+))?$/);
     return m ? { slug: m[1], ep: m[2] ? parseInt(m[2], 10) : null } : null;
@@ -103,19 +110,20 @@ async function fetchHtml(path, opts = {}) {
     return typeof res.data === 'string' ? res.data : '';
 }
 
-function toMeta(item) {
+function toMeta(item, host) {
+    const poster = posterUrl(item.poster, host);
     return {
         id: `vlxxai:${item.slug}`,
         type: 'movie',
         name: item.title,
-        poster: item.poster,
-        background: item.poster,
+        poster,
+        background: poster,
         description: [item.title, item.badge, item.status].filter(Boolean).join(' • '),
         genres: ['18+', item.badge].filter(Boolean)
     };
 }
 
-async function getCatalog(catalogId, type, extra = {}) {
+async function getCatalog(catalogId, type, extra = {}, host) {
     const search = extra.search ? String(extra.search).trim() : '';
     const skip = parseInt(extra.skip, 10) || 0;
     const genre = GENRE_MAP[extra.genre] || GENRE_MAP['Mới Cập Nhật'];
@@ -123,14 +131,14 @@ async function getCatalog(catalogId, type, extra = {}) {
     try {
         // Home tabs page with `&page=N`. Search and category pages are a single page (no pager on the site).
         if (genre.tab && !search) {
-            const fetchPage = async (page) => parseList(await fetchHtml(`/?tab=${genre.tab}${page > 1 ? `&page=${page}` : ''}`)).map(toMeta);
+            const fetchPage = async (page) => parseList(await fetchHtml(`/?tab=${genre.tab}${page > 1 ? `&page=${page}` : ''}`)).map(i => toMeta(i, host));
             return await pagedList({ key: `vlxxai:tab${genre.tab}`, skip, want: WANT, fetchPage });
         }
         const path = search ? `/search.php?q=${encodeURIComponent(search)}` : genre.path;
-        const key = `vlxxai:single:${path}`;
+        const key = `vlxxai:single:${path}:${host || ''}`;
         let metas = cache.get(key);
         if (!metas) {
-            metas = parseList(await fetchHtml(path)).map(toMeta);
+            metas = parseList(await fetchHtml(path)).map(i => toMeta(i, host));
             if (metas.length) cache.set(key, metas, 600);
         }
         return metas.slice(skip, skip + WANT);
@@ -160,7 +168,7 @@ async function loadTitle(slug) {
     return info;
 }
 
-async function getMeta(type, id) {
+async function getMeta(type, id, host) {
     const p = parseId(id);
     if (!p) return null;
     try {
@@ -170,8 +178,8 @@ async function getMeta(type, id) {
             id: `vlxxai:${p.slug}`,
             type: 'movie',
             name: info.name,
-            poster: info.poster,
-            background: info.poster,
+            poster: posterUrl(info.poster, host),
+            background: posterUrl(info.poster, host),
             description: `${info.description || info.name}\n\n📺 ${info.episodes.length} tập${last ? ` (tới tập ${last})` : ''} — chọn tập ở danh sách nguồn phát.`,
             genres: ['18+', info.badge].filter(Boolean)
         };

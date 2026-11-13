@@ -58,6 +58,11 @@ const v = require('../src/scrapers/vlxxai');
     // episodes: index = position in the page (newest first)
     assert.deepStrictEqual(v.parseEpisodes(TITLE_PAGE, SLUG), [{ n: 3, index: 0 }, { n: 2, index: 1 }, { n: 1, index: 2 }]);
 
+    // covers go through the edge when a host is known
+    const withHost = await v.getCatalog('vlxxai-movie', 'movie', { genre: 'Loạn Luân' }, 'w.dev');
+    assert.strictEqual(withHost[0].poster, `https://w.dev/vlxxai/poster/thumb_${SLUG}.webp`);
+    assert.strictEqual((await v.getMeta('movie', `vlxxai:${SLUG}`, 'w.dev')).poster, 'https://w.dev/vlxxai/poster/thumb_other.webp');
+
     // catalog: movies, like the other sources
     const cat = await v.getCatalog('vlxxai-movie', 'movie', {});
     assert.strictEqual(cat.length, 24);
