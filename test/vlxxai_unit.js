@@ -88,6 +88,18 @@ const v = require('../src/scrapers/vlxxai');
     // no edge host: resolved right away
     assert.deepStrictEqual((await v.getStream(`vlxxai:${SLUG}`)).map(s => s.url).length, 3);
 
+    // browser playback: playlists and segments are routed back through the Worker (the CDN has no CORS)
+    const master = '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\n360p/video.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=2\n720p/video.m3u8';
+    const mb = 'https://ss.cdnz.top/vai/abc/playlist.m3u8';
+    const rm = v.rewritePlaylist(master, mb, 'https://w.dev').split('\n');
+    assert.strictEqual(rm[0], '#EXTM3U');
+    assert.strictEqual(rm[2], `https://w.dev/vlxxai/hls.m3u8?url=${encodeURIComponent('https://ss.cdnz.top/vai/abc/360p/video.m3u8')}`);
+    const media = '#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="key.bin"\n#EXTINF:4.0,\nvideo0.png\n#EXT-X-ENDLIST\n';
+    const rv = v.rewritePlaylist(media, 'https://ss.cdnz.top/vai/abc/360p/video.m3u8', 'https://w.dev').split('\n');
+    assert.ok(rv[1].includes(`URI="https://w.dev/vlxxai/segment.ts?url=${encodeURIComponent('https://ss.cdnz.top/vai/abc/360p/key.bin')}"`));
+    assert.strictEqual(rv[3], `https://w.dev/vlxxai/segment.ts?url=${encodeURIComponent('https://ss.cdnz.top/vai/abc/360p/video0.png')}`);
+    assert.ok(v.HOST_RE.test('ss.cdnz.top') && !v.HOST_RE.test('evil.example') && !v.HOST_RE.test('cdnz.top.evil.example'));
+
     // player answers: error / embed only / relative link
     assert.deepStrictEqual(v.pickSources({ status: 'error', msg: 'x' }), []);
     assert.deepStrictEqual(v.pickSources({ sources: [{ file: 'https://e.example/x', type: 'embed' }] }), [{ url: 'https://e.example/x', embed: true }]);

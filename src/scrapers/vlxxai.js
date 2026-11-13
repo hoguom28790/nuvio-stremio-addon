@@ -9,7 +9,9 @@ const { pagedList } = require('../utils/pagedList');
 // `ep_index` is the position of the episode in the page's episode list (newest first).
 const BASE_URL = 'https://vlxxai.com';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-const PAGE_SIZE = 24;
+const PAGE_SIZE = 24;     // cards the site shows per page
+const WANT = 100;         // titles per catalog call: the whole site is ~70, so clients that never ask for the next page still see all
+const HOST_RE = /(^|\.)cdnz\.top$/i; // hosts the playlists/segments live on (the Worker route is not an open proxy)
 
 const client = axios.create({
     baseURL: BASE_URL,
@@ -122,7 +124,7 @@ async function getCatalog(catalogId, type, extra = {}) {
         // Home tabs page with `&page=N`. Search and category pages are a single page (no pager on the site).
         if (genre.tab && !search) {
             const fetchPage = async (page) => parseList(await fetchHtml(`/?tab=${genre.tab}${page > 1 ? `&page=${page}` : ''}`)).map(toMeta);
-            return await pagedList({ key: `vlxxai:tab${genre.tab}`, skip, want: PAGE_SIZE, fetchPage });
+            return await pagedList({ key: `vlxxai:tab${genre.tab}`, skip, want: WANT, fetchPage });
         }
         const path = search ? `/search.php?q=${encodeURIComponent(search)}` : genre.path;
         const key = `vlxxai:single:${path}`;
@@ -131,7 +133,7 @@ async function getCatalog(catalogId, type, extra = {}) {
             metas = parseList(await fetchHtml(path)).map(toMeta);
             if (metas.length) cache.set(key, metas, 600);
         }
-        return metas.slice(skip, skip + PAGE_SIZE);
+        return metas.slice(skip, skip + WANT);
     } catch (err) {
         console.error('[VlxxAI Catalog Error]', err.message);
         return [];
@@ -257,4 +259,22 @@ async function getStream(id, type, host) {
     }
 }
 
-module.exports = { getCatalog, getMeta, getStream, resolveEpisode, fetchPlayer, pickSources, parseList, parseEpisodes, GENRE_MAP };
+/**
+ * Browsers (Nuvio web) cannot read the CDN's playlists/segments directly (no CORS headers), so for them the Worker
+ * serves the playlist itself: every URI is rewritten to /vlxxai/hls.m3u8 (playlists) or /vlxxai/segment.ts (the rest).
+ */
+function rewritePlaylist(text, baseUrl, edge) {
+    const wrap = (ref) => {
+        const abs = new URL(ref, baseUrl).href;
+        const kind = /\.m3u8(?:$|\?)/i.test(abs) ? 'hls.m3u8' : 'segment.ts';
+        return `${edge}/vlxxai/${kind}?url=${encodeURIComponent(abs)}`;
+    };
+    return String(text || '').split('\n').map((line) => {
+        const t = line.trim();
+        if (!t) return line;
+        if (t.startsWith('#')) return line.replace(/URI="([^"]+)"/g, (m, u) => `URI="${wrap(u)}"`);
+        return wrap(t);
+    }).join('\n');
+}
+
+module.exports = { rewritePlaylist, HOST_RE, getCatalog, getMeta, getStream, resolveEpisode, fetchPlayer, pickSources, parseList, parseEpisodes, GENRE_MAP };

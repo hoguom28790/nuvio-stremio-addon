@@ -853,17 +853,38 @@ export default {
             }
         }
 
-        // VLXX AI: redirect to the episode's playlist (resolved when it is played)
+        // VLXX AI: playlist of one episode. Apps get a redirect to the CDN playlist; browsers (they send an Origin header and
+        // the CDN has no CORS) get the playlist through this Worker, whose segment/playlist URLs point back here.
+        const vlxxaiHls = async (target) => {
+            let host2 = '';
+            try { host2 = new URL(target).hostname; } catch (e) { /* invalid */ }
+            if (!vlxxai.HOST_RE.test(host2)) return new Response('Host not allowed', { status: 403, headers: CORS_HEADERS });
+            const r = await fetch(target, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': 'https://vlxxai.com/' } });
+            if (!r.ok) return new Response(`Upstream error: ${r.status}`, { status: r.status, headers: CORS_HEADERS });
+            const body = vlxxai.rewritePlaylist(await r.text(), target, url.origin);
+            return new Response(body, { headers: { ...CORS_HEADERS, 'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8', 'Cache-Control': 'no-store' } });
+        };
         if (pathname.startsWith('/vlxxai/play/')) {
             const m = pathname.match(/^\/vlxxai\/play\/([A-Za-z0-9_-]+)\/(\d+)\.m3u8$/);
             if (!m) return new Response('Bad request', { status: 400, headers: CORS_HEADERS });
             try {
                 const target = await vlxxai.resolveEpisode(m[1], parseInt(m[2], 10));
                 if (!target) return new Response('Episode not found', { status: 404, headers: CORS_HEADERS });
+                if (request.headers.get('Origin') || url.searchParams.get('proxy') === '1') return await vlxxaiHls(target);
                 return new Response(null, { status: 302, headers: { ...CORS_HEADERS, 'Location': target, 'Cache-Control': 'no-store' } });
             } catch (e) {
                 return new Response(`Error: ${e.message}`, { status: 502, headers: CORS_HEADERS });
             }
+        }
+        if (pathname === '/vlxxai/hls.m3u8') {
+            try { return await vlxxaiHls(url.searchParams.get('url') || ''); } catch (e) { return new Response(`Error: ${e.message}`, { status: 502, headers: CORS_HEADERS }); }
+        }
+        if (pathname === '/vlxxai/segment.ts') {
+            const segUrl = url.searchParams.get('url') || '';
+            let segHost = '';
+            try { segHost = new URL(segUrl).hostname; } catch (e) { /* invalid */ }
+            if (!vlxxai.HOST_RE.test(segHost)) return new Response('Segment host not allowed', { status: 403, headers: CORS_HEADERS });
+            return handleSegmentProxy(segUrl, 'https://vlxxai.com/');
         }
 
         // VLXX AI diagnostics: the site's own player call (POST ?get_player=1) for one episode, and a probe of what it returns
