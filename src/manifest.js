@@ -392,8 +392,8 @@ const vlxxaiGenres = [
 
 const vlxxaiCatalogs = [
     {
-        type: "movie",
-        id: "vlxxai-movie",
+        type: "series",
+        id: "vlxxai-series",
         name: "VLXX AI",
         extra: [
             { name: "search", isRequired: false },
@@ -403,20 +403,7 @@ const vlxxaiCatalogs = [
     }
 ];
 
-const vlxxaiSeriesCatalogs = [
-    {
-        type: "series",
-        id: "vlxxai-series",
-        name: "VLXX AI (Phim bộ)",
-        extra: [
-            { name: "search", isRequired: false },
-            { name: "skip", isRequired: false },
-            { name: "genre", isRequired: false, options: vlxxaiGenres }
-        ]
-    }
-];
-
-const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs, ...fs1Catalogs, ...javtifulCatalogs, ...hohojCatalogs, ...sexmupCatalogs, ...javhayCatalogs, ...vlxxaiCatalogs, ...vlxxaiSeriesCatalogs];
+const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs, ...fs1Catalogs, ...javtifulCatalogs, ...hohojCatalogs, ...sexmupCatalogs, ...javhayCatalogs, ...vlxxaiCatalogs];
 const allCatalogs = [...filteredCatalogs, ...adultCatalogs];
 const allPrefixes = ["tt", "kkphim:", "vsmov:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "fs1:", "javtiful:", "hohoj:", "sexmup:", "javhay:", "vlxxai:"];
 
