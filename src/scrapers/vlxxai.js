@@ -158,8 +158,12 @@ async function loadTitle(slug) {
     const cacheKey = `vlxxai:page:${slug}`;
     const cached = cache.get(cacheKey);
     if (cached) return cached;
-    const html = await fetchHtml(`/${slug}`);
-    const episodes = parseEpisodes(html, slug);
+    let html = await fetchHtml(`/${slug}`);
+    let episodes = parseEpisodes(html, slug);
+    if (!episodes.length) { // a cold isolate or a hiccup of the site: one more try before giving up
+        html = await fetchHtml(`/${slug}`);
+        episodes = parseEpisodes(html, slug);
+    }
     const h1 = decode((html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/) || [])[1]).replace(/\s*-\s*Tập\s*\d+\s*$/i, '');
     const og = (html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/i) || [])[1]
         || (html.match(/uploads\/thumbs\/[A-Za-z0-9_.-]+\.(?:webp|jpe?g|png)/) || [])[0] || '';
@@ -255,11 +259,13 @@ async function getStream(id, type, host) {
         // numbered episodes ascending, then the others ("Full") in page order
         const eps = info.episodes.filter(e => !p.ep || e.key === String(p.ep))
             .sort((a, b) => (a.n === null) - (b.n === null) || (a.n !== null ? a.n - b.n : a.index - b.index));
-        const label = (e) => `${info.name}\n${e.label}${info.badge ? ` • ${info.badge}` : ''}`;
+        // the episode comes first: clients may show only the first line, and identical lines look like duplicates
+        const label = (e) => `${e.label}${info.badge ? ` • ${info.badge}` : ''}\n${info.name}`;
         if (edge) {
             return eps.map(e => ({
                 name: `🔞 VLXX AI • ${e.label}`,
                 title: label(e),
+                description: label(e),
                 url: `${edge}/vlxxai/play/${p.slug}/${e.key}.m3u8`,
                 behaviorHints: { notWebReady: false, bingeGroup: `vlxxai-${p.slug}-${e.key}` }
             }));
@@ -267,7 +273,7 @@ async function getStream(id, type, host) {
         const out = [];
         for (const e of eps.slice(0, 10)) { // no edge host: resolve now (kept small)
             const url = await resolveEpisode(p.slug, e.key).catch(() => null);
-            if (url) out.push({ name: `🔞 VLXX AI • ${e.label}`, title: label(e), url, behaviorHints: { notWebReady: false, bingeGroup: `vlxxai-${p.slug}-${e.key}` } });
+            if (url) out.push({ name: `🔞 VLXX AI • ${e.label}`, title: label(e), description: label(e), url, behaviorHints: { notWebReady: false, bingeGroup: `vlxxai-${p.slug}-${e.key}` } });
         }
         return out;
     } catch (err) {
