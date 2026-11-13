@@ -90,6 +90,8 @@ const v = require('../src/scrapers/vlxxai');
     const streams = await v.getStream(`vlxxai:${SLUG}`, 'movie', 'w.dev');
     assert.deepStrictEqual(streams.map(s => s.url), [1, 2, 3].map(n => `https://w.dev/vlxxai/play/${SLUG}/${n}.m3u8`));
     assert.ok(streams[0].name.includes('Tập 1'));
+    // like the other multi-stream sources, every stream has its own bingeGroup (clients may merge streams that share one)
+    assert.strictEqual(new Set(streams.map(x => x.behaviorHints.bingeGroup)).size, streams.length);
     assert.ok(!calls.slice(before).some(c => c.startsWith('POST')));
     assert.strictEqual((await v.getStream(`vlxxai:${SLUG}:2`, 'movie', 'w.dev')).length, 1);
 

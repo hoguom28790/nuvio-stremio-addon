@@ -261,13 +261,13 @@ async function getStream(id, type, host) {
                 name: `🔞 VLXX AI • ${e.label}`,
                 title: label(e),
                 url: `${edge}/vlxxai/play/${p.slug}/${e.key}.m3u8`,
-                behaviorHints: { notWebReady: false, bingeGroup: `vlxxai-${p.slug}` }
+                behaviorHints: { notWebReady: false, bingeGroup: `vlxxai-${p.slug}-${e.key}` }
             }));
         }
         const out = [];
         for (const e of eps.slice(0, 10)) { // no edge host: resolve now (kept small)
             const url = await resolveEpisode(p.slug, e.key).catch(() => null);
-            if (url) out.push({ name: `🔞 VLXX AI • ${e.label}`, title: label(e), url, behaviorHints: { notWebReady: false, bingeGroup: `vlxxai-${p.slug}` } });
+            if (url) out.push({ name: `🔞 VLXX AI • ${e.label}`, title: label(e), url, behaviorHints: { notWebReady: false, bingeGroup: `vlxxai-${p.slug}-${e.key}` } });
         }
         return out;
     } catch (err) {
