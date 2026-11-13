@@ -1245,7 +1245,7 @@ export default {
             const search = url.searchParams.get('search') || undefined;
             const report = [];
             for (const id of ids) {
-                const type = (id === 'hentaiz-anime') ? 'series' : 'movie';
+                const type = (id === 'hentaiz-anime' || id.endsWith('-series')) ? 'series' : 'movie';
                 const row = { id, type, calls: [] };
                 const seen = new Set();
                 let skip = 0, repeated = 0, total = 0;

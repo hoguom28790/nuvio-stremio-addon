@@ -108,6 +108,21 @@ const v = require('../src/scrapers/vlxxai');
     // no edge host: resolved right away
     assert.deepStrictEqual((await v.getStream(`vlxxai:${SLUG}`)).map(s => s.url).length, 3);
 
+    // series: the same titles with a real episode list (video ids carry the episode key)
+    const sc = await v.getCatalog('vlxxai-series', 'series', {}, 'w.dev');
+    assert.strictEqual(sc[0].type, 'series');
+    assert.strictEqual(sc[0].id, `vlxxai:${SLUG}`);
+    const sm = await v.getMeta('series', `vlxxai:${SLUG}`, 'w.dev');
+    assert.strictEqual(sm.type, 'series');
+    assert.deepStrictEqual(sm.videos.map(x => [x.id, x.season, x.episode, x.title]), [1, 2, 3].map(n => [`vlxxai:${SLUG}:${n}`, 1, n, `Tập ${n}`]));
+    assert.ok(sm.videos.every((x, i, a) => !i || x.released > a[i - 1].released));
+    const sf = await v.getMeta('series', 'vlxxai:solo-film', 'w.dev');
+    assert.deepStrictEqual(sf.videos.map(x => [x.id, x.episode, x.title]), [['vlxxai:solo-film:full', 1, 'Full']]);
+    const one = await v.getStream(`vlxxai:${SLUG}:2`, 'series', 'w.dev');
+    assert.deepStrictEqual(one.map(x => x.url), [`https://w.dev/vlxxai/play/${SLUG}/2.m3u8`]);
+    assert.deepStrictEqual((await v.getStream('vlxxai:solo-film:full', 'series', 'w.dev')).map(x => x.url), ['https://w.dev/vlxxai/play/solo-film/full.m3u8']);
+    assert.deepStrictEqual(await v.getStream(`vlxxai:${SLUG}:99`, 'series', 'w.dev'), []);
+
     // browser playback: playlists and segments are routed back through the Worker (the CDN has no CORS)
     const master = '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\n360p/video.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=2\n720p/video.m3u8';
     const mb = 'https://ss.cdnz.top/vai/abc/playlist.m3u8';

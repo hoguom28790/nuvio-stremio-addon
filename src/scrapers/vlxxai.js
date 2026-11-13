@@ -65,8 +65,9 @@ function posterUrl(url, host) {
 }
 
 function parseId(id) {
-    const m = String(id).replace(/\.json$/, '').match(/^vlxxai:([A-Za-z0-9_-]+)(?::(\d+))?$/);
-    return m ? { slug: m[1], ep: m[2] ? parseInt(m[2], 10) : null } : null;
+    // vlxxai:<slug> (a title) or vlxxai:<slug>:<episode key> (one episode: "3", "full")
+    const m = String(id).replace(/\.json$/, '').match(/^vlxxai:([A-Za-z0-9_-]+)(?::([A-Za-z0-9_-]+))?$/);
+    return m ? { slug: m[1], ep: m[2] || null } : null;
 }
 
 /** Cards of a list page: `<article class="post-card"><a href="/<slug>"> ... <img src alt> ... ep-status ... title`. */
@@ -111,16 +112,21 @@ function parseEpisodes(html, slug) {
     return out;
 }
 
+/** Numbered episodes ascending, then the others ("Full") in page order. */
+function sortEpisodes(list) {
+    return [...list].sort((a, b) => (a.n === null) - (b.n === null) || (a.n !== null ? a.n - b.n : a.index - b.index));
+}
+
 async function fetchHtml(path, opts = {}) {
     const res = await client.get(path, { responseType: 'text', transformResponse: [d => d], ...opts });
     return typeof res.data === 'string' ? res.data : '';
 }
 
-function toMeta(item, host) {
+function toMeta(item, host, type) {
     const poster = posterUrl(item.poster, host);
     return {
         id: `vlxxai:${item.slug}`,
-        type: 'movie',
+        type,
         name: item.title,
         poster,
         background: poster,
@@ -130,6 +136,7 @@ function toMeta(item, host) {
 }
 
 async function getCatalog(catalogId, type, extra = {}, host) {
+    type = type === 'series' ? 'series' : 'movie'; // the same titles are offered as movies (episodes = streams) and as series (episodes = videos)
     const search = extra.search ? String(extra.search).trim() : '';
     const skip = parseInt(extra.skip, 10) || 0;
     const genre = GENRE_MAP[extra.genre] || GENRE_MAP['Mới Cập Nhật'];
@@ -137,14 +144,14 @@ async function getCatalog(catalogId, type, extra = {}, host) {
     try {
         // Home tabs page with `&page=N`. Search and category pages are a single page (no pager on the site).
         if (genre.tab && !search) {
-            const fetchPage = async (page) => parseList(await fetchHtml(`/?tab=${genre.tab}${page > 1 ? `&page=${page}` : ''}`)).map(i => toMeta(i, host));
-            return await pagedList({ key: `vlxxai:tab${genre.tab}`, skip, want: WANT, fetchPage });
+            const fetchPage = async (page) => parseList(await fetchHtml(`/?tab=${genre.tab}${page > 1 ? `&page=${page}` : ''}`)).map(i => toMeta(i, host, type));
+            return await pagedList({ key: `vlxxai:${type}:tab${genre.tab}`, skip, want: WANT, fetchPage });
         }
         const path = search ? `/search.php?q=${encodeURIComponent(search)}` : genre.path;
-        const key = `vlxxai:single:${path}:${host || ''}`;
+        const key = `vlxxai:single:${type}:${path}:${host || ''}`;
         let metas = cache.get(key);
         if (!metas) {
-            metas = parseList(await fetchHtml(path)).map(i => toMeta(i, host));
+            metas = parseList(await fetchHtml(path)).map(i => toMeta(i, host, type));
             if (metas.length) cache.set(key, metas, 600);
         }
         return metas.slice(skip, skip + WANT);
@@ -183,16 +190,29 @@ async function getMeta(type, id, host) {
     if (!p) return null;
     try {
         const info = await loadTitle(p.slug);
-        const last = info.episodes.reduce((m, e) => Math.max(m, e.n || 0), 0);
-        const count = info.episodes.length;
+        const poster = posterUrl(info.poster, host);
+        const base = { id: `vlxxai:${p.slug}`, name: info.name, poster, background: poster, genres: ['18+', info.badge].filter(Boolean) };
+        // numbered episodes ascending, then the others ("Full") in page order
+        const eps = sortEpisodes(info.episodes);
+        if (type === 'series') {
+            return {
+                ...base,
+                type: 'series',
+                description: info.description || info.name,
+                videos: eps.map((e, i) => ({
+                    id: `vlxxai:${p.slug}:${e.key}`,
+                    title: e.label,
+                    season: 1,
+                    episode: e.n || i + 1,
+                    released: new Date(Date.UTC(2000, 0, 1) + i * 86400000).toISOString()
+                }))
+            };
+        }
+        const last = eps.reduce((m, e) => Math.max(m, e.n || 0), 0);
         return {
-            id: `vlxxai:${p.slug}`,
+            ...base,
             type: 'movie',
-            name: info.name,
-            poster: posterUrl(info.poster, host),
-            background: posterUrl(info.poster, host),
-            description: `${info.description || info.name}\n\n📺 ${last ? `${count} tập (tới tập ${last})` : info.episodes.map(e => e.label).join(', ')} — chọn tập ở danh sách nguồn phát.`,
-            genres: ['18+', info.badge].filter(Boolean)
+            description: `${info.description || info.name}\n\n📺 ${last ? `${eps.length} tập (tới tập ${last})` : eps.map(e => e.label).join(', ')} — chọn tập ở danh sách nguồn phát.`
         };
     } catch (err) {
         console.error(`[VlxxAI Meta Error] ${id}:`, err.message);
@@ -257,8 +277,7 @@ async function getStream(id, type, host) {
         const info = await loadTitle(p.slug);
         const edge = edgeBaseOf(host);
         // numbered episodes ascending, then the others ("Full") in page order
-        const eps = info.episodes.filter(e => !p.ep || e.key === String(p.ep))
-            .sort((a, b) => (a.n === null) - (b.n === null) || (a.n !== null ? a.n - b.n : a.index - b.index));
+        const eps = sortEpisodes(info.episodes.filter(e => !p.ep || e.key === String(p.ep)));
         // the episode comes first: clients may show only the first line, and identical lines look like duplicates
         const label = (e) => `${e.label}${info.badge ? ` • ${info.badge}` : ''}\n${info.name}`;
         if (edge) {
