@@ -409,7 +409,7 @@ const allPrefixes = ["tt", "kkphim:", "vsmov:", "hentaiz:", "javhd:", "vlxx:", "
 
 const baseManifest = {
     id: "org.hophim.stremio",
-    version: "1.4.5",
+    version: "1.4.6",
     name: "Hồ Phim",
     description: "Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ KKPhim, VSMOV",
     logo: "https://raw.githubusercontent.com/hoguom28790/nuvio-stremio-addon/master/logo.png",
