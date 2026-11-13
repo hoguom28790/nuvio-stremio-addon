@@ -2,7 +2,8 @@ const axios = require('axios');
 const cache = require('../utils/cache');
 const { pagedList } = require('../utils/pagedList');
 
-// VLXX AI (vlxxai.com): AI-made dubbed/subbed drama series. A title has several episodes (/<slug>/tap-N).
+// VLXX AI (vlxxai.com): AI-made dubbed/subbed dramas. A title has several episodes (/<slug>/tap-N); here a title is a
+// "movie" (like the other 'Thế giới khác' sources) and its episodes are the streams.
 // Lists: home tabs `/?tab=N&page=P` (24 per page); category pages `/<category>` (one page); search `/search.php?q=`.
 // The player is loaded by the site's own page script: POST `?get_player=1` { slug, ep_index } -> JSON { link, sources }.
 // `ep_index` is the position of the episode in the page's episode list (newest first).
@@ -46,6 +47,12 @@ function abs(u) {
     if (!u) return '';
     if (/^https?:\/\//i.test(u)) return u;
     return `${BASE_URL}${u.startsWith('/') ? '' : '/'}${u}`;
+}
+
+function edgeBaseOf(host) {
+    if (!host) return '';
+    const edgeHost = !host.includes('onrender.com') ? host : ((typeof process !== 'undefined' && process.env && process.env.CF_HOST) || 'hophimaddon.hophim-4g6qbubt.workers.dev');
+    return edgeHost.includes('://') ? edgeHost : `https://${edgeHost}`;
 }
 
 function parseId(id) {
@@ -97,7 +104,7 @@ async function fetchHtml(path, opts = {}) {
 function toMeta(item) {
     return {
         id: `vlxxai:${item.slug}`,
-        type: 'series',
+        type: 'movie',
         name: item.title,
         poster: item.poster,
         background: item.poster,
@@ -156,22 +163,15 @@ async function getMeta(type, id) {
     if (!p) return null;
     try {
         const info = await loadTitle(p.slug);
-        const eps = [...info.episodes].sort((a, b) => a.n - b.n);
+        const last = info.episodes.reduce((m, e) => Math.max(m, e.n), 0);
         return {
             id: `vlxxai:${p.slug}`,
-            type: 'series',
+            type: 'movie',
             name: info.name,
             poster: info.poster,
             background: info.poster,
-            description: info.description || info.name,
-            genres: ['18+', info.badge].filter(Boolean),
-            videos: eps.map(e => ({
-                id: `vlxxai:${p.slug}:${e.n}`,
-                title: `Tập ${e.n}`,
-                season: 1,
-                episode: e.n,
-                released: new Date(Date.UTC(2000, 0, 1) + e.n * 86400000).toISOString()
-            }))
+            description: `${info.description || info.name}\n\n📺 ${info.episodes.length} tập${last ? ` (tới tập ${last})` : ''} — chọn tập ở danh sách nguồn phát.`,
+            genres: ['18+', info.badge].filter(Boolean)
         };
     } catch (err) {
         console.error(`[VlxxAI Meta Error] ${id}:`, err.message);
@@ -215,33 +215,46 @@ function pickSources(player) {
     return out;
 }
 
-async function getStream(id) {
+/** Playlist URL of one episode (null when the site gives none). Embedded pages are not played directly. */
+async function resolveEpisode(slug, n) {
+    const info = await loadTitle(slug);
+    const ep = info.episodes.find(e => e.n === n);
+    if (!ep) return null;
+    const src = pickSources(await fetchPlayer(slug, ep.index)).find(x => !x.embed);
+    return src ? src.url : null;
+}
+
+/**
+ * A title is one "movie" whose episodes are the streams (Tập 1, Tập 2, ...). Each stream points at the Worker
+ * (/vlxxai/play/<slug>/<n>.m3u8), which redirects to the episode's playlist when it is played, so listing the streams
+ * costs a single page fetch however many episodes there are.
+ */
+async function getStream(id, type, host) {
     const p = parseId(id);
-    if (!p || !p.ep) return [];
+    if (!p) return [];
     try {
         const info = await loadTitle(p.slug);
-        const ep = info.episodes.find(e => e.n === p.ep);
-        if (!ep) return [];
-        const player = await fetchPlayer(p.slug, ep.index);
-        const streams = [];
-        for (const src of pickSources(player)) {
-            if (src.embed) continue; // embedded pages are not played directly
-            streams.push({
-                name: '🔞 VLXX AI',
-                title: `${info.name}\nTập ${p.ep}${info.badge ? ` • ${info.badge}` : ''}`,
-                url: src.url,
-                behaviorHints: {
-                    notWebReady: false,
-                    bingeGroup: `vlxxai-${p.slug}`,
-                    proxyHeaders: { request: { 'User-Agent': USER_AGENT, 'Referer': `${BASE_URL}/` } }
-                }
-            });
+        const edge = edgeBaseOf(host);
+        const eps = [...info.episodes].filter(e => !p.ep || e.n === p.ep).sort((a, b) => a.n - b.n);
+        const label = (n) => `${info.name}\nTập ${n}${info.badge ? ` • ${info.badge}` : ''}`;
+        if (edge) {
+            return eps.map(e => ({
+                name: `🔞 VLXX AI • Tập ${e.n}`,
+                title: label(e.n),
+                url: `${edge}/vlxxai/play/${p.slug}/${e.n}.m3u8`,
+                behaviorHints: { notWebReady: false, bingeGroup: `vlxxai-${p.slug}` }
+            }));
         }
-        return streams;
+        const out = [];
+        for (const e of eps.slice(0, 10)) { // no edge host: resolve now (kept small)
+            const url = await resolveEpisode(p.slug, e.n).catch(() => null);
+            if (url) out.push({ name: `🔞 VLXX AI • Tập ${e.n}`, title: label(e.n), url, behaviorHints: { notWebReady: false, bingeGroup: `vlxxai-${p.slug}` } });
+        }
+        return out;
     } catch (err) {
         console.error(`[VlxxAI Stream Error] ${id}:`, err.message);
         return [];
     }
 }
 
-module.exports = { getCatalog, getMeta, getStream, fetchPlayer, pickSources, parseList, parseEpisodes, GENRE_MAP };
+module.exports = { getCatalog, getMeta, getStream, resolveEpisode, fetchPlayer, pickSources, parseList, parseEpisodes, GENRE_MAP };

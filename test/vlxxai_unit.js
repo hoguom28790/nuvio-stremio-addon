@@ -58,36 +58,43 @@ const v = require('../src/scrapers/vlxxai');
     // episodes: index = position in the page (newest first)
     assert.deepStrictEqual(v.parseEpisodes(TITLE_PAGE, SLUG), [{ n: 3, index: 0 }, { n: 2, index: 1 }, { n: 1, index: 2 }]);
 
-    // catalog
-    const cat = await v.getCatalog('vlxxai-series', 'series', {});
+    // catalog: movies, like the other sources
+    const cat = await v.getCatalog('vlxxai-movie', 'movie', {});
     assert.strictEqual(cat.length, 24);
     assert.strictEqual(cat[0].id, `vlxxai:${SLUG}`);
-    assert.strictEqual(cat[0].type, 'series');
-    const srch = await v.getCatalog('vlxxai-series', 'series', { search: 'found' });
+    assert.strictEqual(cat[0].type, 'movie');
+    const srch = await v.getCatalog('vlxxai-movie', 'movie', { search: 'found' });
     assert.deepStrictEqual(srch.map(m => m.id), ['vlxxai:found-one']);
-    const gen = await v.getCatalog('vlxxai-series', 'series', { genre: 'Loạn Luân' });
+    const gen = await v.getCatalog('vlxxai-movie', 'movie', { genre: 'Loạn Luân' });
     assert.deepStrictEqual(gen.map(m => m.id), [`vlxxai:${SLUG}`, 'vlxxai:thai-tu-an-danh']); // single-page category
 
-    // meta: episodes ascending, title without the "- Tập N" suffix, poster from the page
-    const meta = await v.getMeta('series', `vlxxai:${SLUG}`);
+    // meta: a movie, title without the "- Tập N" suffix, poster from the page
+    const meta = await v.getMeta('movie', `vlxxai:${SLUG}`);
+    assert.strictEqual(meta.type, 'movie');
     assert.strictEqual(meta.name, 'Mười Năm Ở Rể');
-    assert.deepStrictEqual(meta.videos.map(x => x.id), [`vlxxai:${SLUG}:1`, `vlxxai:${SLUG}:2`, `vlxxai:${SLUG}:3`]);
-    assert.ok(/Dù mang hoài bão lớn/.test(meta.description));
+    assert.ok(/3 tập/.test(meta.description) && /Dù mang hoài bão lớn/.test(meta.description));
 
-    // stream: episode 1 is index 2 in the page's list
-    const streams = await v.getStream(`vlxxai:${SLUG}:1`);
-    assert.strictEqual(streams.length, 1);
-    assert.strictEqual(streams[0].url, 'https://cdn.example/ep1/index.m3u8');
+    // streams: one per episode (ascending), pointing at the edge; no player call until played
+    const before = calls.length;
+    const streams = await v.getStream(`vlxxai:${SLUG}`, 'movie', 'w.dev');
+    assert.deepStrictEqual(streams.map(s => s.url), [1, 2, 3].map(n => `https://w.dev/vlxxai/play/${SLUG}/${n}.m3u8`));
+    assert.ok(streams[0].name.includes('Tập 1'));
+    assert.ok(!calls.slice(before).some(c => c.startsWith('POST')));
+    assert.strictEqual((await v.getStream(`vlxxai:${SLUG}:2`, 'movie', 'w.dev')).length, 1);
+
+    // playing episode 1 = index 2 in the page's list
+    assert.strictEqual(await v.resolveEpisode(SLUG, 1), 'https://cdn.example/ep1/index.m3u8');
     assert.ok(calls.some(c => c === `POST /${SLUG}?get_player=1 slug=${SLUG}&ep_index=2`), calls.join('\n'));
-    assert.strictEqual(streams[0].behaviorHints.proxyHeaders.request.Referer, 'https://vlxxai.com/');
+    // no edge host: resolved right away
+    assert.deepStrictEqual((await v.getStream(`vlxxai:${SLUG}`)).map(s => s.url).length, 3);
 
     // player answers: error / embed only / relative link
     assert.deepStrictEqual(v.pickSources({ status: 'error', msg: 'x' }), []);
     assert.deepStrictEqual(v.pickSources({ sources: [{ file: 'https://e.example/x', type: 'embed' }] }), [{ url: 'https://e.example/x', embed: true }]);
     assert.deepStrictEqual(v.pickSources({ link: '/uploads/a.mp4', sources: [] }), [{ url: 'https://vlxxai.com/uploads/a.mp4', embed: false }]);
     player = { sources: [{ file: 'https://e.example/x', type: 'embed' }] };
-    assert.deepStrictEqual(await v.getStream(`vlxxai:${SLUG}:2`), []); // embedded pages are not played directly
-    assert.deepStrictEqual(await v.getStream(`vlxxai:${SLUG}:9`), []); // unknown episode
-    assert.deepStrictEqual(await v.getStream('vlxxai:' + SLUG), []);   // no episode in the id
+    assert.strictEqual(await v.resolveEpisode(SLUG, 2), null); // embedded pages are not played directly
+    assert.strictEqual(await v.resolveEpisode(SLUG, 9), null); // unknown episode
+    assert.deepStrictEqual(await v.getStream('nope'), []);
     console.log('vlxxai_unit OK');
 })().catch(e => { console.error(e); process.exit(1); });

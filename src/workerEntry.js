@@ -853,6 +853,19 @@ export default {
             }
         }
 
+        // VLXX AI: redirect to the episode's playlist (resolved when it is played)
+        if (pathname.startsWith('/vlxxai/play/')) {
+            const m = pathname.match(/^\/vlxxai\/play\/([A-Za-z0-9_-]+)\/(\d+)\.m3u8$/);
+            if (!m) return new Response('Bad request', { status: 400, headers: CORS_HEADERS });
+            try {
+                const target = await vlxxai.resolveEpisode(m[1], parseInt(m[2], 10));
+                if (!target) return new Response('Episode not found', { status: 404, headers: CORS_HEADERS });
+                return new Response(null, { status: 302, headers: { ...CORS_HEADERS, 'Location': target, 'Cache-Control': 'no-store' } });
+            } catch (e) {
+                return new Response(`Error: ${e.message}`, { status: 502, headers: CORS_HEADERS });
+            }
+        }
+
         // VLXX AI diagnostics: the site's own player call (POST ?get_player=1) for one episode, and a probe of what it returns
         if (pathname === '/vlxxai/debug') {
             const slug = url.searchParams.get('slug') || 'muoi-nam-den-sach-van-phai-o-re-noi-nhuc-cua-chang-re-hau-phu-kinh-thanh';
@@ -860,11 +873,9 @@ export default {
             const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
             const out = { slug, ep };
             try {
-                const meta = await vlxxai.getMeta('series', `vlxxai:${slug}`);
-                out.meta = meta ? { name: meta.name, poster: meta.poster, episodes: meta.videos.length, first: meta.videos[0] && meta.videos[0].id } : null;
-                const index = meta ? [...meta.videos].sort((a, b) => b.episode - a.episode).findIndex(v => v.episode === ep) : -1;
-                out.epIndex = index;
-                const player = index >= 0 ? await vlxxai.fetchPlayer(slug, index) : null;
+                const meta = await vlxxai.getMeta('movie', `vlxxai:${slug}`);
+                out.meta = meta ? { name: meta.name, poster: meta.poster, description: meta.description } : null;
+                const player = await vlxxai.fetchPlayer(slug, parseInt(url.searchParams.get('index') || '0', 10) || 0);
                 out.player = player ? JSON.parse(JSON.stringify(player, (k, v) => (typeof v === 'string' && v.length > 300 ? v.slice(0, 300) + '…' : v))) : null;
                 out.sources = vlxxai.pickSources(player);
                 const target = out.sources.length ? out.sources[0].url : null;
@@ -877,7 +888,7 @@ export default {
                         } catch (e) { out[withRef ? 'withReferer' : 'noReferer'] = { error: e.message }; }
                     }
                 }
-                out.streams = await vlxxai.getStream(`vlxxai:${slug}:${ep}`);
+                out.streams = await vlxxai.getStream(`vlxxai:${slug}`, 'movie', host);
             } catch (e) { out.error = e.message; }
             return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
         }
@@ -1196,7 +1207,7 @@ export default {
             const search = url.searchParams.get('search') || undefined;
             const report = [];
             for (const id of ids) {
-                const type = (id === 'hentaiz-anime' || id.endsWith('-series')) ? 'series' : 'movie';
+                const type = (id === 'hentaiz-anime') ? 'series' : 'movie';
                 const row = { id, type, calls: [] };
                 const seen = new Set();
                 let skip = 0, repeated = 0, total = 0;

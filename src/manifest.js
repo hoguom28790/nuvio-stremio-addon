@@ -392,8 +392,8 @@ const vlxxaiGenres = [
 
 const vlxxaiCatalogs = [
     {
-        type: "series",
-        id: "vlxxai-series",
+        type: "movie",
+        id: "vlxxai-movie",
         name: "VLXX AI",
         extra: [
             { name: "search", isRequired: false },
