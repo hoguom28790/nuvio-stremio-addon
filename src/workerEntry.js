@@ -7,6 +7,7 @@ const vlxx = require('./scrapers/vlxx');
 const avdb = require('./scrapers/avdb');
 const sexmup = require('./scrapers/sexmup');
 const javhay = require('./scrapers/javhay');
+const vlxxai = require('./scrapers/vlxxai');
 const javtiful = require('./scrapers/javtiful');
 const kkphim = require('./scrapers/kkphim');
 const vsmov = require('./scrapers/vsmov');
@@ -852,6 +853,35 @@ export default {
             }
         }
 
+        // VLXX AI diagnostics: the site's own player call (POST ?get_player=1) for one episode, and a probe of what it returns
+        if (pathname === '/vlxxai/debug') {
+            const slug = url.searchParams.get('slug') || 'muoi-nam-den-sach-van-phai-o-re-noi-nhuc-cua-chang-re-hau-phu-kinh-thanh';
+            const ep = parseInt(url.searchParams.get('ep') || '1', 10) || 1;
+            const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+            const out = { slug, ep };
+            try {
+                const meta = await vlxxai.getMeta('series', `vlxxai:${slug}`);
+                out.meta = meta ? { name: meta.name, poster: meta.poster, episodes: meta.videos.length, first: meta.videos[0] && meta.videos[0].id } : null;
+                const index = meta ? [...meta.videos].sort((a, b) => b.episode - a.episode).findIndex(v => v.episode === ep) : -1;
+                out.epIndex = index;
+                const player = index >= 0 ? await vlxxai.fetchPlayer(slug, index) : null;
+                out.player = player ? JSON.parse(JSON.stringify(player, (k, v) => (typeof v === 'string' && v.length > 300 ? v.slice(0, 300) + '…' : v))) : null;
+                out.sources = vlxxai.pickSources(player);
+                const target = out.sources.length ? out.sources[0].url : null;
+                if (target) {
+                    for (const withRef of [true, false]) {
+                        try {
+                            const r = await fetch(target, { headers: { 'User-Agent': UA, ...(withRef ? { 'Referer': 'https://vlxxai.com/' } : {}), 'Range': 'bytes=0-1023' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                            const buf = new Uint8Array(await r.arrayBuffer());
+                            out[withRef ? 'withReferer' : 'noReferer'] = { status: r.status, type: r.headers.get('content-type'), range: r.headers.get('content-range'), length: r.headers.get('content-length'), cors: r.headers.get('access-control-allow-origin'), first16: [...buf.slice(0, 16)].map(b => b.toString(16).padStart(2, '0')).join(' '), text: /^#EXTM3U/.test(new TextDecoder().decode(buf.slice(0, 7))) ? new TextDecoder().decode(buf.slice(0, 300)) : undefined };
+                        } catch (e) { out[withRef ? 'withReferer' : 'noReferer'] = { error: e.message }; }
+                    }
+                }
+                out.streams = await vlxxai.getStream(`vlxxai:${slug}:${ep}`);
+            } catch (e) { out.error = e.message; }
+            return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
         // Hohoj diagnostics: embed m3u8 + playlist/segment probe, plus list-page structure
         if (pathname === '/hohoj/debug') {
             const id = url.searchParams.get('id') || '60919';
@@ -1166,7 +1196,7 @@ export default {
             const search = url.searchParams.get('search') || undefined;
             const report = [];
             for (const id of ids) {
-                const type = id === 'hentaiz-anime' ? 'series' : 'movie';
+                const type = (id === 'hentaiz-anime' || id.endsWith('-series')) ? 'series' : 'movie';
                 const row = { id, type, calls: [] };
                 const seen = new Set();
                 let skip = 0, repeated = 0, total = 0;
