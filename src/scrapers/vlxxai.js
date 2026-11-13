@@ -268,14 +268,17 @@ async function getStream(id, type, host) {
 }
 
 /**
- * Browsers (Nuvio web) cannot read the CDN's playlists/segments directly (no CORS headers), so for them the Worker
- * serves the playlist itself: every URI is rewritten to /vlxxai/hls.m3u8 (playlists) or /vlxxai/segment.ts (the rest).
+ * Every client gets the playlist through the Worker: browsers (Nuvio web) cannot read the CDN directly (no CORS
+ * headers) and FFmpeg-based players mistake its .png-named segments for images. Every URI is rewritten to
+ * /vlxxai/hls.m3u8 (playlists) or /vlxxai/segment.ts (the rest).
  */
 function rewritePlaylist(text, baseUrl, edge) {
+    // The URL must END in .ts / .m3u8: FFmpeg-based players pick the demuxer from the end of the URL, and the CDN's
+    // segments are named .png (real MPEG-TS inside), which makes them read the segment as an image.
     const wrap = (ref) => {
         const abs = new URL(ref, baseUrl).href;
-        const kind = /\.m3u8(?:$|\?)/i.test(abs) ? 'hls.m3u8' : 'segment.ts';
-        return `${edge}/vlxxai/${kind}?url=${encodeURIComponent(abs)}`;
+        const playlist = /\.m3u8(?:$|\?)/i.test(abs);
+        return `${edge}/vlxxai/${playlist ? 'hls.m3u8' : 'segment.ts'}?url=${encodeURIComponent(abs)}&f=${playlist ? 'list.m3u8' : 'seg.ts'}`;
     };
     return String(text || '').split('\n').map((line) => {
         const t = line.trim();

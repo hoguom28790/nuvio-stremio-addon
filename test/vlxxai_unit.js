@@ -98,11 +98,12 @@ const v = require('../src/scrapers/vlxxai');
     const mb = 'https://ss.cdnz.top/vai/abc/playlist.m3u8';
     const rm = v.rewritePlaylist(master, mb, 'https://w.dev').split('\n');
     assert.strictEqual(rm[0], '#EXTM3U');
-    assert.strictEqual(rm[2], `https://w.dev/vlxxai/hls.m3u8?url=${encodeURIComponent('https://ss.cdnz.top/vai/abc/360p/video.m3u8')}`);
+    assert.strictEqual(rm[2], `https://w.dev/vlxxai/hls.m3u8?url=${encodeURIComponent('https://ss.cdnz.top/vai/abc/360p/video.m3u8')}&f=list.m3u8`);
     const media = '#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="key.bin"\n#EXTINF:4.0,\nvideo0.png\n#EXT-X-ENDLIST\n';
     const rv = v.rewritePlaylist(media, 'https://ss.cdnz.top/vai/abc/360p/video.m3u8', 'https://w.dev').split('\n');
-    assert.ok(rv[1].includes(`URI="https://w.dev/vlxxai/segment.ts?url=${encodeURIComponent('https://ss.cdnz.top/vai/abc/360p/key.bin')}"`));
-    assert.strictEqual(rv[3], `https://w.dev/vlxxai/segment.ts?url=${encodeURIComponent('https://ss.cdnz.top/vai/abc/360p/video0.png')}`);
+    assert.ok(rv[1].includes(`URI="https://w.dev/vlxxai/segment.ts?url=${encodeURIComponent('https://ss.cdnz.top/vai/abc/360p/key.bin')}&f=seg.ts"`));
+    assert.strictEqual(rv[3], `https://w.dev/vlxxai/segment.ts?url=${encodeURIComponent('https://ss.cdnz.top/vai/abc/360p/video0.png')}&f=seg.ts`);
+    assert.ok(rv[3].endsWith('.ts')); // FFmpeg picks the demuxer from the end of the URL
     assert.ok(v.HOST_RE.test('ss.cdnz.top') && !v.HOST_RE.test('evil.example') && !v.HOST_RE.test('cdnz.top.evil.example'));
 
     // player answers: error / embed only / relative link

@@ -870,8 +870,8 @@ export default {
             }
         }
 
-        // VLXX AI: playlist of one episode. Apps get a redirect to the CDN playlist; browsers (they send an Origin header and
-        // the CDN has no CORS) get the playlist through this Worker, whose segment/playlist URLs point back here.
+        // VLXX AI: playlist of one episode, served through this Worker for every client (the CDN has no CORS and its
+        // .png-named segments confuse FFmpeg-based players); its segment/playlist URLs point back here.
         const vlxxaiHls = async (target) => {
             let host2 = '';
             try { host2 = new URL(target).hostname; } catch (e) { /* invalid */ }
@@ -887,8 +887,8 @@ export default {
             try {
                 const target = await vlxxai.resolveEpisode(m[1], parseInt(m[2], 10));
                 if (!target) return new Response('Episode not found', { status: 404, headers: CORS_HEADERS });
-                if (request.headers.get('Origin') || url.searchParams.get('proxy') === '1') return await vlxxaiHls(target);
-                return new Response(null, { status: 302, headers: { ...CORS_HEADERS, 'Location': target, 'Cache-Control': 'no-store' } });
+                if (url.searchParams.get('direct') === '1') return new Response(null, { status: 302, headers: { ...CORS_HEADERS, 'Location': target, 'Cache-Control': 'no-store' } });
+                return await vlxxaiHls(target);
             } catch (e) {
                 return new Response(`Error: ${e.message}`, { status: 502, headers: CORS_HEADERS });
             }
