@@ -91,16 +91,22 @@ function parseList(html) {
     return items;
 }
 
-/** Episodes listed on a title page, in page order (newest first): [{ n, index }] */
+/**
+ * Episodes listed on a title page, in page order (newest first): [{ key, label, n, index }].
+ * Links are /<slug>/tap-<N>, or /<slug>/full for a single-video title; `key` is "<N>" or the path word ("full"),
+ * `n` the episode number (null when the link is not numbered).
+ */
 function parseEpisodes(html, slug) {
-    const re = new RegExp(`href="(?:https?://[^/"]+)?/${slug}/tap-(\\d+)"[^>]*class="ep-item`, 'g');
+    const re = new RegExp(`href="(?:https?://[^/"]+)?/${slug}/([A-Za-z0-9_-]+)"[^>]*class="ep-item[^"]*"[^>]*>([\\s\\S]*?)</a>`, 'g');
     const out = [];
     const seen = new Set();
     for (const m of String(html || '').matchAll(re)) {
-        const n = parseInt(m[1], 10);
-        if (seen.has(n)) continue;
-        seen.add(n);
-        out.push({ n, index: out.length });
+        const num = m[1].match(/^tap-(\d+)$/i);
+        const key = num ? String(parseInt(num[1], 10)) : m[1];
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const text = decode(m[2]);
+        out.push({ key, label: num ? `Tập ${key}` : (text || key), n: num ? parseInt(key, 10) : null, index: out.length });
     }
     return out;
 }
@@ -173,14 +179,15 @@ async function getMeta(type, id, host) {
     if (!p) return null;
     try {
         const info = await loadTitle(p.slug);
-        const last = info.episodes.reduce((m, e) => Math.max(m, e.n), 0);
+        const last = info.episodes.reduce((m, e) => Math.max(m, e.n || 0), 0);
+        const count = info.episodes.length;
         return {
             id: `vlxxai:${p.slug}`,
             type: 'movie',
             name: info.name,
             poster: posterUrl(info.poster, host),
             background: posterUrl(info.poster, host),
-            description: `${info.description || info.name}\n\n📺 ${info.episodes.length} tập${last ? ` (tới tập ${last})` : ''} — chọn tập ở danh sách nguồn phát.`,
+            description: `${info.description || info.name}\n\n📺 ${last ? `${count} tập (tới tập ${last})` : info.episodes.map(e => e.label).join(', ')} — chọn tập ở danh sách nguồn phát.`,
             genres: ['18+', info.badge].filter(Boolean)
         };
     } catch (err) {
@@ -226,9 +233,9 @@ function pickSources(player) {
 }
 
 /** Playlist URL of one episode (null when the site gives none). Embedded pages are not played directly. */
-async function resolveEpisode(slug, n) {
+async function resolveEpisode(slug, key) {
     const info = await loadTitle(slug);
-    const ep = info.episodes.find(e => e.n === n);
+    const ep = info.episodes.find(e => e.key === String(key));
     if (!ep) return null;
     const src = pickSources(await fetchPlayer(slug, ep.index)).find(x => !x.embed);
     return src ? src.url : null;
@@ -236,7 +243,7 @@ async function resolveEpisode(slug, n) {
 
 /**
  * A title is one "movie" whose episodes are the streams (Tập 1, Tập 2, ...). Each stream points at the Worker
- * (/vlxxai/play/<slug>/<n>.m3u8), which redirects to the episode's playlist when it is played, so listing the streams
+ * (/vlxxai/play/<slug>/<key>.m3u8), which serves the episode's playlist when it is played, so listing the streams
  * costs a single page fetch however many episodes there are.
  */
 async function getStream(id, type, host) {
@@ -245,20 +252,22 @@ async function getStream(id, type, host) {
     try {
         const info = await loadTitle(p.slug);
         const edge = edgeBaseOf(host);
-        const eps = [...info.episodes].filter(e => !p.ep || e.n === p.ep).sort((a, b) => a.n - b.n);
-        const label = (n) => `${info.name}\nTập ${n}${info.badge ? ` • ${info.badge}` : ''}`;
+        // numbered episodes ascending, then the others ("Full") in page order
+        const eps = info.episodes.filter(e => !p.ep || e.key === String(p.ep))
+            .sort((a, b) => (a.n === null) - (b.n === null) || (a.n !== null ? a.n - b.n : a.index - b.index));
+        const label = (e) => `${info.name}\n${e.label}${info.badge ? ` • ${info.badge}` : ''}`;
         if (edge) {
             return eps.map(e => ({
-                name: `🔞 VLXX AI • Tập ${e.n}`,
-                title: label(e.n),
-                url: `${edge}/vlxxai/play/${p.slug}/${e.n}.m3u8`,
+                name: `🔞 VLXX AI • ${e.label}`,
+                title: label(e),
+                url: `${edge}/vlxxai/play/${p.slug}/${e.key}.m3u8`,
                 behaviorHints: { notWebReady: false, bingeGroup: `vlxxai-${p.slug}` }
             }));
         }
         const out = [];
         for (const e of eps.slice(0, 10)) { // no edge host: resolve now (kept small)
-            const url = await resolveEpisode(p.slug, e.n).catch(() => null);
-            if (url) out.push({ name: `🔞 VLXX AI • Tập ${e.n}`, title: label(e.n), url, behaviorHints: { notWebReady: false, bingeGroup: `vlxxai-${p.slug}` } });
+            const url = await resolveEpisode(p.slug, e.key).catch(() => null);
+            if (url) out.push({ name: `🔞 VLXX AI • ${e.label}`, title: label(e), url, behaviorHints: { notWebReady: false, bingeGroup: `vlxxai-${p.slug}` } });
         }
         return out;
     } catch (err) {

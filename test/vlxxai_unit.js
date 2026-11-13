@@ -32,11 +32,13 @@ const TITLE_PAGE = `<h1 style="x"> Mười Năm Ở Rể - Tập 1 </h1><span>�
 
 const calls = [];
 let player = { status: 'success', link: 'https://cdn.example/ep1/index.m3u8', sources: [{ file: 'https://cdn.example/ep1/index.m3u8', type: 'hls' }] };
+const FULL_TITLE = `<h1> Phim Lẻ - Full </h1><span>⭐ Thuyết Minh</span>\n<div class="ep-grid active" id="group-0"> <a href="/solo-film/full" class="ep-item active" title="Full"> Full </a> </div>\n<div id="movieContent">Nội dung</div>`;
 const client = {
     get: async (u) => {
         calls.push(`GET ${u}`);
         if (u.startsWith('/search.php')) return { data: card('found-one', 'Found', 1) };
         if (u === `/${SLUG}`) return { data: TITLE_PAGE };
+        if (u === '/solo-film') return { data: FULL_TITLE };
         if (u.startsWith('/loan-luan')) return { data: HOME };
         if (u.startsWith('/?tab=')) return { data: /page=\d/.test(u) ? '' : FULL };
         return { data: '' };
@@ -56,7 +58,11 @@ const v = require('../src/scrapers/vlxxai');
     assert.strictEqual(items[0].status, 'Tập 3');
 
     // episodes: index = position in the page (newest first)
-    assert.deepStrictEqual(v.parseEpisodes(TITLE_PAGE, SLUG), [{ n: 3, index: 0 }, { n: 2, index: 1 }, { n: 1, index: 2 }]);
+    assert.deepStrictEqual(v.parseEpisodes(TITLE_PAGE, SLUG), [
+        { key: '3', label: 'Tập 3', n: 3, index: 0 }, { key: '2', label: 'Tập 2', n: 2, index: 1 }, { key: '1', label: 'Tập 1', n: 1, index: 2 }]);
+    // single-video titles link /<slug>/full
+    const FULL_PAGE = `<div class="ep-grid active" id="group-0"> <a href="/solo-film/full" class="ep-item active" title="Full"> Full </a> </div>`;
+    assert.deepStrictEqual(v.parseEpisodes(FULL_PAGE, 'solo-film'), [{ key: 'full', label: 'Full', n: null, index: 0 }]);
 
     // covers go through the edge when a host is known
     const withHost = await v.getCatalog('vlxxai-movie', 'movie', { genre: 'Loạn Luân' }, 'w.dev');
@@ -86,6 +92,13 @@ const v = require('../src/scrapers/vlxxai');
     assert.ok(streams[0].name.includes('Tập 1'));
     assert.ok(!calls.slice(before).some(c => c.startsWith('POST')));
     assert.strictEqual((await v.getStream(`vlxxai:${SLUG}:2`, 'movie', 'w.dev')).length, 1);
+
+    // a single-video title ("Full") has one stream and plays through ep_index 0
+    const solo = await v.getStream('vlxxai:solo-film', 'movie', 'w.dev');
+    assert.deepStrictEqual(solo.map(x => [x.name, x.url]), [['🔞 VLXX AI • Full', 'https://w.dev/vlxxai/play/solo-film/full.m3u8']]);
+    assert.strictEqual(await v.resolveEpisode('solo-film', 'full'), 'https://cdn.example/ep1/index.m3u8');
+    assert.ok(calls.some(c => c === 'POST /solo-film?get_player=1 slug=solo-film&ep_index=0'));
+    assert.ok(/Full/.test((await v.getMeta('movie', 'vlxxai:solo-film')).description));
 
     // playing episode 1 = index 2 in the page's list
     assert.strictEqual(await v.resolveEpisode(SLUG, 1), 'https://cdn.example/ep1/index.m3u8');

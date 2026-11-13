@@ -882,10 +882,10 @@ export default {
             return new Response(body, { headers: { ...CORS_HEADERS, 'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8', 'Cache-Control': 'no-store' } });
         };
         if (pathname.startsWith('/vlxxai/play/')) {
-            const m = pathname.match(/^\/vlxxai\/play\/([A-Za-z0-9_-]+)\/(\d+)\.m3u8$/);
+            const m = pathname.match(/^\/vlxxai\/play\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)\.m3u8$/);
             if (!m) return new Response('Bad request', { status: 400, headers: CORS_HEADERS });
             try {
-                const target = await vlxxai.resolveEpisode(m[1], parseInt(m[2], 10));
+                const target = await vlxxai.resolveEpisode(m[1], m[2]);
                 if (!target) return new Response('Episode not found', { status: 404, headers: CORS_HEADERS });
                 if (url.searchParams.get('direct') === '1') return new Response(null, { status: 302, headers: { ...CORS_HEADERS, 'Location': target, 'Cache-Control': 'no-store' } });
                 return await vlxxaiHls(target);
