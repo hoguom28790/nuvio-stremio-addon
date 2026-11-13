@@ -7,6 +7,7 @@ const vlxx = require('./scrapers/vlxx');
 const avdb = require('./scrapers/avdb');
 const sexmup = require('./scrapers/sexmup');
 const javhay = require('./scrapers/javhay');
+const vlxxai = require('./scrapers/vlxxai');
 const javtiful = require('./scrapers/javtiful');
 const kkphim = require('./scrapers/kkphim');
 const vsmov = require('./scrapers/vsmov');
@@ -852,6 +853,84 @@ export default {
             }
         }
 
+        // VLXX AI: cover proxy (the site's thumbs, fetched with its Referer, cached at the edge)
+        if (pathname.startsWith('/vlxxai/poster/')) {
+            const name = pathname.replace('/vlxxai/poster/', '');
+            if (!/^[A-Za-z0-9_.-]+\.(?:webp|jpe?g|png)$/i.test(name)) return new Response('Bad poster path', { status: 400, headers: CORS_HEADERS });
+            try {
+                const upstream = await fetch(`https://vlxxai.com/uploads/thumbs/${name}`, {
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36', 'Referer': 'https://vlxxai.com/' },
+                    cf: { cacheEverything: true, cacheTtlByStatus: { '200-299': 604800, '404': 600, '500-599': 0 } }
+                });
+                const type = upstream.headers.get('content-type') || '';
+                if (!upstream.ok || !/^image\//i.test(type)) return new Response('Poster not found', { status: upstream.status === 200 ? 404 : upstream.status, headers: { ...CORS_HEADERS, 'Cache-Control': 'public, max-age=300' } });
+                return new Response(upstream.body, { headers: { ...CORS_HEADERS, 'Content-Type': type, 'Cache-Control': 'public, max-age=604800, immutable', 'CDN-Cache-Control': 'public, max-age=604800' } });
+            } catch (err) {
+                return new Response(`Poster error: ${err.message}`, { status: 502, headers: CORS_HEADERS });
+            }
+        }
+
+        // VLXX AI: playlist of one episode, served through this Worker for every client (the CDN has no CORS and its
+        // .png-named segments confuse FFmpeg-based players); its segment/playlist URLs point back here.
+        const vlxxaiHls = async (target) => {
+            let host2 = '';
+            try { host2 = new URL(target).hostname; } catch (e) { /* invalid */ }
+            if (!vlxxai.HOST_RE.test(host2)) return new Response('Host not allowed', { status: 403, headers: CORS_HEADERS });
+            const r = await fetch(target, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': 'https://vlxxai.com/' } });
+            if (!r.ok) return new Response(`Upstream error: ${r.status}`, { status: r.status, headers: CORS_HEADERS });
+            const body = vlxxai.rewritePlaylist(await r.text(), target, url.origin);
+            return new Response(body, { headers: { ...CORS_HEADERS, 'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8', 'Cache-Control': 'no-store' } });
+        };
+        if (pathname.startsWith('/vlxxai/play/')) {
+            const m = pathname.match(/^\/vlxxai\/play\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)\.m3u8$/);
+            if (!m) return new Response('Bad request', { status: 400, headers: CORS_HEADERS });
+            try {
+                const target = await vlxxai.resolveEpisode(m[1], m[2]);
+                if (!target) return new Response('Episode not found', { status: 404, headers: CORS_HEADERS });
+                if (url.searchParams.get('direct') === '1') return new Response(null, { status: 302, headers: { ...CORS_HEADERS, 'Location': target, 'Cache-Control': 'no-store' } });
+                return await vlxxaiHls(target);
+            } catch (e) {
+                return new Response(`Error: ${e.message}`, { status: 502, headers: CORS_HEADERS });
+            }
+        }
+        if (pathname === '/vlxxai/hls.m3u8') {
+            try { return await vlxxaiHls(url.searchParams.get('url') || ''); } catch (e) { return new Response(`Error: ${e.message}`, { status: 502, headers: CORS_HEADERS }); }
+        }
+        if (pathname === '/vlxxai/segment.ts') {
+            const segUrl = url.searchParams.get('url') || '';
+            let segHost = '';
+            try { segHost = new URL(segUrl).hostname; } catch (e) { /* invalid */ }
+            if (!vlxxai.HOST_RE.test(segHost)) return new Response('Segment host not allowed', { status: 403, headers: CORS_HEADERS });
+            return handleSegmentProxy(segUrl, 'https://vlxxai.com/');
+        }
+
+        // VLXX AI diagnostics: the site's own player call (POST ?get_player=1) for one episode, and a probe of what it returns
+        if (pathname === '/vlxxai/debug') {
+            const slug = url.searchParams.get('slug') || 'muoi-nam-den-sach-van-phai-o-re-noi-nhuc-cua-chang-re-hau-phu-kinh-thanh';
+            const ep = parseInt(url.searchParams.get('ep') || '1', 10) || 1;
+            const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+            const out = { slug, ep };
+            try {
+                const meta = await vlxxai.getMeta('movie', `vlxxai:${slug}`, host);
+                out.meta = meta ? { name: meta.name, poster: meta.poster, description: meta.description } : null;
+                const player = await vlxxai.fetchPlayer(slug, parseInt(url.searchParams.get('index') || '0', 10) || 0);
+                out.player = player ? JSON.parse(JSON.stringify(player, (k, v) => (typeof v === 'string' && v.length > 300 ? v.slice(0, 300) + '…' : v))) : null;
+                out.sources = vlxxai.pickSources(player);
+                const target = out.sources.length ? out.sources[0].url : null;
+                if (target) {
+                    for (const withRef of [true, false]) {
+                        try {
+                            const r = await fetch(target, { headers: { 'User-Agent': UA, ...(withRef ? { 'Referer': 'https://vlxxai.com/' } : {}), 'Range': 'bytes=0-1023' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                            const buf = new Uint8Array(await r.arrayBuffer());
+                            out[withRef ? 'withReferer' : 'noReferer'] = { status: r.status, type: r.headers.get('content-type'), range: r.headers.get('content-range'), length: r.headers.get('content-length'), cors: r.headers.get('access-control-allow-origin'), first16: [...buf.slice(0, 16)].map(b => b.toString(16).padStart(2, '0')).join(' '), text: /^#EXTM3U/.test(new TextDecoder().decode(buf.slice(0, 7))) ? new TextDecoder().decode(buf.slice(0, 300)) : undefined };
+                        } catch (e) { out[withRef ? 'withReferer' : 'noReferer'] = { error: e.message }; }
+                    }
+                }
+                out.streams = await vlxxai.getStream(`vlxxai:${slug}`, 'movie', host);
+            } catch (e) { out.error = e.message; }
+            return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
+        }
+
         // Hohoj diagnostics: embed m3u8 + playlist/segment probe, plus list-page structure
         if (pathname === '/hohoj/debug') {
             const id = url.searchParams.get('id') || '60919';
@@ -1166,7 +1245,7 @@ export default {
             const search = url.searchParams.get('search') || undefined;
             const report = [];
             for (const id of ids) {
-                const type = id === 'hentaiz-anime' ? 'series' : 'movie';
+                const type = (id === 'hentaiz-anime' || id.endsWith('-series')) ? 'series' : 'movie';
                 const row = { id, type, calls: [] };
                 const seen = new Set();
                 let skip = 0, repeated = 0, total = 0;

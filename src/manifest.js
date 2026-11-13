@@ -373,13 +373,43 @@ const javhayCatalogs = [
     }
 ];
 
-const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs, ...fs1Catalogs, ...javtifulCatalogs, ...hohojCatalogs, ...sexmupCatalogs, ...javhayCatalogs];
+const vlxxaiGenres = [
+    "Mới Cập Nhật",
+    "Đã Hoàn Thành",
+    "Đang Cập Nhật",
+    "Trùng Sinh",
+    "Học Đường",
+    "Loạn Luân",
+    "Xuyên Không",
+    "Hiện Đại",
+    "Công Sở",
+    "Cổ Trang",
+    "Hệ Thống",
+    "Tu Tiên",
+    "Ngoại Tình",
+    "Hấp Dẫn"
+];
+
+const vlxxaiCatalogs = [
+    {
+        type: "series",
+        id: "vlxxai-series",
+        name: "VLXX AI",
+        extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: vlxxaiGenres }
+        ]
+    }
+];
+
+const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs, ...fs1Catalogs, ...javtifulCatalogs, ...hohojCatalogs, ...sexmupCatalogs, ...javhayCatalogs, ...vlxxaiCatalogs];
 const allCatalogs = [...filteredCatalogs, ...adultCatalogs];
-const allPrefixes = ["tt", "kkphim:", "vsmov:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "fs1:", "javtiful:", "hohoj:", "sexmup:", "javhay:"];
+const allPrefixes = ["tt", "kkphim:", "vsmov:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "fs1:", "javtiful:", "hohoj:", "sexmup:", "javhay:", "vlxxai:"];
 
 const baseManifest = {
     id: "org.hophim.stremio",
-    version: "1.4.5",
+    version: "1.4.6",
     name: "Hồ Phim",
     description: "Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ KKPhim, VSMOV",
     logo: "https://raw.githubusercontent.com/hoguom28790/nuvio-stremio-addon/master/logo.png",
