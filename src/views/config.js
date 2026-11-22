@@ -742,6 +742,10 @@ function renderConfigPage(host, initialConfig = {}) {
           <input type="checkbox" name="source" value="hentaiz" ${sourceChecked('hentaiz')} onchange="updateUI()">
           <span>⚡ HentaiZ (Anime)</span>
         </label>
+        <label class="${sourceClass('javhd')}">
+          <input type="checkbox" name="source" value="javhd" ${sourceChecked('javhd')} onchange="updateUI()">
+          <span>⚡ JavHD (javhdz.page)</span>
+        </label>
         <label class="${sourceClass('vlxx')}">
           <input type="checkbox" name="source" value="vlxx" ${sourceChecked('vlxx')} onchange="updateUI()">
           <span>⚡ VLXX (Phim Chọn Lọc)</span>
