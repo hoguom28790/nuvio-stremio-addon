@@ -30,7 +30,7 @@ const line = (k, v) => console.log(`${k}: ${typeof v === 'string' ? v : JSON.str
         line('moviePlayerLines', page.text.split('\n').map(l => l.trim()).filter(l => /m3u8|iframe|player|source|atob|embed/i.test(l)).slice(0, 12).map(l => l.slice(0, 220)));
         return;
     }
-    for (const ref of [`${BASE}/`, null]) {
+    for (const ref of [`${BASE}/`, 'https://javhdz.one/', null]) {
         const p = await get(stream, ref ? { Referer: ref } : {});
         line(`playlist(${ref ? 'referer' : 'no referer'})`, { status: p.r.status, type: p.r.headers.get('content-type'), cors: p.r.headers.get('access-control-allow-origin'), head: p.text.slice(0, 260) });
         const next = p.text.split('\n').map(l => l.trim()).find(l => l && !l.startsWith('#'));
