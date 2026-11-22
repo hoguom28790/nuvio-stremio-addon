@@ -2,7 +2,8 @@ const axios = require('axios');
 const cache = require('../utils/cache');
 const { pagedList } = require('../utils/pagedList');
 
-const BASE_URL = 'https://vlxx.phd';
+// vlxx.phd now redirects to vlxx.net (the lists use <img src>, no longer data-original)
+const BASE_URL = 'https://vlxx.net';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 const client = axios.create({
@@ -71,18 +72,24 @@ function stripHtml(html) {
     return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-// Parse video cards from HTML listing
+// Parse video cards from HTML listing: <div id="video-N" class="video-item"><a title href><img src|data-original>
+// <div class="ribbon">..</div></a><div class="video-name"><a>title</a></div></div>
 function parseVideoList(html) {
     const items = [];
-    const itemRegex = /<div id="video-(\d+)" class="video-item">[\s\S]*?<a title="([^"]*)" href="([^"]*)">[\s\S]*?data-original="([^"]*)"[\s\S]*?(?:<div class="ribbon">([^<]*)<\/div>[\s\S]*?)?<\/a>[\s\S]*?<div class="video-name">[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/g;
-
-    let match;
-    while ((match = itemRegex.exec(html)) !== null) {
-        const vid = match[1];
-        const title = match[2] || stripHtml(match[6]);
-        const href = match[3];
-        const poster = match[4].startsWith('http') ? match[4] : `${BASE_URL}${match[4]}`;
-        const ribbon = match[5] ? match[5].trim() : '';
+    const seen = new Set();
+    const blocks = String(html || '').split(/<div id="video-(?=\d+" class="video-item")/).slice(1);
+    for (const block of blocks) {
+        const vid = (block.match(/^(\d+)"/) || [])[1];
+        if (!vid || seen.has(vid)) continue;
+        const link = block.match(/<a[^>]*?href="([^"]*)"/);
+        if (!link) continue;
+        seen.add(vid);
+        const href = link[1];
+        const attr = (re) => { const m = block.match(re); return m ? m[1] : ''; };
+        const title = attr(/<a[^>]*?title="([^"]*)"/) || stripHtml((block.match(/<div class="video-name">[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/) || [])[1]);
+        const img = attr(/<img[^>]*?data-original="([^"]*)"/) || attr(/<img[^>]*?\ssrc="([^"]*)"/);
+        const poster = img ? (/^https?:/.test(img) ? img : `${BASE_URL}${img.startsWith('/') ? '' : '/'}${img}`) : `${BASE_URL}/img/${vid}.jpg`;
+        const ribbon = attr(/<div class="ribbon">([^<]*)<\/div>/).trim();
 
         // Extract slug from href: /video/:slug/:id/
         const slugMatch = href.match(/\/video\/([^\/]+)\/\d+\//);
@@ -91,7 +98,7 @@ function parseVideoList(html) {
         items.push({
             id: vid,
             slug,
-            title,
+            title: stripHtml(title.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'")),
             url: href,
             poster,
             ribbon
@@ -208,7 +215,7 @@ async function getMeta(type, id) {
             tags.push(...innerTags);
         }
 
-        const poster = `https://vlxx.phd/img/${vid}.jpg`;
+        const poster = `${BASE_URL}/img/${vid}.jpg`;
         const genres = Array.from(new Set(['18+', ...tags])).filter(Boolean);
 
         const meta = {
@@ -360,7 +367,8 @@ async function getM3u8(vid, serverId = 1, host = 'hophimaddon.hophim-4g6qbubt.wo
     const rewritten = lines.map(line => {
         const trimmed = line.trim();
         if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-            return `${segmentBase}${separator}url=${encodeURIComponent(trimmed)}`;
+            // ends in .ts: FFmpeg-based players pick the demuxer from the end of the URL (segments may be named .png)
+            return `${segmentBase}${separator}url=${encodeURIComponent(trimmed)}&f=seg.ts`;
         }
         return line;
     }).join('\n');
@@ -374,5 +382,6 @@ module.exports = {
     getStream,
     getM3u8,
     resolveManifestUrl,
+    parseVideoList,
     slugify
 };

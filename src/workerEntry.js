@@ -583,7 +583,7 @@ export default {
 
         // 5. VLXX Segment Unwrapper
         if (pathname === '/vlxx/segment.ts') {
-            return handleSegmentProxy(url.searchParams.get('url'), 'https://vlxx.phd/');
+            return handleSegmentProxy(url.searchParams.get('url'), 'https://vlxx.net/');
         }
 
         // 5c. AVDB Segment Proxy
@@ -738,6 +738,42 @@ export default {
                 }
                 return new Response('Error generating playlist: Could not retrieve JavHD stream playlist', { status: 502, headers: CORS_HEADERS });
             });
+        }
+
+        // VLXX diagnostics: the player chain of one video (ajax.php -> embed page -> playlist -> first segment)
+        if (pathname === '/vlxx/debug') {
+            const vid = (url.searchParams.get('id') || '3256').replace(/\D/g, '');
+            const server = (url.searchParams.get('server') || '1').replace(/\D/g, '') || '1';
+            const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+            const out = { vid, server };
+            const tmo = () => (AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined);
+            try {
+                const r = await fetch('https://vlxx.net/ajax.php', { method: 'POST', headers: { 'User-Agent': UA, 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest', 'Referer': 'https://vlxx.net/' }, body: new URLSearchParams({ vlxx_server: '1', id: vid, server }).toString(), signal: tmo() });
+                const t = await r.text();
+                out.ajax = { status: r.status, head: t.slice(0, 500) };
+                let player = ''; try { player = JSON.parse(t).player || ''; } catch (e) { /* not json */ }
+                const embed = (player.match(/src=["']([^"']+)["']/i) || [])[1];
+                out.embed = embed || null;
+                if (embed) {
+                    const er = await fetch(embed, { headers: { 'User-Agent': UA, 'Referer': 'https://vlxx.net/' }, signal: tmo() });
+                    const et = await er.text();
+                    out.embedPage = { status: er.status, length: et.length, src: (et.match(/window\.__SRC\s*=\s*(\[[\s\S]*?\]);/) || [])[1], head: et.slice(0, 200) };
+                    let file = ''; try { file = JSON.parse(out.embedPage.src)[0].file; } catch (e) { /* no src */ }
+                    out.file = file || null;
+                    if (file) {
+                        const pr = await fetch(file, { headers: { 'User-Agent': UA, 'Referer': new URL(embed).origin + '/' }, signal: tmo() });
+                        const pt = await pr.text();
+                        out.playlist = { status: pr.status, type: pr.headers.get('content-type'), head: pt.slice(0, 400) };
+                        const seg = pt.split('\n').map(l => l.trim()).find(l => l && !l.startsWith('#'));
+                        if (seg) {
+                            const sr = await fetch(new URL(seg, file).href, { headers: { 'User-Agent': UA, 'Referer': 'https://play.vlstream.net/', 'Range': 'bytes=0-511' }, signal: tmo() });
+                            const u8 = new Uint8Array(await sr.arrayBuffer());
+                            out.segment = { url: new URL(seg, file).href.slice(0, 160), status: sr.status, type: sr.headers.get('content-type'), first16: [...u8.slice(0, 16)].map(b => b.toString(16).padStart(2, '0')).join(' ') };
+                        }
+                    }
+                }
+            } catch (e) { out.error = e.message; }
+            return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
         }
 
         // 7. VLXX M3U8 Stream
