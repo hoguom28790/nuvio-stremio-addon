@@ -20,10 +20,17 @@ jobs:
         with:
           node-version: 22
 
+      - name: Probe the JavHD mirror (read-only report)
+        continue-on-error: true
+        env:
+          JAVHD_BASE: https://javhdz.page
+        run: node scripts/probe_javhd.js
+
       - name: Run JavHD Catalog Updater
         run: node scripts/update_javhd.js
 
       - name: Commit and push if changes detected
+        if: github.ref == 'refs/heads/master'
         run: |
          git config --global user.name "github-actions[bot]"
          git config --global user.email "github-actions[bot]@users.noreply.github.com"
