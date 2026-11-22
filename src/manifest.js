@@ -403,13 +403,16 @@ const vlxxaiCatalogs = [
     }
 ];
 
-const adultCatalogs = [...hentaizCatalogs, ...javhdCatalogs, ...vlxxCatalogs, ...avdbCatalogs, ...fs1Catalogs, ...javtifulCatalogs, ...hohojCatalogs, ...sexmupCatalogs, ...javhayCatalogs, ...vlxxaiCatalogs];
+// JavHD is not offered: javhdz.one and its CDN (tiktokcdn.top) block the Worker and every player/poster request without
+// their Referer (HTTP 403 "Sorry, you have been blocked"). To offer it again, add `...javhdCatalogs` back here and its
+// checkbox in views/config.js.
+const adultCatalogs = [...hentaizCatalogs, ...vlxxCatalogs, ...avdbCatalogs, ...fs1Catalogs, ...javtifulCatalogs, ...hohojCatalogs, ...sexmupCatalogs, ...javhayCatalogs, ...vlxxaiCatalogs];
 const allCatalogs = [...filteredCatalogs, ...adultCatalogs];
 const allPrefixes = ["tt", "kkphim:", "vsmov:", "hentaiz:", "javhd:", "vlxx:", "avdb:", "fs1:", "javtiful:", "hohoj:", "sexmup:", "javhay:", "vlxxai:"];
 
 const baseManifest = {
     id: "org.hophim.stremio",
-    version: "1.4.6",
+    version: "1.4.7",
     name: "Hồ Phim",
     description: "Tổng hợp phim Vietsub & Thuyết minh lồng tiếng từ KKPhim, VSMOV",
     logo: "https://raw.githubusercontent.com/hoguom28790/nuvio-stremio-addon/master/logo.png",
