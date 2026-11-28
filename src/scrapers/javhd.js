@@ -2,7 +2,9 @@ const axios = require('axios');
 const cache = require('../utils/cache');
 const { pagedList } = require('../utils/pagedList');
 
-const BASE_URL = 'https://javhdz.one';
+// javhdz.one moved to javhdz.page: its CDN (tiktokcdn.top) now answers 200 only to Referer https://javhdz.page/ (403 to the
+// old Referer or none), and /data/ covers load without a Referer
+const BASE_URL = 'https://javhdz.page';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 const client = axios.create({
@@ -93,29 +95,20 @@ async function ensureStaticCatalog() {
 }
 
 /**
- * Format poster URL cleanly (replaces old javhdz.bz/.wtf, strips wsrv.nl, supports Edge CDN route)
+ * Cover URL: any old mirror (javhdz.one/.bz/.wtf) or relative path -> javhdz.page/data/..., which devices load directly
+ * (the Worker is blocked by the site, so there is no poster proxy any more).
  */
-function formatPoster(poster, host) {
+function formatPoster(poster) {
     if (!poster) return '';
-    let clean = String(poster).replace(/https?:\/\/wsrv\.nl\/\?url=/g, '').replace(/javhdz\.(?:bz|wtf)/g, 'javhdz.one');
+    let clean = String(poster).replace(/https?:\/\/wsrv\.nl\/\?url=/g, '');
     try { clean = decodeURIComponent(clean); } catch (e) {}
     if (clean.startsWith('//')) clean = 'https:' + clean;
     else if (clean.startsWith('/')) clean = `${BASE_URL}${clean}`;
     else if (!clean.startsWith('http')) clean = `${BASE_URL}/${clean}`;
-
-    // If host provided and it contains /data/, route through edge poster proxy for 100% reliability
-    if (host && clean.includes('javhdz.one/data/')) {
-        const edgeHost = host && !host.includes('onrender.com') ? host : ((typeof process !== 'undefined' && process.env && process.env.CF_HOST) || 'hophimaddon.hophim-4g6qbubt.workers.dev');
-        const edgeBase = edgeHost.includes('://') ? edgeHost : `https://${edgeHost}`;
-        const parts = clean.split('/data/');
-        if (parts[1]) {
-            return `${edgeBase}/javhd/poster/${parts[1]}`;
-        }
-    }
-    return clean;
+    return clean.replace(/^https?:\/\/javhdz\.(?:one|bz|wtf)\//, `${BASE_URL}/`);
 }
 
-// Genre to URL mapping on javhdz.one
+// Genre to URL mapping on javhdz.page
 const GENRE_MAP = {
     'Tất Cả': '/video/',
     'Mới Cập Nhật': '/video/',
@@ -190,7 +183,7 @@ function parseMovieCards(html, host = '') {
     return metas;
 }
 
-// Fetch a page of the site with an ordinary browser User-Agent. javhdz.one answers Cloudflare's "Attention Required" (403) to
+// Fetch a page of the site with an ordinary browser User-Agent. the site answers Cloudflare's "Attention Required" (403) to
 // the Worker's IP range; the addon does not disguise itself to get around that (no crawler User-Agents, no third-party reader):
 // an empty string means "the site did not let us in" and the callers fall back to the auto-updated catalog.
 async function fetchPage(targetUrl) {
@@ -215,7 +208,7 @@ async function fetchPage(targetUrl) {
 }
 
 /**
- * Get catalog movies for JavHD: live pages of javhdz.one (paged with the shared pagedList), the static catalog only as
+ * Get catalog movies for JavHD: live pages of javhdz.page (paged with the shared pagedList), the static catalog only as
  * an offline fallback.
  */
 function staticCatalogItems(extra, host) {

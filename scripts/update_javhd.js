@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const BASE_URL = 'https://javhdz.one';
+const BASE_URL = 'https://javhdz.page';
 // Movies without a stream link that are filled in per run (newest first)
 const MAX_BACKFILL_PER_RUN = 120;
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';

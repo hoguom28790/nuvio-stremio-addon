@@ -90,7 +90,7 @@ const SOURCES = [
     {
         name: 'javhd', size: 24, mod: '../src/scrapers/javhd',
         call: (m, skip) => m.getCatalog('javhd-latest', 'movie', { skip }, 'w.dev'),
-        match: u => (u.startsWith('https://javhdz.one/video/') ? num(/\/page\/(\d+)\/$/, u) || 1 : null),
+        match: u => (u.startsWith('https://javhdz.page/video/') ? num(/\/page\/(\d+)\/$/, u) || 1 : null),
         card: i => `<li class="x"><a class="movie-item" href="/slug-${i}.html" title="Title ${i}"><img data-src="/data/${i}.jpg"><span class="meta-sub">Vietsub</span></a></li>`,
         wrap: c => `<ul>${c}</ul>`
     }

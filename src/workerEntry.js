@@ -7,6 +7,7 @@ const vlxx = require('./scrapers/vlxx');
 const avdb = require('./scrapers/avdb');
 const sexmup = require('./scrapers/sexmup');
 const javhay = require('./scrapers/javhay');
+const vlxxai = require('./scrapers/vlxxai');
 const javtiful = require('./scrapers/javtiful');
 const kkphim = require('./scrapers/kkphim');
 const vsmov = require('./scrapers/vsmov');
@@ -376,24 +377,24 @@ export default {
         // 4. JavHD Segment Unwrapper (Direct Cloudflare Edge streaming with PNG-header unwrapping)
         if (pathname === '/javhd/segment.ts') {
             const segUrl = url.searchParams.get('url');
-            const res = await handleSegmentProxy(segUrl, 'https://javhdz.one/');
+            const res = await handleSegmentProxy(segUrl, 'https://javhdz.page/');
             const ref = url.searchParams.get('r');
             if (res.status < 400 || !ref) return res;
             // Signed tiktokcdn URL expired -> fresh playlist (via VN proxy) -> same segment index
             const fresh = await refreshSegmentUrl('javhd', ref, segUrl, ([slug, quality]) =>
                 javhd.getM3u8(slug, quality, host, env, { ...VN_FETCH, fresh: true }));
-            return fresh ? handleSegmentProxy(fresh, 'https://javhdz.one/') : res;
+            return fresh ? handleSegmentProxy(fresh, 'https://javhdz.page/') : res;
         }
 
         // 4b. JavHD Poster Proxy (Edge cached with 7 days TTL, CORS enabled, bypasses ISP blocks)
         if (pathname.startsWith('/javhd/poster/')) {
             const filename = pathname.replace('/javhd/poster/', '');
-            const targetUrl = `https://javhdz.one/data/${filename}`;
+            const targetUrl = `https://javhdz.page/data/${filename}`;
             try {
                 const upstream = await fetch(targetUrl, {
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                        'Referer': 'https://javhdz.one/'
+                        'Referer': 'https://javhdz.page/'
                     },
                     cf: {
                         cacheEverything: true,
@@ -582,7 +583,7 @@ export default {
 
         // 5. VLXX Segment Unwrapper
         if (pathname === '/vlxx/segment.ts') {
-            return handleSegmentProxy(url.searchParams.get('url'), 'https://vlxx.phd/');
+            return handleSegmentProxy(url.searchParams.get('url'), 'https://vlxx.net/');
         }
 
         // 5c. AVDB Segment Proxy
@@ -664,7 +665,7 @@ export default {
         // JavHD diagnostics: reports each stage from the Worker (page, CDN playlist direct, VN proxies, Render)
         if (pathname === '/javhd/debug') {
             const diag = { stages: {} };
-            const hdr = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': 'https://javhdz.one/' };
+            const hdr = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': 'https://javhdz.page/' };
             const probe = async (label, fn) => {
                 const t0 = Date.now();
                 try { diag.stages[label] = { ...(await fn()), ms: Date.now() - t0 }; }
@@ -692,7 +693,7 @@ export default {
                 const st = await javhd.getStream(`javhd:${slug}`, 'movie', host);
                 diag.streamsCount = st.length;
             }
-            await probe('page', () => brief(`https://javhdz.one/${slug}.html`));
+            await probe('page', () => brief(`https://javhdz.page/${slug}.html`));
             if (master) {
                 await probe('cdnDirect', () => brief(master));
                 if (IS_CF_WORKER) await probe('vnProxies', async () => ({ results: await vnProbe(master, { headers: hdr }) }));
@@ -737,6 +738,42 @@ export default {
                 }
                 return new Response('Error generating playlist: Could not retrieve JavHD stream playlist', { status: 502, headers: CORS_HEADERS });
             });
+        }
+
+        // VLXX diagnostics: the player chain of one video (ajax.php -> embed page -> playlist -> first segment)
+        if (pathname === '/vlxx/debug') {
+            const vid = (url.searchParams.get('id') || '3256').replace(/\D/g, '');
+            const server = (url.searchParams.get('server') || '1').replace(/\D/g, '') || '1';
+            const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+            const out = { vid, server };
+            const tmo = () => (AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined);
+            try {
+                const r = await fetch('https://vlxx.net/ajax.php', { method: 'POST', headers: { 'User-Agent': UA, 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest', 'Referer': 'https://vlxx.net/' }, body: new URLSearchParams({ vlxx_server: '1', id: vid, server }).toString(), signal: tmo() });
+                const t = await r.text();
+                out.ajax = { status: r.status, head: t.slice(0, 500) };
+                let player = ''; try { player = JSON.parse(t).player || ''; } catch (e) { /* not json */ }
+                const embed = (player.match(/src=["']([^"']+)["']/i) || [])[1];
+                out.embed = embed || null;
+                if (embed) {
+                    const er = await fetch(embed, { headers: { 'User-Agent': UA, 'Referer': 'https://vlxx.net/' }, signal: tmo() });
+                    const et = await er.text();
+                    out.embedPage = { status: er.status, length: et.length, src: (et.match(/window\.__SRC\s*=\s*(\[[\s\S]*?\]);/) || [])[1], head: et.slice(0, 200) };
+                    let file = ''; try { file = JSON.parse(out.embedPage.src)[0].file; } catch (e) { /* no src */ }
+                    out.file = file || null;
+                    if (file) {
+                        const pr = await fetch(file, { headers: { 'User-Agent': UA, 'Referer': new URL(embed).origin + '/' }, signal: tmo() });
+                        const pt = await pr.text();
+                        out.playlist = { status: pr.status, type: pr.headers.get('content-type'), head: pt.slice(0, 400) };
+                        const seg = pt.split('\n').map(l => l.trim()).find(l => l && !l.startsWith('#'));
+                        if (seg) {
+                            const sr = await fetch(new URL(seg, file).href, { headers: { 'User-Agent': UA, 'Referer': 'https://play.vlstream.net/', 'Range': 'bytes=0-511' }, signal: tmo() });
+                            const u8 = new Uint8Array(await sr.arrayBuffer());
+                            out.segment = { url: new URL(seg, file).href.slice(0, 160), status: sr.status, type: sr.headers.get('content-type'), first16: [...u8.slice(0, 16)].map(b => b.toString(16).padStart(2, '0')).join(' ') };
+                        }
+                    }
+                }
+            } catch (e) { out.error = e.message; }
+            return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
         }
 
         // 7. VLXX M3U8 Stream
@@ -850,6 +887,84 @@ export default {
             } catch (e) {
                 return new Response(JSON.stringify({ target, error: e.message }), { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
             }
+        }
+
+        // VLXX AI: cover proxy (the site's thumbs, fetched with its Referer, cached at the edge)
+        if (pathname.startsWith('/vlxxai/poster/')) {
+            const name = pathname.replace('/vlxxai/poster/', '');
+            if (!/^[A-Za-z0-9_.-]+\.(?:webp|jpe?g|png)$/i.test(name)) return new Response('Bad poster path', { status: 400, headers: CORS_HEADERS });
+            try {
+                const upstream = await fetch(`https://vlxxai.com/uploads/thumbs/${name}`, {
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36', 'Referer': 'https://vlxxai.com/' },
+                    cf: { cacheEverything: true, cacheTtlByStatus: { '200-299': 604800, '404': 600, '500-599': 0 } }
+                });
+                const type = upstream.headers.get('content-type') || '';
+                if (!upstream.ok || !/^image\//i.test(type)) return new Response('Poster not found', { status: upstream.status === 200 ? 404 : upstream.status, headers: { ...CORS_HEADERS, 'Cache-Control': 'public, max-age=300' } });
+                return new Response(upstream.body, { headers: { ...CORS_HEADERS, 'Content-Type': type, 'Cache-Control': 'public, max-age=604800, immutable', 'CDN-Cache-Control': 'public, max-age=604800' } });
+            } catch (err) {
+                return new Response(`Poster error: ${err.message}`, { status: 502, headers: CORS_HEADERS });
+            }
+        }
+
+        // VLXX AI: playlist of one episode, served through this Worker for every client (the CDN has no CORS and its
+        // .png-named segments confuse FFmpeg-based players); its segment/playlist URLs point back here.
+        const vlxxaiHls = async (target) => {
+            let host2 = '';
+            try { host2 = new URL(target).hostname; } catch (e) { /* invalid */ }
+            if (!vlxxai.HOST_RE.test(host2)) return new Response('Host not allowed', { status: 403, headers: CORS_HEADERS });
+            const r = await fetch(target, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Referer': 'https://vlxxai.com/' } });
+            if (!r.ok) return new Response(`Upstream error: ${r.status}`, { status: r.status, headers: CORS_HEADERS });
+            const body = vlxxai.rewritePlaylist(await r.text(), target, url.origin);
+            return new Response(body, { headers: { ...CORS_HEADERS, 'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8', 'Cache-Control': 'no-store' } });
+        };
+        if (pathname.startsWith('/vlxxai/play/')) {
+            const m = pathname.match(/^\/vlxxai\/play\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)\.m3u8$/);
+            if (!m) return new Response('Bad request', { status: 400, headers: CORS_HEADERS });
+            try {
+                const target = await vlxxai.resolveEpisode(m[1], m[2]);
+                if (!target) return new Response('Episode not found', { status: 404, headers: CORS_HEADERS });
+                if (url.searchParams.get('direct') === '1') return new Response(null, { status: 302, headers: { ...CORS_HEADERS, 'Location': target, 'Cache-Control': 'no-store' } });
+                return await vlxxaiHls(target);
+            } catch (e) {
+                return new Response(`Error: ${e.message}`, { status: 502, headers: CORS_HEADERS });
+            }
+        }
+        if (pathname === '/vlxxai/hls.m3u8') {
+            try { return await vlxxaiHls(url.searchParams.get('url') || ''); } catch (e) { return new Response(`Error: ${e.message}`, { status: 502, headers: CORS_HEADERS }); }
+        }
+        if (pathname === '/vlxxai/segment.ts') {
+            const segUrl = url.searchParams.get('url') || '';
+            let segHost = '';
+            try { segHost = new URL(segUrl).hostname; } catch (e) { /* invalid */ }
+            if (!vlxxai.HOST_RE.test(segHost)) return new Response('Segment host not allowed', { status: 403, headers: CORS_HEADERS });
+            return handleSegmentProxy(segUrl, 'https://vlxxai.com/');
+        }
+
+        // VLXX AI diagnostics: the site's own player call (POST ?get_player=1) for one episode, and a probe of what it returns
+        if (pathname === '/vlxxai/debug') {
+            const slug = url.searchParams.get('slug') || 'muoi-nam-den-sach-van-phai-o-re-noi-nhuc-cua-chang-re-hau-phu-kinh-thanh';
+            const ep = parseInt(url.searchParams.get('ep') || '1', 10) || 1;
+            const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+            const out = { slug, ep };
+            try {
+                const meta = await vlxxai.getMeta('movie', `vlxxai:${slug}`, host);
+                out.meta = meta ? { name: meta.name, poster: meta.poster, description: meta.description } : null;
+                const player = await vlxxai.fetchPlayer(slug, parseInt(url.searchParams.get('index') || '0', 10) || 0);
+                out.player = player ? JSON.parse(JSON.stringify(player, (k, v) => (typeof v === 'string' && v.length > 300 ? v.slice(0, 300) + '…' : v))) : null;
+                out.sources = vlxxai.pickSources(player);
+                const target = out.sources.length ? out.sources[0].url : null;
+                if (target) {
+                    for (const withRef of [true, false]) {
+                        try {
+                            const r = await fetch(target, { headers: { 'User-Agent': UA, ...(withRef ? { 'Referer': 'https://vlxxai.com/' } : {}), 'Range': 'bytes=0-1023' }, signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+                            const buf = new Uint8Array(await r.arrayBuffer());
+                            out[withRef ? 'withReferer' : 'noReferer'] = { status: r.status, type: r.headers.get('content-type'), range: r.headers.get('content-range'), length: r.headers.get('content-length'), cors: r.headers.get('access-control-allow-origin'), first16: [...buf.slice(0, 16)].map(b => b.toString(16).padStart(2, '0')).join(' '), text: /^#EXTM3U/.test(new TextDecoder().decode(buf.slice(0, 7))) ? new TextDecoder().decode(buf.slice(0, 300)) : undefined };
+                        } catch (e) { out[withRef ? 'withReferer' : 'noReferer'] = { error: e.message }; }
+                    }
+                }
+                out.streams = await vlxxai.getStream(`vlxxai:${slug}`, 'movie', host);
+            } catch (e) { out.error = e.message; }
+            return new Response(JSON.stringify(out, null, 2), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json; charset=utf-8' } });
         }
 
         // Hohoj diagnostics: embed m3u8 + playlist/segment probe, plus list-page structure
@@ -1082,7 +1197,7 @@ export default {
                 } else if (id === 'javhd') {
                     // JavHD, read with an ordinary browser User-Agent only: does the site answer it, do the posters load,
                     // does the page still carry the base64 stream (`window.atob`), does the playlist answer
-                    const base = 'https://javhdz.one';
+                    const base = 'https://javhdz.page';
                     const get = async (u) => {
                         const r = await fetch(u, { headers: { 'User-Agent': UA, 'Referer': `${base}/`, 'Accept': 'text/html,application/xhtml+xml', 'Accept-Language': 'vi,en-US;q=0.9,en;q=0.8' }, redirect: 'follow', signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
                         return { r, html: await r.text() };
@@ -1166,7 +1281,7 @@ export default {
             const search = url.searchParams.get('search') || undefined;
             const report = [];
             for (const id of ids) {
-                const type = id === 'hentaiz-anime' ? 'series' : 'movie';
+                const type = (id === 'hentaiz-anime' || id.endsWith('-series')) ? 'series' : 'movie';
                 const row = { id, type, calls: [] };
                 const seen = new Set();
                 let skip = 0, repeated = 0, total = 0;
@@ -1752,7 +1867,7 @@ export default {
         }
 
         if (pathname === '/debug/test-render') {
-            const target = url.searchParams.get('url') || 'https://javhdz.one/';
+            const target = url.searchParams.get('url') || 'https://javhdz.page/';
             const customReferer = url.searchParams.get('referer');
             const customUa = url.searchParams.get('ua');
             const customOrigin = url.searchParams.get('origin');
