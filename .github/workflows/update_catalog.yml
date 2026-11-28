@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '0 */6 * * *'  # Tự động chạy định kỳ mỗi 6 tiếng
   workflow_dispatch:       # Cho phép bấm nút "Run workflow" để chạy ngay lập tức
+    inputs:
+      probe_urls:
+        description: 'Optional: space-separated URLs to look at (read-only report)'
+        required: false
+        default: ''
 
 jobs:
   update-catalog:
@@ -25,6 +30,13 @@ jobs:
         env:
           JAVHD_BASE: https://javhdz.page
         run: node scripts/probe_javhd.js
+
+      - name: Look at the given pages (read-only report)
+        if: github.event.inputs.probe_urls != ''
+        continue-on-error: true
+        env:
+          PROBE_URLS: ${{ github.event.inputs.probe_urls }}
+        run: node scripts/probe_site.js $PROBE_URLS
 
       - name: Run JavHD Catalog Updater
         run: node scripts/update_javhd.js
